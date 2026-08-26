@@ -1,0 +1,2633 @@
+{
+  "schemaVersion": "0.1.0",
+  "dataset": {
+    "id": "dataset_representative_models",
+    "name": "Representative cross-sector financial models",
+    "description": "Synthetic SaaS and bank fixtures for deterministic schema, validator, query, and visualization tests. Not investment research.",
+    "createdAt": "2025-03-15T09:08:00Z",
+    "updatedAt": "2025-03-15T09:08:00Z",
+    "defaultModelId": "model_northstar_cloud"
+  },
+  "models": [
+    {
+      "id": "model_northstar_cloud",
+      "name": "Northstar Cloud Operating Model",
+      "description": "Representative SaaS model used to prove metric hierarchy and formula lineage.",
+      "primaryEntityId": "entity_northstar_cloud",
+      "baseCurrency": "USD",
+      "asOf": "2025-03-15",
+      "currentVersionId": "version_northstar_2025_03_15",
+      "versionIds": [
+        "version_northstar_2025_03_15"
+      ],
+      "defaultScenarioId": "scenario_base",
+      "attributes": {
+        "sector": "Software",
+        "fiscalYearEnd": "December"
+      }
+    },
+    {
+      "id": "model_harbor_national",
+      "name": "Harbor National Bank Model",
+      "description": "Structurally different bank fixture used to test schema and viewer generality.",
+      "primaryEntityId": "entity_harbor_national",
+      "baseCurrency": "USD",
+      "asOf": "2025-03-15",
+      "currentVersionId": "version_harbor_2025_03_15",
+      "versionIds": [
+        "version_harbor_2025_03_15"
+      ],
+      "defaultScenarioId": "scenario_base",
+      "attributes": {
+        "sector": "Banks",
+        "fiscalYearEnd": "December"
+      }
+    }
+  ],
+  "entities": [
+    {
+      "id": "entity_northstar_cloud",
+      "type": "company",
+      "name": "Northstar Cloud",
+      "attributes": {
+        "ticker": "NSTC"
+      }
+    },
+    {
+      "id": "entity_harbor_national",
+      "type": "company",
+      "name": "Harbor National",
+      "attributes": {
+        "ticker": "HBNK"
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "id": "metric_northstar_revenue",
+      "name": "Revenue",
+      "description": "Total recognized revenue.",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "income-statement",
+        "key-output"
+      ]
+    },
+    {
+      "id": "metric_northstar_subscription_revenue",
+      "name": "Subscription revenue",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "income-statement",
+        "driver"
+      ]
+    },
+    {
+      "id": "metric_northstar_services_revenue",
+      "name": "Services revenue",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "income-statement"
+      ]
+    },
+    {
+      "id": "metric_northstar_cost_of_revenue",
+      "name": "Cost of revenue",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "income-statement"
+      ]
+    },
+    {
+      "id": "metric_northstar_gross_profit",
+      "name": "Gross profit",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "income-statement",
+        "key-output"
+      ]
+    },
+    {
+      "id": "metric_northstar_gross_margin",
+      "name": "Gross margin",
+      "dataType": "percentage",
+      "unit": "%",
+      "aggregation": "average",
+      "tags": [
+        "margin",
+        "key-output"
+      ]
+    },
+    {
+      "id": "metric_harbor_operating_income",
+      "name": "Total operating income",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "income-statement",
+        "key-output"
+      ]
+    },
+    {
+      "id": "metric_harbor_net_interest_income",
+      "name": "Net interest income",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "banking",
+        "driver"
+      ]
+    },
+    {
+      "id": "metric_harbor_non_interest_income",
+      "name": "Non-interest income",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "banking"
+      ]
+    },
+    {
+      "id": "metric_harbor_provision",
+      "name": "Provision for credit losses",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "credit",
+        "assumption"
+      ]
+    },
+    {
+      "id": "metric_harbor_non_interest_expense",
+      "name": "Non-interest expense",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "banking"
+      ]
+    },
+    {
+      "id": "metric_harbor_pre_tax_income",
+      "name": "Pre-tax income",
+      "dataType": "currency",
+      "unit": "USDm",
+      "aggregation": "sum",
+      "tags": [
+        "income-statement",
+        "key-output"
+      ]
+    }
+  ],
+  "periods": [
+    {
+      "id": "period_fy2022",
+      "label": "FY22A",
+      "type": "fiscal_year",
+      "startDate": "2022-01-01",
+      "endDate": "2022-12-31"
+    },
+    {
+      "id": "period_fy2023",
+      "label": "FY23A",
+      "type": "fiscal_year",
+      "startDate": "2023-01-01",
+      "endDate": "2023-12-31"
+    },
+    {
+      "id": "period_fy2024",
+      "label": "FY24A",
+      "type": "fiscal_year",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31"
+    },
+    {
+      "id": "period_fy2025",
+      "label": "FY25E",
+      "type": "fiscal_year",
+      "startDate": "2025-01-01",
+      "endDate": "2025-12-31"
+    },
+    {
+      "id": "period_fy2026",
+      "label": "FY26E",
+      "type": "fiscal_year",
+      "startDate": "2026-01-01",
+      "endDate": "2026-12-31"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "scenario_actual",
+      "name": "Actual",
+      "type": "actual"
+    },
+    {
+      "id": "scenario_base",
+      "name": "Base",
+      "type": "base"
+    }
+  ],
+  "observations": [
+    {
+      "id": "obs_northstar_revenue_fy2022",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1000,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_revenue"
+    },
+    {
+      "id": "obs_northstar_revenue_fy2023",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1150,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_revenue"
+    },
+    {
+      "id": "obs_northstar_revenue_fy2024",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1330,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_revenue"
+    },
+    {
+      "id": "obs_northstar_revenue_fy2025",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1535,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_revenue"
+    },
+    {
+      "id": "obs_northstar_revenue_fy2026",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1745,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_revenue"
+    },
+    {
+      "id": "obs_northstar_subscription_revenue_fy2022",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_subscription_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 820,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_subscription_revenue_fy2023",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_subscription_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 960,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_subscription_revenue_fy2024",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_subscription_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1125,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_subscription_revenue_fy2025",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_subscription_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1315,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_northstar_subscription_revenue_fy2026",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_subscription_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1510,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_northstar_services_revenue_fy2022",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_services_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 180,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_services_revenue_fy2023",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_services_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 190,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_services_revenue_fy2024",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_services_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 205,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_services_revenue_fy2025",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_services_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 220,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_northstar_services_revenue_fy2026",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_services_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 235,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_northstar_cost_of_revenue_fy2022",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_cost_of_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 340,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_cost_of_revenue_fy2023",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_cost_of_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 380,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_cost_of_revenue_fy2024",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_cost_of_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 425,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_northstar_cost_of_revenue_fy2025",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_cost_of_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 480,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_northstar_cost_of_revenue_fy2026",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_cost_of_revenue",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 535,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_northstar_gross_profit_fy2022",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_profit",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 660,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_profit"
+    },
+    {
+      "id": "obs_northstar_gross_profit_fy2023",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_profit",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 770,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_profit"
+    },
+    {
+      "id": "obs_northstar_gross_profit_fy2024",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_profit",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 905,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_profit"
+    },
+    {
+      "id": "obs_northstar_gross_profit_fy2025",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_profit",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1055,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_profit"
+    },
+    {
+      "id": "obs_northstar_gross_profit_fy2026",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_profit",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1210,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_profit"
+    },
+    {
+      "id": "obs_northstar_gross_margin_fy2022",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_margin",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 0.66,
+      "unit": "%",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_margin"
+    },
+    {
+      "id": "obs_northstar_gross_margin_fy2023",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_margin",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 0.669565,
+      "unit": "%",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_margin"
+    },
+    {
+      "id": "obs_northstar_gross_margin_fy2024",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_margin",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 0.680451,
+      "unit": "%",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_margin"
+    },
+    {
+      "id": "obs_northstar_gross_margin_fy2025",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_margin",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 0.687296,
+      "unit": "%",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_margin"
+    },
+    {
+      "id": "obs_northstar_gross_margin_fy2026",
+      "modelId": "model_northstar_cloud",
+      "metricId": "metric_northstar_gross_margin",
+      "entityId": "entity_northstar_cloud",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 0.69341,
+      "unit": "%",
+      "asOf": "2025-03-15",
+      "versionId": "version_northstar_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_northstar_gross_margin"
+    },
+    {
+      "id": "obs_harbor_operating_income_fy2022",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_operating_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 2000,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_operating_income"
+    },
+    {
+      "id": "obs_harbor_operating_income_fy2023",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_operating_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 2080,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_operating_income"
+    },
+    {
+      "id": "obs_harbor_operating_income_fy2024",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_operating_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 2175,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_operating_income"
+    },
+    {
+      "id": "obs_harbor_operating_income_fy2025",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_operating_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 2275,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_operating_income"
+    },
+    {
+      "id": "obs_harbor_operating_income_fy2026",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_operating_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 2375,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_operating_income"
+    },
+    {
+      "id": "obs_harbor_net_interest_income_fy2022",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_net_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1480,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_net_interest_income_fy2023",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_net_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1540,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_net_interest_income_fy2024",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_net_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1610,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_net_interest_income_fy2025",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_net_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1685,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_harbor_net_interest_income_fy2026",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_net_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1760,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_harbor_non_interest_income_fy2022",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 520,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_non_interest_income_fy2023",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 540,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_non_interest_income_fy2024",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 565,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_non_interest_income_fy2025",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 590,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_harbor_non_interest_income_fy2026",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 615,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_harbor_provision_fy2022",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_provision",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 210,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_provision_fy2023",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_provision",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 260,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_provision_fy2024",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_provision",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 225,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_provision_fy2025",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_provision",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 235,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_harbor_provision_fy2026",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_provision",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 245,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_harbor_non_interest_expense_fy2022",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_expense",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1190,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_non_interest_expense_fy2023",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_expense",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1230,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_non_interest_expense_fy2024",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_expense",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 1285,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "reported"
+    },
+    {
+      "id": "obs_harbor_non_interest_expense_fy2025",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_expense",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1330,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_harbor_non_interest_expense_fy2026",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_non_interest_expense",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 1380,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "assumption"
+    },
+    {
+      "id": "obs_harbor_pre_tax_income_fy2022",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_pre_tax_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2022",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 600,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_pre_tax_income"
+    },
+    {
+      "id": "obs_harbor_pre_tax_income_fy2023",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_pre_tax_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2023",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 590,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_pre_tax_income"
+    },
+    {
+      "id": "obs_harbor_pre_tax_income_fy2024",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_pre_tax_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2024",
+      "scenarioId": "scenario_actual",
+      "actuality": "actual",
+      "value": 665,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_pre_tax_income"
+    },
+    {
+      "id": "obs_harbor_pre_tax_income_fy2025",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_pre_tax_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 710,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_pre_tax_income"
+    },
+    {
+      "id": "obs_harbor_pre_tax_income_fy2026",
+      "modelId": "model_harbor_national",
+      "metricId": "metric_harbor_pre_tax_income",
+      "entityId": "entity_harbor_national",
+      "periodId": "period_fy2026",
+      "scenarioId": "scenario_base",
+      "actuality": "estimate",
+      "value": 750,
+      "unit": "USDm",
+      "asOf": "2025-03-15",
+      "versionId": "version_harbor_2025_03_15",
+      "valueType": "derived",
+      "transformationId": "transformation_harbor_pre_tax_income"
+    }
+  ],
+  "transformations": [
+    {
+      "id": "transformation_northstar_revenue",
+      "outputMetricId": "metric_northstar_revenue",
+      "language": "model-expression@0.1",
+      "expression": "sum(ref(\"metric_northstar_subscription_revenue\"), ref(\"metric_northstar_services_revenue\"))",
+      "dependencyMetricIds": [
+        "metric_northstar_subscription_revenue",
+        "metric_northstar_services_revenue"
+      ],
+      "appliesWhen": {
+        "modelId": "model_northstar_cloud"
+      },
+      "originalExpression": "=SUM(B11:B12)",
+      "status": "supported"
+    },
+    {
+      "id": "transformation_northstar_gross_profit",
+      "outputMetricId": "metric_northstar_gross_profit",
+      "language": "model-expression@0.1",
+      "expression": "ref(\"metric_northstar_revenue\") - ref(\"metric_northstar_cost_of_revenue\")",
+      "dependencyMetricIds": [
+        "metric_northstar_revenue",
+        "metric_northstar_cost_of_revenue"
+      ],
+      "appliesWhen": {
+        "modelId": "model_northstar_cloud"
+      },
+      "originalExpression": "=B10-B16",
+      "status": "supported"
+    },
+    {
+      "id": "transformation_northstar_gross_margin",
+      "outputMetricId": "metric_northstar_gross_margin",
+      "language": "model-expression@0.1",
+      "expression": "when(ref(\"metric_northstar_revenue\") == 0, null, ref(\"metric_northstar_gross_profit\") / ref(\"metric_northstar_revenue\"))",
+      "dependencyMetricIds": [
+        "metric_northstar_revenue",
+        "metric_northstar_gross_profit"
+      ],
+      "appliesWhen": {
+        "modelId": "model_northstar_cloud"
+      },
+      "originalExpression": "=IFERROR(B18/B10,0)",
+      "status": "supported"
+    },
+    {
+      "id": "transformation_harbor_operating_income",
+      "outputMetricId": "metric_harbor_operating_income",
+      "language": "model-expression@0.1",
+      "expression": "sum(ref(\"metric_harbor_net_interest_income\"), ref(\"metric_harbor_non_interest_income\"))",
+      "dependencyMetricIds": [
+        "metric_harbor_net_interest_income",
+        "metric_harbor_non_interest_income"
+      ],
+      "appliesWhen": {
+        "modelId": "model_harbor_national"
+      },
+      "originalExpression": "=SUM(B9:B10)",
+      "status": "supported"
+    },
+    {
+      "id": "transformation_harbor_pre_tax_income",
+      "outputMetricId": "metric_harbor_pre_tax_income",
+      "language": "model-expression@0.1",
+      "expression": "ref(\"metric_harbor_operating_income\") - ref(\"metric_harbor_provision\") - ref(\"metric_harbor_non_interest_expense\")",
+      "dependencyMetricIds": [
+        "metric_harbor_operating_income",
+        "metric_harbor_provision",
+        "metric_harbor_non_interest_expense"
+      ],
+      "appliesWhen": {
+        "modelId": "model_harbor_national"
+      },
+      "originalExpression": "=B8-B14-B18",
+      "status": "supported"
+    }
+  ],
+  "relationships": [
+    {
+      "id": "relationship_northstar_subscription_component",
+      "fromId": "metric_northstar_subscription_revenue",
+      "type": "component_of",
+      "toId": "metric_northstar_revenue"
+    },
+    {
+      "id": "relationship_northstar_services_component",
+      "fromId": "metric_northstar_services_revenue",
+      "type": "component_of",
+      "toId": "metric_northstar_revenue"
+    },
+    {
+      "id": "relationship_harbor_interest_component",
+      "fromId": "metric_harbor_net_interest_income",
+      "type": "component_of",
+      "toId": "metric_harbor_operating_income"
+    },
+    {
+      "id": "relationship_harbor_non_interest_component",
+      "fromId": "metric_harbor_non_interest_income",
+      "type": "component_of",
+      "toId": "metric_harbor_operating_income"
+    },
+    {
+      "id": "relationship_northstar_evidence_supports",
+      "fromId": "evidence_northstar_retention",
+      "type": "supports",
+      "toId": "assumption_northstar_subscription_growth"
+    },
+    {
+      "id": "relationship_northstar_assumption_affects",
+      "fromId": "assumption_northstar_subscription_growth",
+      "type": "affects",
+      "toId": "metric_northstar_subscription_revenue"
+    },
+    {
+      "id": "relationship_northstar_decision_related",
+      "fromId": "decision_northstar_fy2025_revenue",
+      "type": "related_to",
+      "toId": "assumption_northstar_subscription_growth"
+    },
+    {
+      "id": "relationship_harbor_evidence_supports",
+      "fromId": "evidence_harbor_provision",
+      "type": "supports",
+      "toId": "assumption_harbor_credit_cost"
+    },
+    {
+      "id": "relationship_harbor_assumption_affects",
+      "fromId": "assumption_harbor_credit_cost",
+      "type": "affects",
+      "toId": "metric_harbor_provision"
+    }
+  ],
+  "sourceArtifacts": [
+    {
+      "id": "artifact_northstar_workbook",
+      "type": "workbook",
+      "title": "Northstar Cloud operating model (representative fixture)",
+      "uri": "fixtures://northstar-cloud-model.xlsx",
+      "contentHash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "retrievedAt": "2025-03-15T09:00:00Z"
+    },
+    {
+      "id": "artifact_northstar_notes",
+      "type": "document",
+      "title": "Northstar Cloud forecast notes (representative fixture)",
+      "uri": "fixtures://northstar-cloud-notes.md",
+      "contentHash": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "retrievedAt": "2025-03-15T09:01:00Z"
+    },
+    {
+      "id": "artifact_harbor_workbook",
+      "type": "workbook",
+      "title": "Harbor National bank model (representative fixture)",
+      "uri": "fixtures://harbor-national-model.xlsx",
+      "contentHash": "sha256:c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+      "retrievedAt": "2025-03-15T09:05:00Z"
+    },
+    {
+      "id": "artifact_harbor_notes",
+      "type": "document",
+      "title": "Harbor National provision notes (representative fixture)",
+      "uri": "fixtures://harbor-national-notes.md",
+      "contentHash": "sha256:d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+      "retrievedAt": "2025-03-15T09:06:00Z"
+    }
+  ],
+  "provenanceRecords": [
+    {
+      "id": "provenance_model_northstar_cloud",
+      "targetId": "model_northstar_cloud",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Cover",
+        "range": "A1:F12"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_model_harbor_national",
+      "targetId": "model_harbor_national",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Cover",
+        "range": "A1:F12"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_entity_northstar_cloud",
+      "targetId": "entity_northstar_cloud",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Cover",
+        "cell": "B3"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_entity_harbor_national",
+      "targetId": "entity_harbor_national",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Cover",
+        "cell": "B3"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_northstar_revenue",
+      "targetId": "metric_northstar_revenue",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A10"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_northstar_subscription_revenue",
+      "targetId": "metric_northstar_subscription_revenue",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A11"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_northstar_services_revenue",
+      "targetId": "metric_northstar_services_revenue",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A12"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_northstar_cost_of_revenue",
+      "targetId": "metric_northstar_cost_of_revenue",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A16"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_northstar_gross_profit",
+      "targetId": "metric_northstar_gross_profit",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A18"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_northstar_gross_margin",
+      "targetId": "metric_northstar_gross_margin",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A19"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_harbor_operating_income",
+      "targetId": "metric_harbor_operating_income",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A8"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_harbor_net_interest_income",
+      "targetId": "metric_harbor_net_interest_income",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A9"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_harbor_non_interest_income",
+      "targetId": "metric_harbor_non_interest_income",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A10"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_harbor_provision",
+      "targetId": "metric_harbor_provision",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A14"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_metric_harbor_non_interest_expense",
+      "targetId": "metric_harbor_non_interest_expense",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A18"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_metric_harbor_pre_tax_income",
+      "targetId": "metric_harbor_pre_tax_income",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A21"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_period_fy2022",
+      "targetId": "period_fy2022",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B7:F7"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_period_fy2023",
+      "targetId": "period_fy2023",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B7:F7"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_period_fy2024",
+      "targetId": "period_fy2024",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B7:F7"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_period_fy2025",
+      "targetId": "period_fy2025",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B7:F7"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_period_fy2026",
+      "targetId": "period_fy2026",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B7:F7"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_scenario_actual",
+      "targetId": "scenario_actual",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Assumptions",
+        "range": "B2:C2"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_scenario_base",
+      "targetId": "scenario_base",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Assumptions",
+        "range": "B2:C2"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_revenue_fy2022",
+      "targetId": "obs_northstar_revenue_fy2022",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B10"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_revenue_fy2023",
+      "targetId": "obs_northstar_revenue_fy2023",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C10"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_revenue_fy2024",
+      "targetId": "obs_northstar_revenue_fy2024",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D10"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_revenue_fy2025",
+      "targetId": "obs_northstar_revenue_fy2025",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E10"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_revenue_fy2026",
+      "targetId": "obs_northstar_revenue_fy2026",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F10"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_subscription_revenue_fy2022",
+      "targetId": "obs_northstar_subscription_revenue_fy2022",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B11"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_subscription_revenue_fy2023",
+      "targetId": "obs_northstar_subscription_revenue_fy2023",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C11"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_subscription_revenue_fy2024",
+      "targetId": "obs_northstar_subscription_revenue_fy2024",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D11"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_subscription_revenue_fy2025",
+      "targetId": "obs_northstar_subscription_revenue_fy2025",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E11"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_subscription_revenue_fy2026",
+      "targetId": "obs_northstar_subscription_revenue_fy2026",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F11"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_services_revenue_fy2022",
+      "targetId": "obs_northstar_services_revenue_fy2022",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B12"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_services_revenue_fy2023",
+      "targetId": "obs_northstar_services_revenue_fy2023",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C12"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_services_revenue_fy2024",
+      "targetId": "obs_northstar_services_revenue_fy2024",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D12"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_services_revenue_fy2025",
+      "targetId": "obs_northstar_services_revenue_fy2025",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E12"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_services_revenue_fy2026",
+      "targetId": "obs_northstar_services_revenue_fy2026",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F12"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_cost_of_revenue_fy2022",
+      "targetId": "obs_northstar_cost_of_revenue_fy2022",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B16"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_cost_of_revenue_fy2023",
+      "targetId": "obs_northstar_cost_of_revenue_fy2023",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C16"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_cost_of_revenue_fy2024",
+      "targetId": "obs_northstar_cost_of_revenue_fy2024",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D16"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_cost_of_revenue_fy2025",
+      "targetId": "obs_northstar_cost_of_revenue_fy2025",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E16"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_cost_of_revenue_fy2026",
+      "targetId": "obs_northstar_cost_of_revenue_fy2026",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F16"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_profit_fy2022",
+      "targetId": "obs_northstar_gross_profit_fy2022",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B18"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_profit_fy2023",
+      "targetId": "obs_northstar_gross_profit_fy2023",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C18"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_profit_fy2024",
+      "targetId": "obs_northstar_gross_profit_fy2024",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D18"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_profit_fy2025",
+      "targetId": "obs_northstar_gross_profit_fy2025",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E18"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_profit_fy2026",
+      "targetId": "obs_northstar_gross_profit_fy2026",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F18"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_margin_fy2022",
+      "targetId": "obs_northstar_gross_margin_fy2022",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B19"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_margin_fy2023",
+      "targetId": "obs_northstar_gross_margin_fy2023",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C19"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_margin_fy2024",
+      "targetId": "obs_northstar_gross_margin_fy2024",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D19"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_margin_fy2025",
+      "targetId": "obs_northstar_gross_margin_fy2025",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E19"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_northstar_gross_margin_fy2026",
+      "targetId": "obs_northstar_gross_margin_fy2026",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F19"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_operating_income_fy2022",
+      "targetId": "obs_harbor_operating_income_fy2022",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B8"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_operating_income_fy2023",
+      "targetId": "obs_harbor_operating_income_fy2023",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C8"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_operating_income_fy2024",
+      "targetId": "obs_harbor_operating_income_fy2024",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D8"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_operating_income_fy2025",
+      "targetId": "obs_harbor_operating_income_fy2025",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E8"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_operating_income_fy2026",
+      "targetId": "obs_harbor_operating_income_fy2026",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F8"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_net_interest_income_fy2022",
+      "targetId": "obs_harbor_net_interest_income_fy2022",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B9"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_net_interest_income_fy2023",
+      "targetId": "obs_harbor_net_interest_income_fy2023",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C9"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_net_interest_income_fy2024",
+      "targetId": "obs_harbor_net_interest_income_fy2024",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D9"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_net_interest_income_fy2025",
+      "targetId": "obs_harbor_net_interest_income_fy2025",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E9"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_net_interest_income_fy2026",
+      "targetId": "obs_harbor_net_interest_income_fy2026",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F9"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_income_fy2022",
+      "targetId": "obs_harbor_non_interest_income_fy2022",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B10"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_income_fy2023",
+      "targetId": "obs_harbor_non_interest_income_fy2023",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C10"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_income_fy2024",
+      "targetId": "obs_harbor_non_interest_income_fy2024",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D10"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_income_fy2025",
+      "targetId": "obs_harbor_non_interest_income_fy2025",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E10"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_income_fy2026",
+      "targetId": "obs_harbor_non_interest_income_fy2026",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F10"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_provision_fy2022",
+      "targetId": "obs_harbor_provision_fy2022",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B14"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_provision_fy2023",
+      "targetId": "obs_harbor_provision_fy2023",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C14"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_provision_fy2024",
+      "targetId": "obs_harbor_provision_fy2024",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D14"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_provision_fy2025",
+      "targetId": "obs_harbor_provision_fy2025",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E14"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_provision_fy2026",
+      "targetId": "obs_harbor_provision_fy2026",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F14"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_expense_fy2022",
+      "targetId": "obs_harbor_non_interest_expense_fy2022",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B18"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_expense_fy2023",
+      "targetId": "obs_harbor_non_interest_expense_fy2023",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C18"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_expense_fy2024",
+      "targetId": "obs_harbor_non_interest_expense_fy2024",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D18"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_expense_fy2025",
+      "targetId": "obs_harbor_non_interest_expense_fy2025",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E18"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_non_interest_expense_fy2026",
+      "targetId": "obs_harbor_non_interest_expense_fy2026",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F18"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_pre_tax_income_fy2022",
+      "targetId": "obs_harbor_pre_tax_income_fy2022",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "B21"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_pre_tax_income_fy2023",
+      "targetId": "obs_harbor_pre_tax_income_fy2023",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "C21"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_pre_tax_income_fy2024",
+      "targetId": "obs_harbor_pre_tax_income_fy2024",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "D21"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 1,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_obs_harbor_pre_tax_income_fy2025",
+      "targetId": "obs_harbor_pre_tax_income_fy2025",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E21"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_obs_harbor_pre_tax_income_fy2026",
+      "targetId": "obs_harbor_pre_tax_income_fy2026",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "F21"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.94,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_transformation_northstar_revenue",
+      "targetId": "transformation_northstar_revenue",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B10:F10"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.95,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_transformation_northstar_gross_profit",
+      "targetId": "transformation_northstar_gross_profit",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B18:F18"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.95,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_transformation_northstar_gross_margin",
+      "targetId": "transformation_northstar_gross_margin",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B19:F19"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.95,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_transformation_harbor_operating_income",
+      "targetId": "transformation_harbor_operating_income",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B8:F8"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.95,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_transformation_harbor_pre_tax_income",
+      "targetId": "transformation_harbor_pre_tax_income",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "B21:F21"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.95,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_relationship_northstar_subscription_component",
+      "targetId": "relationship_northstar_subscription_component",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_relationship_northstar_services_component",
+      "targetId": "relationship_northstar_services_component",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_relationship_harbor_interest_component",
+      "targetId": "relationship_harbor_interest_component",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_relationship_harbor_non_interest_component",
+      "targetId": "relationship_harbor_non_interest_component",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_relationship_northstar_evidence_supports",
+      "targetId": "relationship_northstar_evidence_supports",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_relationship_northstar_assumption_affects",
+      "targetId": "relationship_northstar_assumption_affects",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_relationship_northstar_decision_related",
+      "targetId": "relationship_northstar_decision_related",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_relationship_harbor_evidence_supports",
+      "targetId": "relationship_harbor_evidence_supports",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_relationship_harbor_assumption_affects",
+      "targetId": "relationship_harbor_assumption_affects",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "range": "A1:F30"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.9,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_evidence_northstar_retention",
+      "targetId": "evidence_northstar_retention",
+      "sourceArtifactId": "artifact_northstar_notes",
+      "locator": {
+        "passage": "Renewal cohort remains stable; base case assumes subscription growth moderates through FY26."
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_evidence_harbor_provision",
+      "targetId": "evidence_harbor_provision",
+      "sourceArtifactId": "artifact_harbor_notes",
+      "locator": {
+        "passage": "Provision normalization is delayed to preserve coverage while criticized assets remain elevated."
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_assumption_northstar_subscription_growth",
+      "targetId": "assumption_northstar_subscription_growth",
+      "sourceArtifactId": "artifact_northstar_notes",
+      "locator": {
+        "passage": "Subscription revenue growth moderates while renewal behavior remains stable."
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.76,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_assumption_harbor_credit_cost",
+      "targetId": "assumption_harbor_credit_cost",
+      "sourceArtifactId": "artifact_harbor_notes",
+      "locator": {
+        "passage": "Credit costs stay above the pre-cycle level through FY26."
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.71,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_decision_northstar_fy2025_revenue",
+      "targetId": "decision_northstar_fy2025_revenue",
+      "sourceArtifactId": "artifact_northstar_notes",
+      "locator": {
+        "passage": "Raise FY25 subscription revenue after reviewing renewal cohorts."
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.99,
+      "reviewStatus": "confirmed"
+    },
+    {
+      "id": "provenance_change_northstar_fy2025_subscription",
+      "targetId": "change_northstar_fy2025_subscription",
+      "sourceArtifactId": "artifact_northstar_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "E11"
+      },
+      "extractionRunId": "run_northstar_2025_03_15",
+      "confidence": 0.96,
+      "reviewStatus": "unreviewed"
+    },
+    {
+      "id": "provenance_unresolved_harbor_provision_label",
+      "targetId": "unresolved_harbor_provision_label",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A14"
+      },
+      "extractionRunId": "run_harbor_2025_03_15",
+      "confidence": 0.64,
+      "reviewStatus": "unreviewed"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "evidence_northstar_retention",
+      "sourceArtifactId": "artifact_northstar_notes",
+      "excerpt": "Renewal cohort remains stable; base case assumes subscription growth moderates through FY26.",
+      "observedAt": "2025-03-15T08:45:00Z"
+    },
+    {
+      "id": "evidence_harbor_provision",
+      "sourceArtifactId": "artifact_harbor_notes",
+      "excerpt": "Provision normalization is delayed to preserve coverage while criticized assets remain elevated.",
+      "observedAt": "2025-03-15T08:50:00Z"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "assumption_northstar_subscription_growth",
+      "modelId": "model_northstar_cloud",
+      "statement": "Subscription revenue growth moderates while renewal behavior remains stable.",
+      "entityId": "entity_northstar_cloud",
+      "effectivePeriodIds": [
+        "period_fy2025",
+        "period_fy2026"
+      ],
+      "scenarioId": "scenario_base",
+      "confidence": 0.76,
+      "status": "active"
+    },
+    {
+      "id": "assumption_harbor_credit_cost",
+      "modelId": "model_harbor_national",
+      "statement": "Credit costs stay above the pre-cycle level through FY26.",
+      "entityId": "entity_harbor_national",
+      "effectivePeriodIds": [
+        "period_fy2025",
+        "period_fy2026"
+      ],
+      "scenarioId": "scenario_base",
+      "confidence": 0.71,
+      "status": "active"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "decision_northstar_fy2025_revenue",
+      "modelId": "model_northstar_cloud",
+      "analystId": "analyst_demo",
+      "createdAt": "2025-03-15T08:55:00Z",
+      "rationaleText": "Raise FY25 subscription revenue after reviewing renewal cohorts.",
+      "rationaleArtifactId": "artifact_northstar_notes"
+    }
+  ],
+  "decisionChanges": [
+    {
+      "id": "change_northstar_fy2025_subscription",
+      "decisionId": "decision_northstar_fy2025_revenue",
+      "observationId": "obs_northstar_subscription_revenue_fy2025",
+      "metricId": "metric_northstar_subscription_revenue",
+      "periodId": "period_fy2025",
+      "scenarioId": "scenario_base",
+      "before": 1280,
+      "after": 1315
+    }
+  ],
+  "extractionRuns": [
+    {
+      "id": "run_northstar_2025_03_15",
+      "sourceArtifactIds": [
+        "artifact_northstar_workbook",
+        "artifact_northstar_notes"
+      ],
+      "startedAt": "2025-03-15T09:00:00Z",
+      "completedAt": "2025-03-15T09:02:00Z",
+      "extractor": "fixture-extractor@0.1",
+      "modelVersionId": "version_northstar_2025_03_15",
+      "status": "completed",
+      "notes": "Representative dataset for schema and viewer verification; not investment research."
+    },
+    {
+      "id": "run_harbor_2025_03_15",
+      "sourceArtifactIds": [
+        "artifact_harbor_workbook",
+        "artifact_harbor_notes"
+      ],
+      "startedAt": "2025-03-15T09:05:00Z",
+      "completedAt": "2025-03-15T09:08:00Z",
+      "extractor": "fixture-extractor@0.1",
+      "modelVersionId": "version_harbor_2025_03_15",
+      "status": "completed_with_issues",
+      "notes": "One label-to-metric mapping remains explicitly unresolved."
+    }
+  ],
+  "unresolvedItems": [
+    {
+      "id": "unresolved_harbor_provision_label",
+      "modelId": "model_harbor_national",
+      "category": "metric_mapping",
+      "description": "The workbook label 'LLP' was mapped to provision for credit losses, but the source contains no explicit definition.",
+      "targetId": "metric_harbor_provision",
+      "sourceArtifactId": "artifact_harbor_workbook",
+      "locator": {
+        "sheet": "Model",
+        "cell": "A14"
+      },
+      "confidence": 0.64,
+      "status": "open"
+    }
+  ]
+}

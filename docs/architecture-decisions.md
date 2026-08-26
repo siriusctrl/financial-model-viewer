@@ -1,0 +1,45 @@
+# Architecture decisions
+
+## 1. One runtime contract
+
+`src/model-db/schema.ts` owns the runtime contract. TypeScript types are inferred from it, and `schema/model-db.schema.json` is generated from it. Hand-maintaining parallel interface and JSON Schema definitions would allow extraction, validation, and visualization to drift.
+
+The user-supplied model included `Observation.versionId` without a separate version table. The MVP keeps the requested top-level object set and makes each `Model` declare `versionIds` plus `currentVersionId`, giving the validator a concrete foreign-key boundary without inventing a second contract.
+
+## 2. Semantic identity excludes layout
+
+Spreadsheet coordinates, indentation, color, and display blocks are extraction signals. Only provenance locators retain sheet/cell/range information. Metric hierarchy uses explicit relationships, and the financial table is a query projection.
+
+This allows the same core frontend to display SaaS and bank models with unrelated metric sets.
+
+## 3. Expressions are parsed, not executed
+
+`model-expression@0.1` uses an expression parser to produce an AST. A validator accepts only literals, arithmetic, comparisons, conditional expressions, and approved function calls. The interpreter evaluates those nodes explicitly.
+
+Member access, arbitrary identifiers/functions, arrays, assignment, loops, imports, async work, browser/network APIs, `eval`, and `new Function` are outside the language boundary.
+
+Unsupported workbook formulas retain their original formula and materialized workbook value with `opaque` or `unresolved` status. They do not block unrelated data.
+
+## 4. Validation is semantic and deterministic
+
+Runtime schema parsing is necessary but insufficient. The validator separately checks global ID uniqueness, references, model versions, metric/value compatibility, expression dependencies, formula cycles, duplicate point-in-time observations, decision-change types, and provenance coverage.
+
+Errors include object ID, field, reason, and repair direction. LLM judgment is not part of dataset validity.
+
+## 5. Visualizations depend on queries
+
+Components receive projections from `ModelDatabaseQueries`; they do not join JSON arrays themselves. This keeps point-in-time selection, scenario behavior, hierarchy construction, dependency expansion, and provenance resolution consistent across views.
+
+The dependency graph derives edges from transformation dependencies. The relationship table does not duplicate those calculation edges.
+
+## 6. Static deployment for the MVP
+
+The public viewer is a Vite static build deployed with GitHub Pages. The sample dataset is bundled at build time and validated at application startup.
+
+This proves the contract and visualization loop without selecting a production database, API, authentication model, or collaboration system prematurely.
+
+## 7. Representative fixtures are not real extraction evidence
+
+The checked-in SaaS and bank fixtures are synthetic and safe to publish. They prove cross-sector extensibility and deterministic behavior but cannot answer extraction-quality questions about a real analyst workbook.
+
+A real authorized workbook is required to measure formula coverage, hierarchy accuracy, source gaps, analyst acceptance, and the amount of implicit knowledge Excel alone cannot resolve.

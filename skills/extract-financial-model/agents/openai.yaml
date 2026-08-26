@@ -1,0 +1,4 @@
+interface:
+  display_name: "Extract Financial Model"
+  short_description: "Extract financial models into semantic datasets"
+  default_prompt: "Use $extract-financial-model to convert this workbook or model export into a validated semantic dataset and extraction report."

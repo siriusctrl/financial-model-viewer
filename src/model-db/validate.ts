@@ -1,0 +1,555 @@
+import type { z } from "zod";
+import { validateExpression } from "./expressions";
+import { ModelDatabaseSchema } from "./schema";
+import type {
+  Metric,
+  ModelDatabase,
+  Observation,
+  ScalarValue,
+} from "./types";
+
+export type ValidationError = {
+  code: string;
+  objectId: string;
+  field: string;
+  reason: string;
+  suggestion: string;
+};
+
+export type ValidationStats = {
+  models: number;
+  metrics: number;
+  observations: number;
+  transformations: number;
+  unresolved: number;
+  unreviewed: number;
+};
+
+export type ValidationResult =
+  | {
+      success: true;
+      data: ModelDatabase;
+      errors: [];
+      stats: ValidationStats;
+    }
+  | {
+      success: false;
+      data?: ModelDatabase;
+      errors: ValidationError[];
+      stats?: ValidationStats;
+    };
+
+type CollectionName = Exclude<
+  keyof ModelDatabase,
+  "schemaVersion" | "dataset"
+>;
+
+const PROVENANCE_REQUIRED_COLLECTIONS = [
+  "models",
+  "entities",
+  "metrics",
+  "periods",
+  "scenarios",
+  "observations",
+  "transformations",
+  "relationships",
+  "evidence",
+  "assumptions",
+  "decisions",
+  "decisionChanges",
+  "unresolvedItems",
+] as const satisfies readonly CollectionName[];
+
+function error(
+  code: string,
+  objectId: string,
+  field: string,
+  reason: string,
+  suggestion: string,
+): ValidationError {
+  return { code, objectId, field, reason, suggestion };
+}
+
+function objectIdForSchemaIssue(
+  input: unknown,
+  issue: z.core.$ZodIssue,
+): string {
+  if (!input || typeof input !== "object") return "dataset";
+  const path = issue.path;
+  if (path.length >= 2 && typeof path[0] === "string" && typeof path[1] === "number") {
+    const collection = (input as Record<string, unknown>)[path[0]];
+    if (Array.isArray(collection)) {
+      const candidate = collection[path[1]];
+      if (candidate && typeof candidate === "object" && "id" in candidate) {
+        return String((candidate as { id: unknown }).id);
+      }
+    }
+  }
+  return "dataset";
+}
+
+function schemaErrors(input: unknown, issues: z.core.$ZodIssue[]): ValidationError[] {
+  return issues.map((issue) =>
+    error(
+      "schema.invalid",
+      objectIdForSchemaIssue(input, issue),
+      issue.path.join(".") || "$",
+      issue.message,
+      "Update the field to match schema/model-db.schema.json",
+    ),
+  );
+}
+
+function scalarKind(value: ScalarValue): string {
+  if (value === null) return "null";
+  return typeof value;
+}
+
+function valueMatchesMetric(value: ScalarValue, metric: Metric): boolean {
+  if (value === null) return true;
+  if (["number", "percentage", "currency"].includes(metric.dataType)) {
+    return typeof value === "number" && Number.isFinite(value);
+  }
+  if (metric.dataType === "count") {
+    return typeof value === "number" && Number.isInteger(value);
+  }
+  if (metric.dataType === "boolean") return typeof value === "boolean";
+  return typeof value === "string";
+}
+
+function canonicalCollections(database: ModelDatabase): [string, { id: string }[]][] {
+  return [
+    ["models", database.models],
+    ["entities", database.entities],
+    ["metrics", database.metrics],
+    ["periods", database.periods],
+    ["scenarios", database.scenarios],
+    ["observations", database.observations],
+    ["transformations", database.transformations],
+    ["relationships", database.relationships],
+    ["sourceArtifacts", database.sourceArtifacts],
+    ["provenanceRecords", database.provenanceRecords],
+    ["evidence", database.evidence],
+    ["assumptions", database.assumptions],
+    ["decisions", database.decisions],
+    ["decisionChanges", database.decisionChanges],
+    ["extractionRuns", database.extractionRuns],
+    ["unresolvedItems", database.unresolvedItems],
+  ];
+}
+
+function detectCycles(database: ModelDatabase): string[][] {
+  const graph = new Map<string, string[]>();
+  for (const transformation of database.transformations) {
+    if (transformation.status !== "supported") continue;
+    const dependencies = graph.get(transformation.outputMetricId) ?? [];
+    graph.set(transformation.outputMetricId, [
+      ...dependencies,
+      ...transformation.dependencyMetricIds,
+    ]);
+  }
+
+  const visited = new Set<string>();
+  const active = new Set<string>();
+  const stack: string[] = [];
+  const cycles: string[][] = [];
+
+  const visit = (metricId: string): void => {
+    if (active.has(metricId)) {
+      const start = stack.indexOf(metricId);
+      cycles.push([...stack.slice(start), metricId]);
+      return;
+    }
+    if (visited.has(metricId)) return;
+    visited.add(metricId);
+    active.add(metricId);
+    stack.push(metricId);
+    for (const dependency of graph.get(metricId) ?? []) visit(dependency);
+    stack.pop();
+    active.delete(metricId);
+  };
+
+  for (const metricId of graph.keys()) visit(metricId);
+  return cycles;
+}
+
+function pushMissingReference(
+  errors: ValidationError[],
+  objectId: string,
+  field: string,
+  value: string | undefined,
+  validIds: Set<string>,
+  kind: string,
+): void {
+  if (value && !validIds.has(value)) {
+    errors.push(
+      error(
+        "reference.missing",
+        objectId,
+        field,
+        `${kind} ${value} does not exist`,
+        `Add the referenced ${kind.toLowerCase()} or correct ${field}`,
+      ),
+    );
+  }
+}
+
+function validateObservation(
+  observation: Observation,
+  database: ModelDatabase,
+  indexes: {
+    models: Map<string, ModelDatabase["models"][number]>;
+    metrics: Map<string, Metric>;
+    entities: Set<string>;
+    periods: Set<string>;
+    scenarios: Set<string>;
+    transformations: Set<string>;
+  },
+  errors: ValidationError[],
+): void {
+  const model = indexes.models.get(observation.modelId);
+  pushMissingReference(
+    errors,
+    observation.id,
+    "modelId",
+    observation.modelId,
+    new Set(indexes.models.keys()),
+    "Model",
+  );
+  pushMissingReference(errors, observation.id, "metricId", observation.metricId, new Set(indexes.metrics.keys()), "Metric");
+  pushMissingReference(errors, observation.id, "entityId", observation.entityId, indexes.entities, "Entity");
+  pushMissingReference(errors, observation.id, "periodId", observation.periodId, indexes.periods, "Period");
+  pushMissingReference(errors, observation.id, "scenarioId", observation.scenarioId, indexes.scenarios, "Scenario");
+  pushMissingReference(errors, observation.id, "transformationId", observation.transformationId, indexes.transformations, "Transformation");
+
+  if (model && !model.versionIds.includes(observation.versionId)) {
+    errors.push(
+      error(
+        "observation.version",
+        observation.id,
+        "versionId",
+        `Version ${observation.versionId} is not declared by model ${model.id}`,
+        "Add the version ID to model.versionIds or correct the observation",
+      ),
+    );
+  }
+
+  const metric = indexes.metrics.get(observation.metricId);
+  if (metric && !valueMatchesMetric(observation.value, metric)) {
+    errors.push(
+      error(
+        "observation.value_type",
+        observation.id,
+        "value",
+        `Value kind ${scalarKind(observation.value)} is incompatible with metric data type ${metric.dataType}`,
+        `Provide a ${metric.dataType} value or correct the metric dataType`,
+      ),
+    );
+  }
+
+  if (observation.valueType === "derived" && !observation.transformationId) {
+    errors.push(
+      error(
+        "observation.transformation",
+        observation.id,
+        "transformationId",
+        "Derived observations must reference a transformation",
+        "Add transformationId or use a non-derived valueType",
+      ),
+    );
+  }
+
+  void database;
+}
+
+function statsFor(database: ModelDatabase): ValidationStats {
+  return {
+    models: database.models.length,
+    metrics: database.metrics.length,
+    observations: database.observations.length,
+    transformations: database.transformations.length,
+    unresolved: database.unresolvedItems.filter((item) => item.status === "open").length,
+    unreviewed: database.provenanceRecords.filter(
+      (record) => record.reviewStatus === "unreviewed",
+    ).length,
+  };
+}
+
+export function validateModelDatabase(input: unknown): ValidationResult {
+  const parsed = ModelDatabaseSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, errors: schemaErrors(input, parsed.error.issues) };
+  }
+
+  const database = parsed.data;
+  const errors: ValidationError[] = [];
+  const models = new Map(database.models.map((item) => [item.id, item]));
+  const metrics = new Map(database.metrics.map((item) => [item.id, item]));
+  const entityIds = new Set(database.entities.map((item) => item.id));
+  const periodIds = new Set(database.periods.map((item) => item.id));
+  const scenarioIds = new Set(database.scenarios.map((item) => item.id));
+  const transformationIds = new Set(database.transformations.map((item) => item.id));
+  const sourceArtifactIds = new Set(database.sourceArtifacts.map((item) => item.id));
+  const extractionRunIds = new Set(database.extractionRuns.map((item) => item.id));
+  const observationIds = new Set(database.observations.map((item) => item.id));
+  const decisionIds = new Set(database.decisions.map((item) => item.id));
+  const evidenceIds = new Set(database.evidence.map((item) => item.id));
+  const assumptionIds = new Set(database.assumptions.map((item) => item.id));
+  const allVersionIds = new Set(database.models.flatMap((item) => item.versionIds));
+
+  const seenIds = new Map<string, string>();
+  for (const [collection, objects] of canonicalCollections(database)) {
+    for (const object of objects) {
+      const previousCollection = seenIds.get(object.id);
+      if (previousCollection) {
+        errors.push(
+          error(
+            "id.duplicate",
+            object.id,
+            "id",
+            `ID is already used in ${previousCollection}`,
+            "Assign a globally unique stable ID",
+          ),
+        );
+      } else {
+        seenIds.set(object.id, collection);
+      }
+    }
+  }
+
+  pushMissingReference(errors, database.dataset.id, "defaultModelId", database.dataset.defaultModelId, new Set(models.keys()), "Model");
+  for (const model of database.models) {
+    pushMissingReference(errors, model.id, "primaryEntityId", model.primaryEntityId, entityIds, "Entity");
+    pushMissingReference(errors, model.id, "defaultScenarioId", model.defaultScenarioId, scenarioIds, "Scenario");
+    if (!model.versionIds.includes(model.currentVersionId)) {
+      errors.push(
+        error(
+          "model.current_version",
+          model.id,
+          "currentVersionId",
+          `Current version ${model.currentVersionId} is not included in versionIds`,
+          "Add currentVersionId to versionIds or select a declared version",
+        ),
+      );
+    }
+  }
+
+  for (const entity of database.entities) {
+    pushMissingReference(errors, entity.id, "parentEntityId", entity.parentEntityId, entityIds, "Entity");
+  }
+  for (const period of database.periods) {
+    pushMissingReference(errors, period.id, "parentPeriodId", period.parentPeriodId, periodIds, "Period");
+  }
+
+  for (const observation of database.observations) {
+    validateObservation(
+      observation,
+      database,
+      {
+        models,
+        metrics,
+        entities: entityIds,
+        periods: periodIds,
+        scenarios: scenarioIds,
+        transformations: transformationIds,
+      },
+      errors,
+    );
+  }
+
+  const observationKeys = new Map<string, string>();
+  for (const observation of database.observations) {
+    const key = [
+      observation.modelId,
+      observation.metricId,
+      observation.entityId,
+      observation.periodId,
+      observation.scenarioId ?? "none",
+      observation.asOf,
+      observation.versionId,
+    ].join("|");
+    const previous = observationKeys.get(key);
+    if (previous) {
+      errors.push(
+        error(
+          "observation.duplicate_point",
+          observation.id,
+          "$",
+          `Point-in-time key duplicates observation ${previous}`,
+          "Remove the duplicate or assign a distinct asOf, version, scenario, or context",
+        ),
+      );
+    } else {
+      observationKeys.set(key, observation.id);
+    }
+  }
+
+  for (const transformation of database.transformations) {
+    pushMissingReference(errors, transformation.id, "outputMetricId", transformation.outputMetricId, new Set(metrics.keys()), "Metric");
+    transformation.dependencyMetricIds.forEach((metricId, index) =>
+      pushMissingReference(errors, transformation.id, `dependencyMetricIds.${index}`, metricId, new Set(metrics.keys()), "Metric"),
+    );
+
+    if (transformation.status === "supported") {
+      const expression = validateExpression(transformation.expression);
+      for (const issue of expression.issues) {
+        errors.push(
+          error(
+            "transformation.expression",
+            transformation.id,
+            `expression${issue.path === "$" ? "" : issue.path.slice(1)}`,
+            issue.reason,
+            issue.suggestion,
+          ),
+        );
+      }
+      const declared = [...new Set(transformation.dependencyMetricIds)].sort();
+      if (declared.join("|") !== expression.dependencies.join("|")) {
+        errors.push(
+          error(
+            "transformation.dependencies",
+            transformation.id,
+            "dependencyMetricIds",
+            `Declared dependencies [${declared.join(", ")}] do not match expression dependencies [${expression.dependencies.join(", ")}]`,
+            "Regenerate dependencyMetricIds from the parsed canonical expression",
+          ),
+        );
+      }
+    } else if (!transformation.originalExpression) {
+      errors.push(
+        error(
+          "transformation.original_expression",
+          transformation.id,
+          "originalExpression",
+          `${transformation.status} transformations must preserve the original formula`,
+          "Add originalExpression from the source workbook",
+        ),
+      );
+    }
+  }
+
+  for (const cycle of detectCycles(database)) {
+    errors.push(
+      error(
+        "transformation.cycle",
+        cycle[0],
+        "dependencyMetricIds",
+        `Dependency cycle detected: ${cycle.join(" -> ")}`,
+        "Break the cycle or mark an unsupported transformation as opaque",
+      ),
+    );
+  }
+
+  const relationshipTargetIds = new Set(seenIds.keys());
+  for (const relationship of database.relationships) {
+    pushMissingReference(errors, relationship.id, "fromId", relationship.fromId, relationshipTargetIds, "Canonical object");
+    pushMissingReference(errors, relationship.id, "toId", relationship.toId, relationshipTargetIds, "Canonical object");
+  }
+
+  for (const artifact of database.sourceArtifacts) {
+    if (artifact.contentHash && !/^[a-z0-9]+:[a-f0-9]+$/i.test(artifact.contentHash)) {
+      errors.push(
+        error(
+          "artifact.content_hash",
+          artifact.id,
+          "contentHash",
+          "Content hash must include an algorithm prefix",
+          "Use a value such as sha256:0123abcd",
+        ),
+      );
+    }
+  }
+
+  for (const run of database.extractionRuns) {
+    run.sourceArtifactIds.forEach((artifactId, index) =>
+      pushMissingReference(errors, run.id, `sourceArtifactIds.${index}`, artifactId, sourceArtifactIds, "Source artifact"),
+    );
+    pushMissingReference(errors, run.id, "modelVersionId", run.modelVersionId, allVersionIds, "Model version");
+  }
+
+  const validProvenanceTargets = new Set(
+    PROVENANCE_REQUIRED_COLLECTIONS.flatMap((collection) =>
+      database[collection].map((object) => object.id),
+    ),
+  );
+  const targetsWithProvenance = new Set<string>();
+  for (const provenance of database.provenanceRecords) {
+    pushMissingReference(errors, provenance.id, "targetId", provenance.targetId, validProvenanceTargets, "Provenance target");
+    pushMissingReference(errors, provenance.id, "sourceArtifactId", provenance.sourceArtifactId, sourceArtifactIds, "Source artifact");
+    pushMissingReference(errors, provenance.id, "extractionRunId", provenance.extractionRunId, extractionRunIds, "Extraction run");
+    targetsWithProvenance.add(provenance.targetId);
+  }
+  for (const targetId of validProvenanceTargets) {
+    if (!targetsWithProvenance.has(targetId)) {
+      errors.push(
+        error(
+          "provenance.missing",
+          targetId,
+          "provenanceRecords",
+          "Extracted canonical object has no provenance record",
+          "Add source artifact, locator, extraction run, confidence, and review status",
+        ),
+      );
+    }
+  }
+
+  for (const item of database.evidence) {
+    pushMissingReference(errors, item.id, "sourceArtifactId", item.sourceArtifactId, sourceArtifactIds, "Source artifact");
+  }
+  for (const assumption of database.assumptions) {
+    pushMissingReference(errors, assumption.id, "modelId", assumption.modelId, new Set(models.keys()), "Model");
+    pushMissingReference(errors, assumption.id, "entityId", assumption.entityId, entityIds, "Entity");
+    pushMissingReference(errors, assumption.id, "scenarioId", assumption.scenarioId, scenarioIds, "Scenario");
+    assumption.effectivePeriodIds?.forEach((periodId, index) =>
+      pushMissingReference(errors, assumption.id, `effectivePeriodIds.${index}`, periodId, periodIds, "Period"),
+    );
+  }
+  for (const decision of database.decisions) {
+    pushMissingReference(errors, decision.id, "modelId", decision.modelId, new Set(models.keys()), "Model");
+    pushMissingReference(errors, decision.id, "rationaleArtifactId", decision.rationaleArtifactId, sourceArtifactIds, "Source artifact");
+  }
+  for (const change of database.decisionChanges) {
+    pushMissingReference(errors, change.id, "decisionId", change.decisionId, decisionIds, "Decision");
+    pushMissingReference(errors, change.id, "observationId", change.observationId, observationIds, "Observation");
+    pushMissingReference(errors, change.id, "metricId", change.metricId, new Set(metrics.keys()), "Metric");
+    pushMissingReference(errors, change.id, "periodId", change.periodId, periodIds, "Period");
+    pushMissingReference(errors, change.id, "scenarioId", change.scenarioId, scenarioIds, "Scenario");
+    if (scalarKind(change.before) !== scalarKind(change.after)) {
+      errors.push(
+        error(
+          "decision_change.value_type",
+          change.id,
+          "before/after",
+          `Before kind ${scalarKind(change.before)} differs from after kind ${scalarKind(change.after)}`,
+          "Use matching scalar types for before and after",
+        ),
+      );
+    }
+  }
+  for (const unresolved of database.unresolvedItems) {
+    pushMissingReference(errors, unresolved.id, "modelId", unresolved.modelId, new Set(models.keys()), "Model");
+    pushMissingReference(errors, unresolved.id, "targetId", unresolved.targetId, relationshipTargetIds, "Canonical object");
+    pushMissingReference(errors, unresolved.id, "sourceArtifactId", unresolved.sourceArtifactId, sourceArtifactIds, "Source artifact");
+  }
+
+  // Ensure evidence and assumptions used in relationships are still resolvable after
+  // collection-level validation. These sets also make the intended semantic surface explicit.
+  void evidenceIds;
+  void assumptionIds;
+
+  const stats = statsFor(database);
+  if (errors.length > 0) return { success: false, data: database, errors, stats };
+  return { success: true, data: database, errors: [], stats };
+}
+
+export function assertValidModelDatabase(input: unknown): ModelDatabase {
+  const result = validateModelDatabase(input);
+  if (!result.success) {
+    throw new Error(
+      result.errors
+        .map((item) => `${item.objectId}.${item.field}: ${item.reason}`)
+        .join("\n"),
+    );
+  }
+  return result.data;
+}
