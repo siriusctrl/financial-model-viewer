@@ -199,7 +199,18 @@ function TableSection({
                   <strong>{row.metric.name}</strong>
                   <small>{row.metric.unit ?? row.metric.dataType}</small>
                 </span>
-                {isDerived && <span className="formula-badge">fx</span>}
+                <span className="metric-row-signals">
+                  {isDerived && <span className="formula-badge">fx</span>}
+                  {row.unresolvedItems.length > 0 && (
+                    <span
+                      className="row-warning"
+                      title={row.unresolvedItems.map((item) => item.description).join("; ")}
+                      aria-label={`${row.unresolvedItems.length} open extraction issue${row.unresolvedItems.length === 1 ? "" : "s"}`}
+                    >
+                      <Icon name="warning" size={12} /> review
+                    </span>
+                  )}
+                </span>
               </button>
             </th>
             {periods.map((period, index) => {

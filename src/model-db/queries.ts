@@ -14,6 +14,7 @@ import type {
   SourceLocator,
   TablePresentation,
   Transformation,
+  UnresolvedItem,
 } from "./types";
 import { validateExpression } from "./expressions";
 
@@ -39,6 +40,7 @@ export type FinancialTableRow = {
   metric: Metric;
   depth: number;
   sourceLocator?: SourceLocator;
+  unresolvedItems: UnresolvedItem[];
   observations: Record<string, Observation | undefined>;
 };
 
@@ -97,6 +99,7 @@ export type ObservationDetailProjection = {
   transformation?: Transformation;
   provenance: ProvenanceProjection;
   inputs: ObservationLineageInput[];
+  unresolvedItems: UnresolvedItem[];
 };
 
 export type ModelOverviewProjection = {
@@ -370,6 +373,12 @@ export class ModelDatabaseQueries {
         metric: node.metric,
         depth,
         sourceLocator: this.primarySourceLocator(node.metric.id),
+        unresolvedItems: this.database.unresolvedItems.filter(
+          (item) =>
+            item.status === "open" &&
+            item.targetId === node.metric.id &&
+            (!item.modelId || item.modelId === modelId),
+        ),
         observations: Object.fromEntries(
           (seriesByMetric.get(node.metric.id) ?? []).map((point) => [
             point.period.id,
@@ -488,6 +497,12 @@ export class ModelDatabaseQueries {
       transformation,
       provenance: this.getProvenance(observation.id),
       inputs,
+      unresolvedItems: this.database.unresolvedItems.filter(
+        (item) =>
+          item.status === "open" &&
+          (item.targetId === observation.id || item.targetId === metric.id) &&
+          (!item.modelId || item.modelId === observation.modelId),
+      ),
     };
   }
 

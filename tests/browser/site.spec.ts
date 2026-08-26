@@ -65,6 +65,13 @@ test("uses extracted sections for a structurally different bank model", async ({
   await expect(page.getByText("Operating income", { exact: true })).toBeVisible();
   await expect(page.getByText("Credit and costs", { exact: true })).toBeVisible();
   await expect(page.getByText("Provision for credit losses", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 review warning")).toBeVisible();
+  await expect(page.getByLabel("1 open extraction issue")).toBeVisible();
+  await page.getByTitle(/obs_harbor_provision_fy2025/).click();
+  await expect(page.getByTestId("cell-review-warning")).toContainText(
+    "The workbook label 'LLP' was mapped to provision for credit losses",
+  );
+  await expect(page.getByTestId("cell-review-warning")).toContainText("Model!A14");
   await expect(page.getByText("Subscription revenue", { exact: true })).toHaveCount(0);
 });
 
@@ -138,8 +145,8 @@ test("surfaces an explicitly acknowledged presentation fallback", async ({ page 
 
   await uploadJson(page, "fallback-model.json", imported);
 
-  await expect(page.getByTestId("import-notice")).toContainText("with 1 warning");
-  await expect(page.getByText("1 structure warning")).toBeVisible();
+  await expect(page.getByTestId("import-notice")).toContainText("with 2 warnings");
+  await expect(page.getByText("2 review warnings")).toBeVisible();
   await expect(page.getByText("Source-order fallback")).toBeVisible();
 });
 

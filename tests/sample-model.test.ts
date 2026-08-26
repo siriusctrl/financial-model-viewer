@@ -46,6 +46,10 @@ describe("query projections", () => {
     expect(table.entity.name).toBe("Harbor National");
     expect(table.rows.some((row) => row.metric.name === "Provision for credit losses")).toBe(true);
     expect(table.rows.some((row) => row.metric.name === "Subscription revenue")).toBe(false);
+    expect(
+      table.rows.find((row) => row.metric.id === "metric_harbor_provision")
+        ?.unresolvedItems.map((item) => item.id),
+    ).toEqual(["unresolved_harbor_provision_label"]);
   });
 
   it("derives graph edges from transformation dependencies", () => {
@@ -113,5 +117,15 @@ describe("query projections", () => {
     expect(detail.inputs).toHaveLength(1);
     expect(detail.inputs[0]?.period?.label).toBe("FY24A");
     expect(detail.inputs[0]?.provenance.records[0]?.provenance.locator?.cell).toBe("D10");
+  });
+
+  it("projects open metric issues into the affected cell detail", () => {
+    const detail = queries.getObservationDetail("obs_harbor_provision_fy2025");
+    expect(detail.unresolvedItems).toContainEqual(
+      expect.objectContaining({
+        id: "unresolved_harbor_provision_label",
+        locator: { sheet: "Model", cell: "A14" },
+      }),
+    );
   });
 });

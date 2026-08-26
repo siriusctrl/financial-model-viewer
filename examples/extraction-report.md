@@ -71,7 +71,9 @@ The deterministic validator reports no missing provenance for canonical objects.
 
 ```text
 npm run validate -- examples/sample-model-db.json
+npm run extraction:check -- examples/sample-model-db.json examples/extraction-report.md
 PASS — schema, references, types, dependencies, cycles, point-in-time uniqueness, and provenance coverage
+WARNING — `unresolved_harbor_provision_label` remains open and requires analyst review; this warning is visible in the viewer.
 ```
 
 ## Analyst questions

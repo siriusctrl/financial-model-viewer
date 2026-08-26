@@ -155,6 +155,22 @@ function CellDetail({
           </div>
         </section>
 
+        {detail.unresolvedItems.length > 0 && (
+          <section className="cell-review-warning" data-testid="cell-review-warning">
+            <Icon name="warning" size={16} />
+            <div>
+              <strong>Open extraction issue</strong>
+              {detail.unresolvedItems.map((item) => (
+                <p key={item.id}>
+                  {item.description}
+                  {item.locator ? ` · ${formatLocator(item.locator)}` : ""}
+                  {item.confidence !== undefined ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}
+                </p>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="inspector-section">
           <h3>Properties</h3>
           <dl className="property-list">

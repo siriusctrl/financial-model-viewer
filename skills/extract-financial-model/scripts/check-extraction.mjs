@@ -121,6 +121,19 @@ function checkReport(reportPath) {
     }
   }
 
+  const validatorHeadingIndex = headings.findIndex(
+    (heading) => heading.name === "Validator result",
+  );
+  if (validatorHeadingIndex !== -1) {
+    const heading = headings[validatorHeadingIndex];
+    const nextHeading = headings[validatorHeadingIndex + 1];
+    const content = report.slice(heading.contentStart, nextHeading?.index ?? report.length);
+    if (!/(?:npm run extraction:check|check-extraction\.mjs)(?:\s|`|$)/.test(content)) {
+      fail(`${reportPath} must record the strict extraction checker command under "## Validator result".`);
+      valid = false;
+    }
+  }
+
   if (valid) {
     console.log(`VALID ${reportPath}`);
     console.log(`reportSections=${REQUIRED_REPORT_SECTIONS.length}`);

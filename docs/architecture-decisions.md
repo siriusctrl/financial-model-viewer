@@ -42,6 +42,8 @@ This proves the contract and visualization loop without selecting a production d
 
 Users may open a local `model-db@0.1.0` JSON file in the static viewer. The browser reads and validates the file in memory, and the accepted database replaces the sample only for the current tab. The viewer does not upload, persist, cache, or encode imported model data into the URL. This keeps local preview within the static-hosting boundary; sharing and storage remain explicitly deferred.
 
+Extraction agents may also compile a validated dataset into a separate local static review bundle. That build uses relative assets, embeds the dataset into the generated HTML, and is served only on `127.0.0.1` for Playwright or human inspection. It is a derivative review artifact and does not replace or modify the GitHub Pages build, deployment workflow, or public representative dataset.
+
 ## 7. Representative fixtures are not real extraction evidence
 
 The checked-in SaaS and bank fixtures are synthetic and safe to publish. They prove cross-sector extensibility and deterministic behavior but cannot answer extraction-quality questions about a real analyst workbook.

@@ -15,6 +15,12 @@ describe("deterministic model database validator", () => {
       expect(result.stats.models).toBe(2);
       expect(result.stats.observations).toBeGreaterThan(50);
       expect(result.stats.unresolved).toBe(1);
+      expect(result.warnings).toContainEqual(
+        expect.objectContaining({
+          code: "unresolved.open",
+          objectId: "unresolved_harbor_provision_label",
+        }),
+      );
     }
   });
 

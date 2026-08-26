@@ -5,5 +5,6 @@ coverage/
 playwright-report/
 test-results/
 artifacts/verification/
+artifacts/extraction-preview/
 .DS_Store
 *.local

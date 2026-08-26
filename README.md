@@ -21,6 +21,7 @@ This project tests a product direction. It does not replace Excel, execute workb
 - TypeScript types and portable JSON Schema come from one runtime contract.
 - A restricted expression interpreter can evaluate supported formulas without `eval` or arbitrary JavaScript.
 - A deterministic validator can report broken references, value-type mismatches, dependency cycles, duplicate points, unsupported syntax, and missing provenance with object-level repair guidance.
+- Every open unresolved item remains a visible review warning, with affected metric/cell cues when a target is known.
 - The same query layer and frontend render a SaaS model and a structurally different bank model without company-specific UI branches.
 - A user can move from a forecast number to its metric, formula, source workbook cell, confidence, review status, and extraction run.
 
@@ -70,7 +71,7 @@ The public and local viewers include an **Open JSON** action. Choose a `model-db
 - The page shows actionable object and field errors before accepting invalid data.
 - Files are limited to 20 MB to keep the static browser preview responsive.
 
-Reload the page or use **Restore sample** to return to the bundled cross-sector fixture.
+Reload the page or use **Restore bundled** to return to the dataset compiled into the viewer.
 
 ## Deterministic data workflow
 
@@ -97,6 +98,22 @@ npm run extraction:check -- path/to/output-directory
 
 The output directory must contain both `model-db.json` and `extraction-report.md`. The checker uses the same runtime schema and semantic validator as the viewer, then verifies that every required report section exists, is non-empty, and appears in contract order.
 
+Compile the checked extraction into a local static viewer and run its Playwright review loop:
+
+```sh
+npm run extraction:preview -- path/to/output-directory
+```
+
+This writes a generated `viewer/` directory next to the extraction, with portable relative assets, the validated database embedded in HTML, and `viewer/review/` screenshots plus a machine-readable `review.json`. The Playwright pass visits every model and checks source-cell inspection, derived lineage, unresolved cues, mobile table scrolling, and mobile inspection. The automated result deliberately requires visual judgment: inspect the contact sheet and individual screenshots before accepting the extraction.
+
+Keep the compiled bundle available for deeper Playwright or browser interaction:
+
+```sh
+npm run extraction:serve -- path/to/output-directory/viewer
+```
+
+The server binds to `127.0.0.1` and does not upload data. This is an additive local review path; the public GitHub Pages build and its bundled representative dataset remain unchanged. Do not publish a generated bundle containing confidential model data without explicit authorization.
+
 Use `skills/extract-financial-model/` when converting a workbook, workbook IR, CSV export, or structured model input. Each extraction must produce:
 
 ```text
@@ -112,9 +129,10 @@ Real workbooks may contain confidential research. Keep inputs and generated priv
 npm run check          # generated-contract checks, unit tests, TypeScript, production build
 npm run verify:ui      # Chromium/WebKit, desktop/mobile behavior
 npm run verify:proof   # real browser screenshots and contact sheet
+npm run verify:extraction-preview # compile and review the representative extraction
 ```
 
-`verify:proof` writes local review evidence to `artifacts/verification/`, which is intentionally ignored by Git.
+The proof commands write local review evidence under `artifacts/`, which is intentionally ignored by Git.
 
 ## Included data
 

@@ -1,7 +1,7 @@
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { Icon } from "./components/Icon";
 import { ObjectDetailPanel } from "./components/ObjectDetailPanel";
-import { defaultDatabase } from "./data/database";
+import { defaultDatabase, defaultDatabaseWarnings } from "./data/database";
 import { parseModelDatabaseJson } from "./model-db/import";
 import { ModelDatabaseQueries } from "./model-db/queries";
 import type { ModelDatabase } from "./model-db/types";
@@ -19,7 +19,7 @@ const views: Array<{ id: View; label: string }> = [
 const MAX_JSON_BYTES = 20 * 1024 * 1024;
 
 type DatasetSource =
-  | { kind: "sample" }
+  | { kind: "bundled" }
   | { kind: "file"; filename: string };
 
 type ImportNotice = {
@@ -48,8 +48,10 @@ function initialGraphMetric(database: ModelDatabase, modelId: string): string | 
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [database, setDatabase] = useState(defaultDatabase);
-  const [datasetSource, setDatasetSource] = useState<DatasetSource>({ kind: "sample" });
-  const [databaseWarnings, setDatabaseWarnings] = useState<ValidationWarning[]>([]);
+  const [datasetSource, setDatasetSource] = useState<DatasetSource>({ kind: "bundled" });
+  const [databaseWarnings, setDatabaseWarnings] = useState<ValidationWarning[]>(
+    defaultDatabaseWarnings,
+  );
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const [selectedModelId, setSelectedModelId] = useState(() => defaultModelId(defaultDatabase));
   const [view, setView] = useState<View>("table");
@@ -157,12 +159,12 @@ export default function App() {
     }
   };
 
-  const restoreSample = () => {
-    activateDatabase(defaultDatabase, { kind: "sample" });
+  const restoreBundledDatabase = () => {
+    activateDatabase(defaultDatabase, { kind: "bundled" }, defaultDatabaseWarnings);
     setImportNotice({
       kind: "success",
-      title: "Sample dataset restored",
-      message: "You are previewing the bundled cross-sector demonstration dataset.",
+      title: "Bundled dataset restored",
+      message: "You are previewing the dataset compiled into this viewer.",
     });
   };
 
@@ -194,7 +196,7 @@ export default function App() {
           <span className={`validation-status ${databaseWarnings.length > 0 ? "has-warning" : ""}`}>
             <Icon name={databaseWarnings.length > 0 ? "warning" : "check"} size={14} />
             {databaseWarnings.length > 0
-              ? `${databaseWarnings.length} structure warning${databaseWarnings.length === 1 ? "" : "s"}`
+              ? `${databaseWarnings.length} review warning${databaseWarnings.length === 1 ? "" : "s"}`
               : "Validated locally"}
           </span>
           <input
@@ -213,7 +215,7 @@ export default function App() {
             <Icon name="upload" size={15} /> Open JSON
           </button>
           {datasetSource.kind === "file" && (
-            <button className="text-button" onClick={restoreSample}>Restore sample</button>
+            <button className="text-button" onClick={restoreBundledDatabase}>Restore bundled</button>
           )}
         </div>
       </header>

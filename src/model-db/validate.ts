@@ -292,6 +292,7 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   const database = parsed.data;
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
+  const specificallyReportedUnresolvedIds = new Set<string>();
   const models = new Map(database.models.map((item) => [item.id, item]));
   const metrics = new Map(database.metrics.map((item) => [item.id, item]));
   const entityIds = new Set(database.entities.map((item) => item.id));
@@ -418,6 +419,7 @@ export function validateModelDatabase(input: unknown): ValidationResult {
         item.status === "open",
     );
     if (unresolvedPresentation) {
+      specificallyReportedUnresolvedIds.add(unresolvedPresentation.id);
       warnings.push(
         error(
           "presentation.fallback",
@@ -673,6 +675,17 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     pushMissingReference(errors, unresolved.id, "modelId", unresolved.modelId, new Set(models.keys()), "Model");
     pushMissingReference(errors, unresolved.id, "targetId", unresolved.targetId, relationshipTargetIds, "Canonical object");
     pushMissingReference(errors, unresolved.id, "sourceArtifactId", unresolved.sourceArtifactId, sourceArtifactIds, "Source artifact");
+    if (unresolved.status === "open" && !specificallyReportedUnresolvedIds.has(unresolved.id)) {
+      warnings.push(
+        error(
+          "unresolved.open",
+          unresolved.id,
+          unresolved.category,
+          unresolved.description,
+          "Resolve the item with source evidence, or explicitly mark it resolved or dismissed",
+        ),
+      );
+    }
   }
 
   // Ensure evidence and assumptions used in relationships are still resolvable after

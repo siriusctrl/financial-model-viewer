@@ -15,6 +15,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `scripts/generate-schema.ts`: generates `schema/model-db.schema.json` from `schema.ts`.
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
 - `skills/extract-financial-model/`: reusable workbook/model extraction workflow and contract.
+- `skills/extract-financial-model/scripts/build-preview.mjs`: validates, compiles, and Playwright-reviews a local extraction bundle without changing GitHub Pages.
 - `examples/`: generated semantic dataset and its extraction report.
 - `tests/`: expression, validator, query-generality, and Playwright browser behavior.
 - `.github/workflows/pages.yml`: verification and GitHub Pages deployment.
@@ -56,17 +57,19 @@ Before publishing a UI change, also run:
 ```sh
 npm run verify:ui
 npm run verify:proof
+npm run verify:extraction-preview
 ```
 
 Inspect desktop/mobile screenshots and `artifacts/verification/contact-sheet.png`. A successful build alone does not prove table scrolling, model switching, graph interaction, or source traceability.
 
-For a real extraction, also inspect the generated `extraction-report.md`, spot-check source cells/formulas, and confirm every open analyst question is explicit.
+For a real extraction, also run `npm run extraction:preview -- path/to/output-directory`, inspect `viewer/review/contact-sheet.png` and the individual screenshots, spot-check source cells/formulas, and confirm every open analyst question is explicit. Do not treat the automated preview result as visual acceptance.
 
 ## Documentation and handoff
 
 - Update `README.md` when setup, public behavior, scope, publishing, or verification commands change.
 - Update `docs/architecture-decisions.md` when the canonical contract, expression security boundary, query boundary, or hosting model changes.
 - Update the project skill when extraction behavior or report requirements change.
+- Keep generated extraction viewers local and uncommitted unless publication is explicitly authorized; the normal Pages build remains the representative public viewer.
 - Report checks actually run and distinguish representative fixtures from real analyst models.
 - Do not commit confidential workbooks, generated `dist/`, browser artifacts, credentials, or local caches.
 - Use focused Conventional Commit messages.

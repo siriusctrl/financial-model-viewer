@@ -1,6 +1,6 @@
 ---
 name: extract-financial-model
-description: Convert analyst financial-model workbooks, lossless workbook IR, CSV exports, or structured model JSON into a canonical model-db.json plus extraction-report.md. Use when Codex must extract metrics, observations, formulas, hierarchy, assumptions, decisions, and source lineage from a financial model without treating spreadsheet layout as canonical identity.
+description: Convert analyst financial-model workbooks, lossless workbook IR, CSV exports, or structured model JSON into a canonical model-db.json plus extraction-report.md, then compile and visually review the result in the dedicated viewer. Use when Codex must extract or refine metrics, observations, formulas, hierarchy, assumptions, decisions, source lineage, and table presentation without treating spreadsheet layout as canonical identity.
 ---
 
 # Extract Financial Model
@@ -12,6 +12,7 @@ Convert a financial model into the repository's canonical semantic database. Pre
 Before extracting, read:
 
 - [references/extraction-contract.md](references/extraction-contract.md) for mapping, evidence, ID, and report rules.
+- [references/visual-review.md](references/visual-review.md) before compiling or visually reviewing an extraction.
 - `../../schema/model-db.schema.json` for the portable contract.
 - `../../src/model-db/schema.ts` only when implementing or debugging repository code.
 
@@ -59,6 +60,14 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - From the repository root, run `npm run check` after changing schema, fixtures, expressions, validator, or query code.
    - Copy every validator warning into the report and leave the corresponding unresolved item open. Do not report success while validator errors, silent presentation fallbacks, or missing-lineage objects remain.
 
+7. Compile and visually review.
+   - Run `npm run extraction:preview -- path/to/output-directory`. This reruns the strict extraction checker, builds a local static viewer, exercises it with Playwright, and writes `viewer/review/` screenshots plus `review.json`.
+   - From outside the repository, run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/build-preview.mjs path/to/output-directory`; the script resolves the repository toolchain itself.
+   - Inspect `viewer/review/contact-sheet.png` and the individual desktop/mobile screenshots with an image-viewing tool. An automated pass is not visual acceptance.
+   - Fix extraction data when the UI faithfully exposes wrong grouping, order, period, unit, source, or lineage. Fix repository query/UI code only when correct data is projected incorrectly; then run the repository checks and rebuild the preview.
+   - Rerun until both the extraction checker and visual review pass. Never edit compiled `viewer/` files by hand.
+   - For deeper interaction, run `npm run extraction:serve -- path/to/output-directory/viewer` and use Playwright against the printed localhost URL.
+
 ## Output discipline
 
-Keep raw precision in `model-db.json`; apply display rounding only in visualization code. In the report, name every unresolved item and ask a concrete analyst question. State explicitly when the input lacks enough evidence to distinguish fact, forecast, or rationale.
+Keep raw precision in `model-db.json`; apply display rounding only in visualization code. In the report, name every unresolved item and ask a concrete analyst question. State explicitly when the input lacks enough evidence to distinguish fact, forecast, or rationale. Treat `viewer/` as a generated local review artifact: do not commit or publish it, especially when inputs are confidential, unless the user explicitly authorizes publication.
