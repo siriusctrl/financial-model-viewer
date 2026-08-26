@@ -71,27 +71,41 @@ export async function reviewPreview(viewerDirectory, extraction) {
       options.map((option) => ({ label: option.textContent?.trim() || option.value, value: option.value })),
     );
     const defaultModelId = await modelSelect.inputValue();
-    let derivedModelId;
-    let unresolvedModelId;
+    let derivedView;
+    let unresolvedView;
     const tableScreenshots = [];
-    for (const [index, model] of modelOptions.entries()) {
+    let periodViewsRendered = 0;
+    for (const model of modelOptions) {
       await modelSelect.selectOption(model.value);
       await desktop.getByTestId("financial-table-view").waitFor({ state: "visible" });
-      if (await desktop.locator(".value-button").count() === 0) {
-        throw new Error(`Model ${model.label} contains no selectable observation cells`);
+      const periodSelect = desktop.getByLabel("Period view");
+      const periodOptions = await periodSelect.count() > 0
+        ? await periodSelect.locator("option").evaluateAll((options) =>
+            options.map((option) => ({
+              label: option.textContent?.trim() || option.value,
+              value: option.value,
+            })),
+          )
+        : [{ label: "all-periods", value: undefined }];
+      for (const periodOption of periodOptions) {
+        if (periodOption.value) await periodSelect.selectOption(periodOption.value);
+        if (await desktop.locator(".value-button").count() === 0) {
+          throw new Error(`Model ${model.label} / ${periodOption.label} contains no selectable observation cells`);
+        }
+        if (!derivedView && await desktop.locator(".value-button.derived").count() > 0) {
+          derivedView = { modelId: model.value, periodType: periodOption.value };
+        }
+        if (!unresolvedView && await desktop.locator(".row-warning").count() > 0) {
+          unresolvedView = { modelId: model.value, periodType: periodOption.value };
+        }
+        periodViewsRendered += 1;
+        tableScreenshots.push(await capture(
+          desktop,
+          reviewDirectory,
+          `01-view-${String(periodViewsRendered).padStart(2, "0")}-${fileSlug(model.label, model.value)}-${fileSlug(periodOption.label, "periods")}`,
+          captures,
+        ));
       }
-      if (!derivedModelId && await desktop.locator(".value-button.derived").count() > 0) {
-        derivedModelId = model.value;
-      }
-      if (!unresolvedModelId && await desktop.locator(".row-warning").count() > 0) {
-        unresolvedModelId = model.value;
-      }
-      tableScreenshots.push(await capture(
-        desktop,
-        reviewDirectory,
-        `01-model-${String(index + 1).padStart(2, "0")}-${fileSlug(model.label, model.value)}`,
-        captures,
-      ));
     }
     await modelSelect.selectOption(defaultModelId);
 
@@ -106,19 +120,41 @@ export async function reviewPreview(viewerDirectory, extraction) {
 
     let derivedLineage = "not-applicable";
     let derivedScreenshot;
-    if (derivedModelId) {
-      await modelSelect.selectOption(derivedModelId);
+    let dependencyGraph = "not-applicable";
+    let graphScreenshot;
+    if (derivedView) {
+      await modelSelect.selectOption(derivedView.modelId);
+      const periodSelect = desktop.getByLabel("Period view");
+      if (derivedView.periodType && await periodSelect.count() > 0) {
+        await periodSelect.selectOption(derivedView.periodType);
+      }
       const derivedCell = desktop.locator(".value-button.derived").first();
       await derivedCell.click();
       await desktop.getByTestId("formula-lineage").waitFor({ state: "visible" });
       derivedLineage = "passed";
       derivedScreenshot = await capture(desktop, reviewDirectory, "03-derived-lineage", captures);
+      const openMap = desktop.getByRole("button", { name: "Open map" });
+      if (await openMap.count() > 0) {
+        await openMap.click();
+        await desktop.getByTestId("dependency-graph-view").waitFor({ state: "visible" });
+        if (await desktop.locator(".dependency-edge").count() === 0) {
+          throw new Error("Supported derived formula opened a dependency graph with no edges");
+        }
+        dependencyGraph = "passed";
+        graphScreenshot = await capture(desktop, reviewDirectory, "04-dependency-graph", captures);
+        await desktop.getByRole("button", { name: "Model table" }).click();
+        await desktop.getByTestId("financial-table-view").waitFor({ state: "visible" });
+      }
     }
 
     let unresolvedCue = "not-applicable";
     let unresolvedScreenshot;
-    if (unresolvedModelId) {
-      await modelSelect.selectOption(unresolvedModelId);
+    if (unresolvedView) {
+      await modelSelect.selectOption(unresolvedView.modelId);
+      const periodSelect = desktop.getByLabel("Period view");
+      if (unresolvedView.periodType && await periodSelect.count() > 0) {
+        await periodSelect.selectOption(unresolvedView.periodType);
+      }
       const unresolvedRow = desktop.locator("tr").filter({
         has: desktop.locator(".row-warning"),
       }).first();
@@ -186,11 +222,13 @@ export async function reviewPreview(viewerDirectory, extraction) {
       checks: {
         browserConsole: "passed",
         cellInspector: "passed",
+        dependencyGraph,
         derivedLineage,
         mobileDocumentOverflow: "passed",
         mobileInspector: "passed",
         mobileTableScroll: scrollResult.maximum > 0 ? "passed" : "not-applicable",
         modelsRendered: modelOptions.length,
+        periodViewsRendered,
         tableVisible: "passed",
         unresolvedCue,
       },
@@ -199,6 +237,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
         ...tableScreenshots,
         inspectorScreenshot,
         derivedScreenshot,
+        graphScreenshot,
         unresolvedScreenshot,
         mobileScreenshot,
         mobileScrolledScreenshot,

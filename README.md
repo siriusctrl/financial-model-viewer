@@ -22,6 +22,7 @@ This project tests a product direction. It does not replace Excel, execute workb
 - A restricted expression interpreter can evaluate supported formulas without `eval` or arbitrary JavaScript.
 - A deterministic validator can report broken references, value-type mismatches, dependency cycles, duplicate points, unsupported syntax, and missing provenance with object-level repair guidance.
 - Every open unresolved item remains a visible review warning, with affected metric/cell cues when a target is known.
+- Mixed-frequency models expose explicit annual/quarterly period views, and lagged lineage resolves within the selected period type.
 - The same query layer and frontend render a SaaS model and a structurally different bank model without company-specific UI branches.
 - A user can move from a forecast number to its metric, formula, source workbook cell, confidence, review status, and extraction run.
 
@@ -96,7 +97,21 @@ Check a complete extraction package against the viewer contract and required rep
 npm run extraction:check -- path/to/output-directory
 ```
 
-The output directory must contain both `model-db.json` and `extraction-report.md`. The checker uses the same runtime schema and semantic validator as the viewer, then verifies that every required report section exists, is non-empty, and appears in contract order.
+The output directory must contain both `model-db.json` and `extraction-report.md`. The checker uses the same runtime schema and semantic validator as the viewer, then verifies that every required report section exists, is non-empty, appears in contract order, and names every open unresolved warning.
+
+Inventory a complex XLSX package without opening Excel, recalculating formulas, refreshing links, or scanning inflated rectangular used ranges:
+
+```sh
+npm run workbook:inventory -- model.xlsx --out inventory.json
+```
+
+For a stable but complex model sheet, create an explicit private semantic map and extract only the declared concepts:
+
+```sh
+npm run workbook:extract -- model.xlsx extraction-map.json output-directory
+```
+
+The mapped extractor reads sparse OOXML cells and cached formula values, preserves exact formulas and selected comments, and turns missing values, incompatible source types, untranslated formulas, and unmapped comments into explicit unresolved items. It automatically runs the strict package checker and exits nonzero on failure; it does not infer company-specific semantics from layout alone.
 
 Compile the checked extraction into a local static viewer and run its Playwright review loop:
 
@@ -104,7 +119,7 @@ Compile the checked extraction into a local static viewer and run its Playwright
 npm run extraction:preview -- path/to/output-directory
 ```
 
-This writes a generated `viewer/` directory next to the extraction, with portable relative assets, the validated database embedded in HTML, and `viewer/review/` screenshots plus a machine-readable `review.json`. The Playwright pass visits every model and checks source-cell inspection, derived lineage, unresolved cues, mobile table scrolling, and mobile inspection. The automated result deliberately requires visual judgment: inspect the contact sheet and individual screenshots before accepting the extraction.
+This writes a generated `viewer/` directory next to the extraction, with portable relative assets, the validated database embedded in HTML, and `viewer/review/` screenshots plus a machine-readable `review.json`. The Playwright pass visits every model and period-frequency view, then checks source-cell inspection, derived lineage, unresolved cues, mobile table scrolling, and mobile inspection. The automated result deliberately requires visual judgment: inspect the contact sheet and individual screenshots before accepting the extraction.
 
 Keep the compiled bundle available for deeper Playwright or browser interaction:
 
@@ -127,6 +142,7 @@ Real workbooks may contain confidential research. Keep inputs and generated priv
 
 ```sh
 npm run check          # generated-contract checks, unit tests, TypeScript, production build
+npm run verify:workbook-tools # synthetic sparse-XLSX inventory/extraction test
 npm run verify:ui      # Chromium/WebKit, desktop/mobile behavior
 npm run verify:proof   # real browser screenshots and contact sheet
 npm run verify:extraction-preview # compile and review the representative extraction
@@ -151,6 +167,7 @@ Implemented:
 - restricted expression AST validation/interpreter;
 - deterministic semantic validator;
 - extraction skill and contract;
+- sparse read-only XLSX inventory and explicit mapped-workbook extraction;
 - validated cross-sector fixture and extraction report;
 - table-first model viewer, dependency graph, and persistent cell/property inspector;
 - unit, cross-sector generality, browser, responsive, and visual-proof checks;
@@ -158,8 +175,8 @@ Implemented:
 
 Deferred:
 
-- automated `.xlsx` ingestion adapters;
-- a real analyst workbook dataset, pending an authorized input;
+- generic company-semantic inference across arbitrary `.xlsx` layouts;
+- complete canonicalization of every secondary sheet in a real analyst workbook;
 - revision timeline and point-in-time reconstruction UI;
 - bull/base/bear comparison;
 - source → assumption → change visualization;

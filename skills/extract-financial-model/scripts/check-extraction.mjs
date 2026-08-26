@@ -77,7 +77,7 @@ function resolveArtifacts(arguments_) {
   };
 }
 
-function checkReport(reportPath) {
+function checkReport(reportPath, databasePath) {
   if (!existsSync(reportPath) || !statSync(reportPath).isFile()) {
     fail(`Missing extraction report: ${reportPath}`);
     return false;
@@ -134,6 +134,26 @@ function checkReport(reportPath) {
     }
   }
 
+  if (existsSync(databasePath) && statSync(databasePath).isFile()) {
+    try {
+      const database = JSON.parse(readFileSync(databasePath, "utf8"));
+      const openUnresolvedIds = Array.isArray(database.unresolvedItems)
+        ? database.unresolvedItems
+            .filter((item) => item?.status === "open" && typeof item.id === "string")
+            .map((item) => item.id)
+        : [];
+      for (const unresolvedId of openUnresolvedIds) {
+        if (!report.includes(unresolvedId)) {
+          fail(`${reportPath} does not record open warning ${unresolvedId}.`);
+          valid = false;
+        }
+      }
+    } catch (cause) {
+      fail(`Could not compare report warnings with ${databasePath}: ${cause instanceof Error ? cause.message : String(cause)}`);
+      valid = false;
+    }
+  }
+
   if (valid) {
     console.log(`VALID ${reportPath}`);
     console.log(`reportSections=${REQUIRED_REPORT_SECTIONS.length}`);
@@ -174,7 +194,7 @@ function checkDatabase(databasePath) {
 }
 
 const { databasePath, reportPath } = resolveArtifacts(process.argv.slice(2));
-const reportIsValid = checkReport(reportPath);
+const reportIsValid = checkReport(reportPath, databasePath);
 const databaseIsValid = checkDatabase(databasePath);
 
 if (!reportIsValid || !databaseIsValid) {

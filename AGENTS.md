@@ -15,6 +15,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `scripts/generate-schema.ts`: generates `schema/model-db.schema.json` from `schema.ts`.
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
 - `skills/extract-financial-model/`: reusable workbook/model extraction workflow and contract.
+- `skills/extract-financial-model/scripts/ooxml.py`: sparse read-only XLSX package access used by inventory and mapped extraction.
 - `skills/extract-financial-model/scripts/build-preview.mjs`: validates, compiles, and Playwright-reviews a local extraction bundle without changing GitHub Pages.
 - `examples/`: generated semantic dataset and its extraction report.
 - `tests/`: expression, validator, query-generality, and Playwright browser behavior.
@@ -51,6 +52,8 @@ Run for every code or contract change:
 ```sh
 npm run check
 ```
+
+`npm run check` includes a synthetic XLSX test for sparse inventory, cached formula values, comments, and mapped extraction.
 
 Before publishing a UI change, also run:
 

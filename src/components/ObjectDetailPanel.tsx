@@ -185,40 +185,56 @@ function CellDetail({
         {detail.transformation && (
           <section className="inspector-section formula-lineage" data-testid="formula-lineage">
             <div className="inspector-section-heading">
-              <h3>Derived from {detail.inputs.length} input{detail.inputs.length === 1 ? "" : "s"}</h3>
-              <button className="text-button" onClick={() => onFocusGraph(detail.metric.id)}>
-                Open map <Icon name="arrow" size={13} />
-              </button>
+              <h3>
+                {detail.transformation.status === "supported"
+                  ? `Derived from ${detail.inputs.length} input${detail.inputs.length === 1 ? "" : "s"}`
+                  : "Opaque workbook formula"}
+              </h3>
+              {detail.transformation.dependencyMetricIds.length > 0 && (
+                <button className="text-button" onClick={() => onFocusGraph(detail.metric.id)}>
+                  Open map <Icon name="arrow" size={13} />
+                </button>
+              )}
             </div>
 
-            <div className="lineage-inputs">
-              {detail.inputs.map((input) => {
-                const inputSource = input.provenance.records[0];
-                return (
-                  <button
-                    key={`${input.metric.id}:${input.periodOffset}`}
-                    className="lineage-input"
-                    disabled={!input.observation}
-                    onClick={() => input.observation && onSelectTarget(input.observation.id)}
-                  >
-                    <span>
-                      <strong>{input.metric.name}</strong>
-                      <small>
-                        {input.period ? `${input.period.label} · ` : ""}
-                        {inputSource ? formatLocator(inputSource.provenance.locator) : "No matching cell"}
-                      </small>
-                    </span>
-                    <b>{input.observation ? formatValue(input.observation.value, input.metric) : "—"}</b>
-                  </button>
-                );
-              })}
-            </div>
+            {detail.transformation.status === "supported" ? (
+              <div className="lineage-inputs">
+                {detail.inputs.map((input) => {
+                  const inputSource = input.provenance.records[0];
+                  return (
+                    <button
+                      key={`${input.metric.id}:${input.periodOffset}`}
+                      className="lineage-input"
+                      disabled={!input.observation}
+                      onClick={() => input.observation && onSelectTarget(input.observation.id)}
+                    >
+                      <span>
+                        <strong>{input.metric.name}</strong>
+                        <small>
+                          {input.period ? `${input.period.label} · ` : ""}
+                          {inputSource ? formatLocator(inputSource.provenance.locator) : "No matching cell"}
+                        </small>
+                      </span>
+                      <b>{input.observation ? formatValue(input.observation.value, input.metric) : "—"}</b>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="opaque-formula-note">
+                The cached workbook value is retained, but this formula was not translated into canonical lineage.
+              </p>
+            )}
 
             <div className="formula-block">
               <span>Workbook formula</span>
               <code>{detail.transformation.originalExpression ?? "Not supplied"}</code>
-              <span>Canonical expression</span>
-              <code>{detail.transformation.expression}</code>
+              <span>Canonical translation</span>
+              <code>
+                {detail.transformation.status === "supported"
+                  ? detail.transformation.expression
+                  : `Not translated (${detail.transformation.status})`}
+              </code>
             </div>
           </section>
         )}

@@ -24,6 +24,7 @@ export type MetricSeriesQuery = {
   entityId?: string;
   scenarioId?: string;
   asOf?: string;
+  periodType?: Period["type"];
 };
 
 export type MetricSeriesPoint = {
@@ -265,7 +266,22 @@ export class ModelDatabaseQueries {
         if (!period) throw new Error(`Unknown period ${observation.periodId}`);
         return { period, observation };
       })
+      .filter((point) => !query.periodType || point.period.type === query.periodType)
       .sort((left, right) => comparePeriods(left.period, right.period));
+  }
+
+  getPeriodTypes(modelId: string): Period["type"][] {
+    const types = new Map<Period["type"], Period>();
+    for (const observation of this.database.observations) {
+      if (observation.modelId !== modelId) continue;
+      const period = this.periods.get(observation.periodId);
+      if (!period) continue;
+      const current = types.get(period.type);
+      if (!current || comparePeriods(period, current) < 0) types.set(period.type, period);
+    }
+    return [...types.entries()]
+      .sort((left, right) => comparePeriods(left[1], right[1]))
+      .map(([type]) => type);
   }
 
   private visibleMetricIds(modelId: string): Set<string> {
@@ -342,6 +358,7 @@ export class ModelDatabaseQueries {
     entityId,
     scenarioId,
     asOf,
+    periodType,
   }: Omit<MetricSeriesQuery, "metricId">): FinancialTableProjection {
     const model = this.getModel(modelId);
     const resolvedEntityId = entityId ?? model.primaryEntityId;
@@ -358,6 +375,7 @@ export class ModelDatabaseQueries {
         entityId: resolvedEntityId,
         scenarioId,
         asOf,
+        periodType,
       });
       seriesByMetric.set(metricId, series);
       for (const point of series) periodIds.add(point.period.id);
@@ -369,6 +387,11 @@ export class ModelDatabaseQueries {
 
     const rows: FinancialTableRow[] = [];
     const flatten = (node: MetricHierarchyNode, depth: number): void => {
+      const observations = seriesByMetric.get(node.metric.id) ?? [];
+      if (observations.length === 0) {
+        for (const child of node.children) flatten(child, depth);
+        return;
+      }
       rows.push({
         metric: node.metric,
         depth,
@@ -380,7 +403,7 @@ export class ModelDatabaseQueries {
             (!item.modelId || item.modelId === modelId),
         ),
         observations: Object.fromEntries(
-          (seriesByMetric.get(node.metric.id) ?? []).map((point) => [
+          observations.map((point) => [
             point.period.id,
             point.observation,
           ]),
@@ -447,7 +470,10 @@ export class ModelDatabaseQueries {
         .map((candidate) => candidate.periodId),
     )]
       .map((periodId) => this.periods.get(periodId))
-      .filter((candidate): candidate is Period => Boolean(candidate))
+      .filter(
+        (candidate): candidate is Period =>
+          candidate !== undefined && candidate.type === period.type,
+      )
       .sort(comparePeriods);
     const currentPeriodIndex = observedPeriods.findIndex(
       (candidate) => candidate.id === observation.periodId,
@@ -530,7 +556,7 @@ export class ModelDatabaseQueries {
 
       if (direction === "upstream" || direction === "both") {
         for (const transformation of this.database.transformations.filter(
-          (item) => item.outputMetricId === current.metricId,
+          (item) => item.status === "supported" && item.outputMetricId === current.metricId,
         )) {
           transformationIds.add(transformation.id);
           for (const dependencyMetricId of transformation.dependencyMetricIds) {
@@ -547,7 +573,7 @@ export class ModelDatabaseQueries {
 
       if (direction === "downstream" || direction === "both") {
         for (const transformation of this.database.transformations.filter((item) =>
-          item.dependencyMetricIds.includes(current.metricId),
+          item.status === "supported" && item.dependencyMetricIds.includes(current.metricId),
         )) {
           transformationIds.add(transformation.id);
           edges.push({
@@ -564,14 +590,23 @@ export class ModelDatabaseQueries {
       }
     }
 
-    const uniqueEdges = [...new Map(edges.map((edge) => [`${edge.fromId}|${edge.toId}|${edge.transformationId}`, edge])).values()];
+    const uniqueEdges = [...new Map(
+      edges.map((edge) => [`${edge.fromId}|${edge.toId}`, edge]),
+    ).values()];
+    const uniqueTransformations = [...new Map(
+      [...transformationIds]
+        .map((id) => this.transformations.get(id))
+        .filter((item): item is Transformation => Boolean(item))
+        .map((item) => [
+          `${item.outputMetricId}|${item.expression}|${[...item.dependencyMetricIds].sort().join(",")}`,
+          item,
+        ]),
+    ).values()];
     return {
       focusMetric,
       nodes: [...visibleMetricIds].map((id) => this.getMetric(id)),
       edges: uniqueEdges,
-      transformations: [...transformationIds]
-        .map((id) => this.transformations.get(id))
-        .filter((item): item is Transformation => Boolean(item)),
+      transformations: uniqueTransformations,
     };
   }
 

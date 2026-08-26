@@ -16,7 +16,7 @@ The extraction directory must contain `model-db.json` and `extraction-report.md`
 2. builds the current viewer with relative static assets;
 3. embeds the validated model database in the generated HTML;
 4. opens the bundle in headless Chromium;
-5. checks every model table, cell inspection, derived lineage and unresolved cues when available, browser errors, mobile table scrolling, mobile cell inspection, and document overflow;
+5. checks every model and period-frequency table, cell inspection, derived lineage, the deduplicated metric dependency graph, and unresolved cues when available, plus browser errors, mobile table scrolling, mobile cell inspection, and document overflow;
 6. writes `viewer/review/review.json`, individual screenshots, and `viewer/review/contact-sheet.png`.
 
 `review.json` intentionally reports `automated-checks-passed-visual-judgment-required`. Open the images; do not infer UI quality from exit code alone.

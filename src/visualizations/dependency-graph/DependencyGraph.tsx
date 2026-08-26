@@ -35,10 +35,22 @@ function reaches(
   return false;
 }
 
-function distribute(nodes: Metric[], x: number, lane: PositionedNode["lane"]): PositionedNode[] {
-  const gap = 88;
-  const start = 230 - ((nodes.length - 1) * gap) / 2;
-  return nodes.map((metric, index) => ({ metric, x, y: start + index * gap, lane }));
+const NODE_GAP = 88;
+const MIN_CANVAS_HEIGHT = 460;
+
+function distribute(
+  nodes: Metric[],
+  x: number,
+  lane: PositionedNode["lane"],
+  canvasHeight: number,
+): PositionedNode[] {
+  const start = canvasHeight / 2 - ((nodes.length - 1) * NODE_GAP) / 2;
+  return nodes.map((metric, index) => ({
+    metric,
+    x,
+    y: start + index * NODE_GAP,
+    lane,
+  }));
 }
 
 export function DependencyGraph({
@@ -48,7 +60,7 @@ export function DependencyGraph({
   onSelectMetric,
   onSelectTransformation,
 }: Props) {
-  const positionedNodes = useMemo(() => {
+  const graphLayout = useMemo(() => {
     const upstream: Metric[] = [];
     const downstream: Metric[] = [];
     for (const metric of projection.nodes) {
@@ -56,13 +68,22 @@ export function DependencyGraph({
       if (reaches(metric.id, projection.focusMetric.id, projection.edges)) upstream.push(metric);
       else downstream.push(metric);
     }
-    return [
-      ...distribute(upstream, 155, "upstream"),
-      ...distribute([projection.focusMetric], 480, "focus"),
-      ...distribute(downstream, 805, "downstream"),
-    ];
+    const laneCount = Math.max(upstream.length, downstream.length, 1);
+    const canvasHeight = Math.max(
+      MIN_CANVAS_HEIGHT,
+      100 + (laneCount - 1) * NODE_GAP,
+    );
+    return {
+      canvasHeight,
+      nodes: [
+        ...distribute(upstream, 155, "upstream", canvasHeight),
+        ...distribute([projection.focusMetric], 480, "focus", canvasHeight),
+        ...distribute(downstream, 805, "downstream", canvasHeight),
+      ],
+    };
   }, [projection]);
 
+  const positionedNodes = graphLayout.nodes;
   const positions = new Map(positionedNodes.map((node) => [node.metric.id, node]));
 
   return (
@@ -97,7 +118,7 @@ export function DependencyGraph({
         </div>
         <svg
           className="dependency-canvas"
-          viewBox="0 0 960 460"
+          viewBox={`0 0 960 ${graphLayout.canvasHeight}`}
           role="img"
           aria-label={`Dependency graph for ${projection.focusMetric.name}`}
         >
@@ -106,8 +127,8 @@ export function DependencyGraph({
               <path d="M0,0 L8,4 L0,8 Z" className="arrow-head" />
             </marker>
           </defs>
-          <line x1="318" x2="318" y1="28" y2="430" className="lane-divider" />
-          <line x1="642" x2="642" y1="28" y2="430" className="lane-divider" />
+          <line x1="318" x2="318" y1="28" y2={graphLayout.canvasHeight - 30} className="lane-divider" />
+          <line x1="642" x2="642" y1="28" y2={graphLayout.canvasHeight - 30} className="lane-divider" />
           {projection.edges.map((edge) => {
             const from = positions.get(edge.fromId);
             const to = positions.get(edge.toId);
@@ -173,7 +194,7 @@ export function DependencyGraph({
             >
               <span className="expression-status"><Icon name="check" size={14} /> supported</span>
               <span className="expression-copy">
-                <strong>{transformation.id.replace("transformation_", "")}</strong>
+                <strong>{transformation.outputMetricId.replace("metric_", "")}</strong>
                 <code>{transformation.expression}</code>
               </span>
               <Icon name="arrow" size={15} />

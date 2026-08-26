@@ -12,6 +12,7 @@ Convert a financial model into the repository's canonical semantic database. Pre
 Before extracting, read:
 
 - [references/extraction-contract.md](references/extraction-contract.md) for mapping, evidence, ID, and report rules.
+- [references/mapped-workbook.md](references/mapped-workbook.md) when a complex workbook needs an explicit semantic map.
 - [references/visual-review.md](references/visual-review.md) before compiling or visually reviewing an extraction.
 - `../../schema/model-db.schema.json` for the portable contract.
 - `../../src/model-db/schema.ts` only when implementing or debugging repository code.
@@ -26,6 +27,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - Use a lossless parser or intermediate representation that preserves raw values, formulas, styles, comments, hidden state, named ranges, and external references.
 
 2. Inventory before mapping.
+   - For XLSX input, run `python3 skills/extract-financial-model/scripts/inventory-workbook.py workbook.xlsx --out inventory.json`. It reads sparse stored cells directly from OOXML and reports formulas, comments, hidden state, package links, and unsupported binary/media parts without recalculation.
    - List sheets, tables, named ranges, hidden rows/columns/sheets, formulas, comments, and external references.
    - Identify candidate actual/estimate boundaries and model versions.
    - Record gaps in the input representation before making semantic claims.
@@ -38,6 +40,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - When worksheet section labels and reading order are explicit, preserve them as one ordered `tablePresentations` entry for the model. Reference metric IDs and retain the source range; never make a row or cell the metric identity.
    - If grouping is ambiguous, omit the presentation metadata and create an open `presentation` unresolved item instead of inventing a polished layout. Never omit both: the validator treats an unacknowledged fallback as an error.
    - Never use a cell, row, column, block, display label, or current view as a stable object ID.
+   - For a stable but complex model sheet, prefer `extract-mapped-workbook.py` plus a private explicit map over embedding company-specific branches in the reusable extractor.
 
 4. Translate calculations.
    - Preserve every original formula.
@@ -63,7 +66,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
 7. Compile and visually review.
    - Run `npm run extraction:preview -- path/to/output-directory`. This reruns the strict extraction checker, builds a local static viewer, exercises it with Playwright, and writes `viewer/review/` screenshots plus `review.json`.
    - From outside the repository, run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/build-preview.mjs path/to/output-directory`; the script resolves the repository toolchain itself.
-   - Inspect `viewer/review/contact-sheet.png` and the individual desktop/mobile screenshots with an image-viewing tool. An automated pass is not visual acceptance.
+   - Inspect `viewer/review/contact-sheet.png` and the individual desktop/mobile table, inspector, and dependency-graph screenshots with an image-viewing tool. An automated pass is not visual acceptance.
    - Fix extraction data when the UI faithfully exposes wrong grouping, order, period, unit, source, or lineage. Fix repository query/UI code only when correct data is projected incorrectly; then run the repository checks and rebuild the preview.
    - Rerun until both the extraction checker and visual review pass. Never edit compiled `viewer/` files by hand.
    - For deeper interaction, run `npm run extraction:serve -- path/to/output-directory/viewer` and use Playwright against the printed localhost URL.

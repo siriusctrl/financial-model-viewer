@@ -58,6 +58,25 @@ test("shows actual workbook inputs for a derived cell", async ({ page }) => {
   await expect(lineage.getByText("=B10-B16", { exact: true })).toBeVisible();
 });
 
+test("labels opaque formulas without inventing canonical lineage", async ({ page }) => {
+  await page.goto("./");
+  const imported = structuredClone(sample) as ModelDatabase;
+  const transformation = imported.transformations.find(
+    (item) => item.id === "transformation_northstar_gross_profit",
+  );
+  if (!transformation) throw new Error("Missing representative transformation");
+  transformation.status = "opaque";
+  transformation.expression = "0";
+  transformation.dependencyMetricIds = [];
+
+  await uploadJson(page, "opaque-formula.json", imported);
+  await page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/).click();
+  const lineage = page.getByTestId("formula-lineage");
+  await expect(lineage).toContainText("Opaque workbook formula");
+  await expect(lineage).toContainText("Not translated (opaque)");
+  await expect(lineage).not.toContainText("Derived from 0 inputs");
+});
+
 test("uses extracted sections for a structurally different bank model", async ({ page }) => {
   await page.goto("./");
   await page.getByLabel("Active model").selectOption("model_harbor_national");
@@ -117,6 +136,53 @@ test("previews a validated model database JSON file locally", async ({ page }) =
   await expect(notice).toContainText("The file stays in this browser tab");
   await expect(page.locator(".dataset-breadcrumb")).toContainText("Imported analyst model");
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
+});
+
+test("separates annual and quarterly periods in a mixed-frequency model", async ({ page }) => {
+  await page.goto("./");
+  const imported = structuredClone(sample) as ModelDatabase;
+  imported.periods.push({
+    id: "period_q4_2024",
+    label: "Q4'24A",
+    type: "fiscal_quarter",
+    startDate: "2024-10-01",
+    endDate: "2024-12-31",
+  });
+  imported.observations.push({
+    ...imported.observations.find((item) => item.id === "obs_northstar_revenue_fy2024")!,
+    id: "obs_northstar_revenue_q4_2024",
+    periodId: "period_q4_2024",
+    value: 360,
+  });
+  imported.provenanceRecords.push(
+    {
+      id: "provenance_period_q4_2024",
+      targetId: "period_q4_2024",
+      sourceArtifactId: "artifact_northstar_workbook",
+      locator: { sheet: "Model", cell: "D3" },
+      extractionRunId: "run_northstar_2025_03_15",
+      confidence: 0.99,
+      reviewStatus: "unreviewed",
+    },
+    {
+      id: "provenance_obs_northstar_revenue_q4_2024",
+      targetId: "obs_northstar_revenue_q4_2024",
+      sourceArtifactId: "artifact_northstar_workbook",
+      locator: { sheet: "Model", cell: "D10" },
+      extractionRunId: "run_northstar_2025_03_15",
+      confidence: 0.99,
+      reviewStatus: "unreviewed",
+    },
+  );
+
+  await uploadJson(page, "mixed-frequency.json", imported);
+  const periodView = page.getByLabel("Period view");
+  await expect(periodView).toBeVisible();
+  await expect(page.getByText("FY22A", { exact: true })).toBeVisible();
+  await expect(page.getByText("Q4'24A", { exact: true })).toHaveCount(0);
+  await periodView.selectOption("fiscal_quarter");
+  await expect(page.getByText("Q4'24A", { exact: true })).toBeVisible();
+  await expect(page.getByText("FY22A", { exact: true })).toHaveCount(0);
 });
 
 test("surfaces an explicitly acknowledged presentation fallback", async ({ page }) => {

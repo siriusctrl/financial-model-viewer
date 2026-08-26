@@ -315,6 +315,36 @@ select:focus-visible,
   font-size: 11px;
 }
 
+.model-toolbar-controls {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.period-switcher {
+  display: grid;
+  gap: 4px;
+}
+
+.period-switcher span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.period-switcher select {
+  min-width: 132px;
+  padding: 7px 28px 7px 9px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+}
+
 .view-tabs {
   display: flex;
   gap: 3px;
@@ -935,6 +965,16 @@ select:focus-visible,
   border-left: 2px solid var(--green);
 }
 
+.opaque-formula-note {
+  margin: 0;
+  padding: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  background: var(--surface);
+  border-left: 2px solid var(--amber);
+}
+
 .formula-block span {
   color: var(--muted);
   font-size: 9px;
@@ -1410,7 +1450,21 @@ select:focus-visible,
     gap: 11px;
   }
 
+  .model-toolbar-controls {
+    width: 100%;
+    align-items: end;
+  }
+
+  .period-switcher {
+    flex: 0 0 132px;
+  }
+
+  .period-switcher select {
+    width: 100%;
+  }
+
   .view-tabs {
+    flex: 1;
     width: 100%;
   }
 

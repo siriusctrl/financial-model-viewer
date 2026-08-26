@@ -93,6 +93,9 @@ ref("metric_acme_revenue") - ref("metric_acme_cost_of_revenue")
 =IFERROR(B18/B10,0)
 when(ref("metric_acme_revenue") == 0, null,
   ref("metric_acme_gross_profit") / ref("metric_acme_revenue"))
+
+=B10/A10-1
+ref("metric_acme_revenue") / lag("metric_acme_revenue", 1) - 1
 ```
 
 Never use `eval`, `new Function`, assignment, loops, imports, async work, property access, DOM/network APIs, or arbitrary JavaScript. Parse to an AST and let the deterministic interpreter evaluate the AST.

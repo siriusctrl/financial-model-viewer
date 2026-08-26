@@ -69,6 +69,39 @@ describe("query projections", () => {
     );
   });
 
+  it("deduplicates period-specific formulas in the metric dependency graph", () => {
+    const repeated = structuredClone(sample);
+    const transformation = repeated.transformations.find(
+      (item) => item.id === "transformation_northstar_gross_profit",
+    );
+    if (!transformation) throw new Error("Missing representative transformation");
+    repeated.transformations.push({
+      ...transformation,
+      id: "transformation_northstar_gross_profit_repeat",
+    });
+    repeated.provenanceRecords.push({
+      id: "provenance_transformation_northstar_gross_profit_repeat",
+      targetId: "transformation_northstar_gross_profit_repeat",
+      sourceArtifactId: "artifact_northstar_workbook",
+      locator: { sheet: "Model", cell: "F18" },
+      extractionRunId: "run_northstar_2025_03_15",
+      confidence: 0.9,
+      reviewStatus: "unreviewed",
+    });
+
+    const graph = new ModelDatabaseQueries(assertValidModelDatabase(repeated)).getDependencies({
+      metricId: "metric_northstar_gross_profit",
+      direction: "upstream",
+    });
+    expect(graph.edges.filter((edge) =>
+      edge.fromId === "metric_northstar_revenue" &&
+      edge.toId === "metric_northstar_gross_profit"
+    )).toHaveLength(1);
+    expect(graph.transformations.filter((item) =>
+      item.outputMetricId === "metric_northstar_gross_profit"
+    )).toHaveLength(1);
+  });
+
   it("resolves source lineage for a forecast observation", () => {
     const provenance = queries.getProvenance(
       "obs_northstar_subscription_revenue_fy2025",
@@ -104,6 +137,39 @@ describe("query projections", () => {
 
   it("resolves lagged formulas to the prior-period source cell", () => {
     const lagged = structuredClone(sample);
+    lagged.periods.push({
+      id: "period_q4_2024",
+      label: "Q4'24A",
+      type: "fiscal_quarter",
+      startDate: "2024-10-01",
+      endDate: "2024-12-31",
+    });
+    lagged.observations.push({
+      ...lagged.observations.find((item) => item.id === "obs_northstar_revenue_fy2024")!,
+      id: "obs_northstar_revenue_q4_2024",
+      periodId: "period_q4_2024",
+      value: 360,
+    });
+    lagged.provenanceRecords.push(
+      {
+        id: "provenance_period_q4_2024",
+        targetId: "period_q4_2024",
+        sourceArtifactId: "artifact_northstar_workbook",
+        locator: { sheet: "Model", cell: "D3" },
+        extractionRunId: "run_northstar_2025_03_15",
+        confidence: 0.99,
+        reviewStatus: "unreviewed",
+      },
+      {
+        id: "provenance_obs_northstar_revenue_q4_2024",
+        targetId: "obs_northstar_revenue_q4_2024",
+        sourceArtifactId: "artifact_northstar_workbook",
+        locator: { sheet: "Model", cell: "D10" },
+        extractionRunId: "run_northstar_2025_03_15",
+        confidence: 0.99,
+        reviewStatus: "unreviewed",
+      },
+    );
     const transformation = lagged.transformations.find(
       (item) => item.id === "transformation_northstar_gross_profit",
     );
@@ -117,6 +183,16 @@ describe("query projections", () => {
     expect(detail.inputs).toHaveLength(1);
     expect(detail.inputs[0]?.period?.label).toBe("FY24A");
     expect(detail.inputs[0]?.provenance.records[0]?.provenance.locator?.cell).toBe("D10");
+
+    const mixedQueries = new ModelDatabaseQueries(assertValidModelDatabase(lagged));
+    expect(mixedQueries.getPeriodTypes("model_northstar_cloud")).toEqual([
+      "fiscal_year",
+      "fiscal_quarter",
+    ]);
+    expect(mixedQueries.getFinancialTable({
+      modelId: "model_northstar_cloud",
+      periodType: "fiscal_quarter",
+    }).periods.map((item) => item.id)).toEqual(["period_q4_2024"]);
   });
 
   it("projects open metric issues into the affected cell detail", () => {

@@ -4,7 +4,7 @@ import { ObjectDetailPanel } from "./components/ObjectDetailPanel";
 import { defaultDatabase, defaultDatabaseWarnings } from "./data/database";
 import { parseModelDatabaseJson } from "./model-db/import";
 import { ModelDatabaseQueries } from "./model-db/queries";
-import type { ModelDatabase } from "./model-db/types";
+import type { ModelDatabase, Period } from "./model-db/types";
 import type { ValidationError, ValidationWarning } from "./model-db/validate";
 import { DependencyGraph } from "./visualizations/dependency-graph/DependencyGraph";
 import { FinancialTable } from "./visualizations/financial-table/FinancialTable";
@@ -45,6 +45,19 @@ function initialGraphMetric(database: ModelDatabase, modelId: string): string | 
   );
 }
 
+function initialPeriodType(database: ModelDatabase, modelId: string): Period["type"] | undefined {
+  const queries = new ModelDatabaseQueries(database);
+  const periodTypes = queries.getPeriodTypes(modelId);
+  const configured = queries.getModel(modelId).attributes?.defaultPeriodType;
+  return typeof configured === "string" && periodTypes.includes(configured as Period["type"])
+    ? configured as Period["type"]
+    : periodTypes[0];
+}
+
+function periodTypeLabel(type: Period["type"]): string {
+  return type.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [database, setDatabase] = useState(defaultDatabase);
@@ -54,6 +67,9 @@ export default function App() {
   );
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const [selectedModelId, setSelectedModelId] = useState(() => defaultModelId(defaultDatabase));
+  const [selectedPeriodType, setSelectedPeriodType] = useState<Period["type"] | undefined>(() =>
+    initialPeriodType(defaultDatabase, defaultModelId(defaultDatabase)),
+  );
   const [view, setView] = useState<View>("table");
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [graphMetricId, setGraphMetricId] = useState<string | null>(() =>
@@ -62,13 +78,15 @@ export default function App() {
 
   const queries = useMemo(() => new ModelDatabaseQueries(database), [database]);
   const models = queries.getModels();
+  const periodTypes = queries.getPeriodTypes(selectedModelId);
   const table = useMemo(
     () =>
       queries.getFinancialTable({
         modelId: selectedModelId,
         scenarioId: queries.getModel(selectedModelId).defaultScenarioId,
+        periodType: selectedPeriodType,
       }),
-    [queries, selectedModelId],
+    [queries, selectedModelId, selectedPeriodType],
   );
   const availableMetrics = useMemo(
     () => table.rows.map((row) => row.metric),
@@ -83,6 +101,7 @@ export default function App() {
 
   const changeModel = (modelId: string) => {
     setSelectedModelId(modelId);
+    setSelectedPeriodType(initialPeriodType(database, modelId));
     setGraphMetricId(initialGraphMetric(database, modelId));
     setSelectedTargetId(null);
     setView("table");
@@ -103,6 +122,7 @@ export default function App() {
     setDatasetSource(source);
     setDatabaseWarnings(warnings);
     setSelectedModelId(nextModelId);
+    setSelectedPeriodType(initialPeriodType(nextDatabase, nextModelId));
     setGraphMetricId(initialGraphMetric(nextDatabase, nextModelId));
     setSelectedTargetId(null);
     setView("table");
@@ -255,18 +275,37 @@ export default function App() {
           <h1>{table.entity.name}</h1>
           <p>{table.model.name} · {table.model.baseCurrency} · as of {table.model.asOf}</p>
         </div>
-        <nav className="view-tabs" aria-label="Viewer mode">
-          {views.map((item) => (
-            <button
-              key={item.id}
-              className={view === item.id ? "active" : ""}
-              onClick={() => setView(item.id)}
-              aria-current={view === item.id ? "page" : undefined}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        <div className="model-toolbar-controls">
+          {periodTypes.length > 1 && selectedPeriodType && (
+            <label className="period-switcher">
+              <span>Period view</span>
+              <select
+                aria-label="Period view"
+                value={selectedPeriodType}
+                onChange={(event) => {
+                  setSelectedPeriodType(event.target.value as Period["type"]);
+                  setSelectedTargetId(null);
+                }}
+              >
+                {periodTypes.map((type) => (
+                  <option key={type} value={type}>{periodTypeLabel(type)}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <nav className="view-tabs" aria-label="Viewer mode">
+            {views.map((item) => (
+              <button
+                key={item.id}
+                className={view === item.id ? "active" : ""}
+                onClick={() => setView(item.id)}
+                aria-current={view === item.id ? "page" : undefined}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
       </section>
 
       <div className="viewer-layout">
