@@ -51,7 +51,9 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
 
 6. Emit and validate.
    - Write `model-db.json` and `extraction-report.md` next to the requested output.
-   - Run `npm run validate -- path/to/model-db.json`; do not use model judgment as a substitute.
+   - While iterating on the database, run `npm run validate -- path/to/model-db.json` for fast object-level repair output.
+   - Before reporting completion, run `npm run extraction:check -- path/to/output-directory`. This loads `model-db.json` through the viewer's runtime contract and checks that `extraction-report.md` has every required, non-empty section in contract order.
+   - The checker resolves repository code relative to itself, so an agent outside the repository root may run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/check-extraction.mjs path/to/output-directory`.
    - From the repository root, run `npm run check` after changing schema, fixtures, expressions, validator, or query code.
    - Do not report success while validator errors or missing-lineage objects remain.
 

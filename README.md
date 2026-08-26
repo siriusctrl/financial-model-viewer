@@ -89,6 +89,14 @@ Validate any extracted dataset with object-level repair output:
 npm run validate -- path/to/model-db.json
 ```
 
+Check a complete extraction package against the viewer contract and required report format:
+
+```sh
+npm run extraction:check -- path/to/output-directory
+```
+
+The output directory must contain both `model-db.json` and `extraction-report.md`. The checker uses the same runtime schema and semantic validator as the viewer, then verifies that every required report section exists, is non-empty, and appears in contract order.
+
 Use `skills/extract-financial-model/` when converting a workbook, workbook IR, CSV export, or structured model input. Each extraction must produce:
 
 ```text
