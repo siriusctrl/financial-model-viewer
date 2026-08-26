@@ -16,6 +16,8 @@ export type ValidationError = {
   suggestion: string;
 };
 
+export type ValidationWarning = ValidationError;
+
 export type ValidationStats = {
   models: number;
   metrics: number;
@@ -30,12 +32,14 @@ export type ValidationResult =
       success: true;
       data: ModelDatabase;
       errors: [];
+      warnings: ValidationWarning[];
       stats: ValidationStats;
     }
   | {
       success: false;
       data?: ModelDatabase;
       errors: ValidationError[];
+      warnings: ValidationWarning[];
       stats?: ValidationStats;
     };
 
@@ -278,11 +282,16 @@ function statsFor(database: ModelDatabase): ValidationStats {
 export function validateModelDatabase(input: unknown): ValidationResult {
   const parsed = ModelDatabaseSchema.safeParse(input);
   if (!parsed.success) {
-    return { success: false, errors: schemaErrors(input, parsed.error.issues) };
+    return {
+      success: false,
+      errors: schemaErrors(input, parsed.error.issues),
+      warnings: [],
+    };
   }
 
   const database = parsed.data;
   const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
   const models = new Map(database.models.map((item) => [item.id, item]));
   const metrics = new Map(database.metrics.map((item) => [item.id, item]));
   const entityIds = new Set(database.entities.map((item) => item.id));
@@ -296,6 +305,140 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   const evidenceIds = new Set(database.evidence.map((item) => item.id));
   const assumptionIds = new Set(database.assumptions.map((item) => item.id));
   const allVersionIds = new Set(database.models.flatMap((item) => item.versionIds));
+
+  const presentationModels = new Set<string>();
+  const presentationSectionIds = new Set<string>();
+  for (const presentation of database.tablePresentations) {
+    pushMissingReference(
+      errors,
+      presentation.modelId,
+      "modelId",
+      presentation.modelId,
+      new Set(models.keys()),
+      "Model",
+    );
+    pushMissingReference(
+      errors,
+      presentation.modelId,
+      "sourceArtifactId",
+      presentation.sourceArtifactId,
+      sourceArtifactIds,
+      "Source artifact",
+    );
+
+    if (presentationModels.has(presentation.modelId)) {
+      errors.push(
+        error(
+          "presentation.duplicate_model",
+          presentation.modelId,
+          "tablePresentations",
+          "A model can have only one table presentation",
+          "Merge the ordered sections into one presentation for this model",
+        ),
+      );
+    }
+    presentationModels.add(presentation.modelId);
+
+    const visibleMetricIds = new Set(
+      database.observations
+        .filter((observation) => observation.modelId === presentation.modelId)
+        .map((observation) => observation.metricId),
+    );
+    const presentedMetricIds = new Set<string>();
+    for (const section of presentation.sections) {
+      if (presentationSectionIds.has(section.id)) {
+        errors.push(
+          error(
+            "presentation.duplicate_section",
+            section.id,
+            "id",
+            "Table section ID is already used by another section",
+            "Assign a globally unique semantic section ID",
+          ),
+        );
+      }
+      presentationSectionIds.add(section.id);
+
+      section.metricIds.forEach((metricId, index) => {
+        pushMissingReference(
+          errors,
+          section.id,
+          `metricIds.${index}`,
+          metricId,
+          new Set(metrics.keys()),
+          "Metric",
+        );
+        if (presentedMetricIds.has(metricId)) {
+          errors.push(
+            error(
+              "presentation.duplicate_metric",
+              section.id,
+              `metricIds.${index}`,
+              `Metric ${metricId} appears more than once in the model presentation`,
+              "Keep each metric in exactly one ordered section",
+            ),
+          );
+        }
+        if (metrics.has(metricId) && !visibleMetricIds.has(metricId)) {
+          errors.push(
+            error(
+              "presentation.metric_not_visible",
+              section.id,
+              `metricIds.${index}`,
+              `Metric ${metricId} has no observation in model ${presentation.modelId}`,
+              "Remove the metric or add an observation for this model",
+            ),
+          );
+        }
+        presentedMetricIds.add(metricId);
+      });
+    }
+
+    for (const metricId of visibleMetricIds) {
+      if (!presentedMetricIds.has(metricId)) {
+        errors.push(
+          error(
+            "presentation.metric_missing",
+            presentation.modelId,
+            "sections",
+            `Observed metric ${metricId} is missing from the table presentation`,
+            "Place the metric in one ordered section or remove this presentation to use the deterministic fallback",
+          ),
+        );
+      }
+    }
+  }
+
+  for (const model of database.models) {
+    if (presentationModels.has(model.id)) continue;
+    const unresolvedPresentation = database.unresolvedItems.find(
+      (item) =>
+        item.modelId === model.id &&
+        item.category === "presentation" &&
+        item.status === "open",
+    );
+    if (unresolvedPresentation) {
+      warnings.push(
+        error(
+          "presentation.fallback",
+          model.id,
+          "tablePresentations",
+          `Table grouping is unavailable and tracked by ${unresolvedPresentation.id}`,
+          "Resolve the open presentation item after confirming worksheet sections and metric order",
+        ),
+      );
+    } else {
+      errors.push(
+        error(
+          "presentation.missing",
+          model.id,
+          "tablePresentations",
+          "Model has no table presentation and no open presentation unresolved item",
+          "Extract ordered table sections or add an explicit presentation unresolved item so fallback is never silent",
+        ),
+      );
+    }
+  }
 
   const seenIds = new Map<string, string>();
   for (const [collection, objects] of canonicalCollections(database)) {
@@ -538,8 +681,10 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   void assumptionIds;
 
   const stats = statsFor(database);
-  if (errors.length > 0) return { success: false, data: database, errors, stats };
-  return { success: true, data: database, errors: [], stats };
+  if (errors.length > 0) {
+    return { success: false, data: database, errors, warnings, stats };
+  }
+  return { success: true, data: database, errors: [], warnings, stats };
 }
 
 export function assertValidModelDatabase(input: unknown): ModelDatabase {

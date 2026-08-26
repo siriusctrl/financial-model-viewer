@@ -9,7 +9,8 @@ This file is the operating map for agents working in this repository. Keep produ
 - `src/model-db/expressions.ts`: restricted `model-expression@0.1` parser validation and interpreter.
 - `src/model-db/validate.ts`: deterministic schema, reference, type, cycle, uniqueness, and provenance checks.
 - `src/model-db/queries.ts`: visualization-neutral query layer. UI code consumes projections from here.
-- `src/visualizations/`: model overview, financial table, and dependency graph projections.
+- `tablePresentations` in `src/model-db/schema.ts`: optional non-canonical table sections and metric order captured during extraction.
+- `src/visualizations/`: table-first financial model viewer and optional dependency graph projection.
 - `src/components/ObjectDetailPanel.tsx`: canonical object, formula, relationship, and provenance inspection.
 - `scripts/generate-schema.ts`: generates `schema/model-db.schema.json` from `schema.ts`.
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
@@ -20,7 +21,7 @@ This file is the operating map for agents working in this repository. Keep produ
 
 ## Core invariants
 
-- Database objects are the source of truth. Never add canonical block, row, column, indentation, or cell identity.
+- Database objects are the source of truth. Never add canonical block, row, column, indentation, or cell identity. Keep extracted table grouping and order in `tablePresentations`, where it cannot redefine metric identity.
 - Standardize object and relationship rules, not company metrics. Sector-specific metrics belong in data.
 - `schema.ts` is the only maintained contract. Generate JSON Schema and infer TypeScript types from it.
 - Keep `Observation` point-in-time: model, metric, entity, period, scenario, actuality, as-of, and version must remain explicit.
@@ -37,6 +38,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - Schema object or enum change: update `schema.ts`, validator rules, generators, tests, JSON Schema, and fixtures together.
 - Formula-language change: update `expressions.ts`, extraction contract, validator, and expression tests.
 - New visualization: add a query projection first, then build the component against that result.
+- Table grouping/order change: update `tablePresentations`, reference validation, extraction contract, fallback query tests, and fixtures together.
 - Workbook extraction: invoke `skills/extract-financial-model/` and keep real confidential inputs outside Git.
 - New model fixture: use stable semantic IDs, preserve source lineage, run the deterministic validator, and prove the existing frontend works without company-specific branches.
 - Deployment or browser change: inspect Playwright and Pages workflow together.

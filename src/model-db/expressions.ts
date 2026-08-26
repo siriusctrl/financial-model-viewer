@@ -42,7 +42,13 @@ export type ExpressionIssue = {
 export type ExpressionValidation = {
   valid: boolean;
   dependencies: string[];
+  references: ExpressionReference[];
   issues: ExpressionIssue[];
+};
+
+export type ExpressionReference = {
+  metricId: string;
+  periodOffset: number;
 };
 
 export type EvaluationContext = {
@@ -66,6 +72,7 @@ function inspectNode(
   path: string,
   issues: ExpressionIssue[],
   dependencies: Set<string>,
+  references: Map<string, ExpressionReference>,
 ): void {
   switch (node.type) {
     case "Literal": {
@@ -88,7 +95,7 @@ function inspectNode(
           suggestion: "Use +, -, or !",
         });
       }
-      inspectNode(unary.argument, `${path}.argument`, issues, dependencies);
+      inspectNode(unary.argument, `${path}.argument`, issues, dependencies, references);
       return;
     }
     case "BinaryExpression": {
@@ -100,24 +107,26 @@ function inspectNode(
           suggestion: "Use arithmetic or comparison operators from the P0 language",
         });
       }
-      inspectNode(binary.left, `${path}.left`, issues, dependencies);
-      inspectNode(binary.right, `${path}.right`, issues, dependencies);
+      inspectNode(binary.left, `${path}.left`, issues, dependencies, references);
+      inspectNode(binary.right, `${path}.right`, issues, dependencies, references);
       return;
     }
     case "ConditionalExpression": {
       const conditional = asNode<jsep.ConditionalExpression>(node);
-      inspectNode(conditional.test, `${path}.test`, issues, dependencies);
+      inspectNode(conditional.test, `${path}.test`, issues, dependencies, references);
       inspectNode(
         conditional.consequent,
         `${path}.consequent`,
         issues,
         dependencies,
+        references,
       );
       inspectNode(
         conditional.alternate,
         `${path}.alternate`,
         issues,
         dependencies,
+        references,
       );
       return;
     }
@@ -138,6 +147,20 @@ function inspectNode(
             suggestion: "Use one of the approved model-expression functions",
           });
         }
+        const arity = call.arguments.length;
+        const arityValid =
+          (functionName === "ref" && arity === 1) ||
+          (["lag", "lead", "round"].includes(functionName) && (arity === 1 || arity === 2)) ||
+          (functionName === "abs" && arity === 1) ||
+          (functionName === "when" && arity === 3) ||
+          (["sum", "average", "min", "max", "coalesce"].includes(functionName) && arity >= 1);
+        if (ALLOWED_FUNCTIONS.has(functionName) && !arityValid) {
+          issues.push({
+            path: `${path}.arguments`,
+            reason: `Function ${functionName} received ${arity} arguments`,
+            suggestion: "Use ref(value), lag/lead(value[, periods]), round(value[, digits]), abs(value), when(condition, yes, no), or one or more aggregate arguments",
+          });
+        }
         if (["ref", "lag", "lead"].includes(functionName)) {
           const metricId = call.arguments[0]
             ? literalString(call.arguments[0])
@@ -150,11 +173,30 @@ function inspectNode(
             });
           } else {
             dependencies.add(metricId);
+            let periodOffset = 0;
+            if (functionName === "lag" || functionName === "lead") {
+              const periodsNode = call.arguments[1];
+              const periods = periodsNode?.type === "Literal"
+                ? asNode<jsep.Literal>(periodsNode).value
+                : periodsNode === undefined ? 1 : undefined;
+              if (!Number.isInteger(periods) || Number(periods) <= 0) {
+                issues.push({
+                  path: `${path}.arguments[1]`,
+                  reason: `${functionName}() period count must be a positive integer literal`,
+                  suggestion: `Use ${functionName}("${metricId}", 1) or another explicit positive period count`,
+                });
+              } else {
+                periodOffset = functionName === "lag" ? -Number(periods) : Number(periods);
+              }
+            }
+            if (periodOffset !== 0 || functionName === "ref") {
+              references.set(`${metricId}|${periodOffset}`, { metricId, periodOffset });
+            }
           }
         }
       }
       call.arguments.forEach((argument, index) =>
-        inspectNode(argument, `${path}.arguments[${index}]`, issues, dependencies),
+        inspectNode(argument, `${path}.arguments[${index}]`, issues, dependencies, references),
       );
       return;
     }
@@ -177,10 +219,11 @@ function inspectNode(
 export function validateExpression(expression: string): ExpressionValidation {
   const issues: ExpressionIssue[] = [];
   const dependencies = new Set<string>();
+  const references = new Map<string, ExpressionReference>();
 
   try {
     const ast = jsep(expression);
-    inspectNode(ast, "$", issues, dependencies);
+    inspectNode(ast, "$", issues, dependencies, references);
   } catch (error) {
     issues.push({
       path: "$",
@@ -192,6 +235,7 @@ export function validateExpression(expression: string): ExpressionValidation {
   return {
     valid: issues.length === 0,
     dependencies: [...dependencies].sort(),
+    references: [...references.values()],
     issues,
   };
 }

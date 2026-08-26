@@ -57,6 +57,9 @@
     },
     "unresolvedItems": {
       "$ref": "#/$defs/__schema30"
+    },
+    "tablePresentations": {
+      "$ref": "#/$defs/__schema31"
     }
   },
   "required": [
@@ -77,10 +80,11 @@
     "decisions",
     "decisionChanges",
     "extractionRuns",
-    "unresolvedItems"
+    "unresolvedItems",
+    "tablePresentations"
   ],
   "additionalProperties": false,
-  "description": "Canonical semantic database for financial models. Layout, row, column, and cell identity are intentionally excluded from business objects.",
+  "description": "Semantic financial-model database with a canonical object core and optional non-canonical table grouping metadata. Spreadsheet row, column, and cell identity are excluded from business objects.",
   "$defs": {
     "__schema0": {
       "type": "string",
@@ -910,6 +914,7 @@
               "hierarchy",
               "lineage",
               "actuality_boundary",
+              "presentation",
               "other"
             ]
           },
@@ -946,6 +951,61 @@
         ],
         "additionalProperties": false
       }
+    },
+    "__schema31": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "modelId": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "sourceArtifactId": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "sections": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/__schema32"
+            }
+          }
+        },
+        "required": [
+          "modelId",
+          "sections"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "__schema32": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "metricIds": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "sourceLocator": {
+          "$ref": "#/$defs/__schema22"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "metricIds"
+      ],
+      "additionalProperties": false
     }
   }
 }

@@ -48,24 +48,28 @@ try {
   const browser = await chromium.launch();
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
   await desktop.goto(baseUrl, { waitUntil: "networkidle" });
-  await capture(desktop, "01-overview-desktop");
+  await capture(desktop, "01-table-desktop");
 
-  await desktop.locator(".primary-nav button").filter({ hasText: "Financial table" }).click();
-  await capture(desktop, "02-financial-table-desktop");
   await desktop.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/).click();
-  await capture(desktop, "03-provenance-panel-desktop");
-  await desktop.getByRole("button", { name: "Close details" }).click();
+  await capture(desktop, "02-source-inspector-desktop");
 
-  await desktop.locator(".primary-nav button").filter({ hasText: "Dependency graph" }).click();
+  const derivedCell = desktop.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/);
+  await derivedCell.click();
+  await desktop.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await capture(desktop, "03-derived-lineage-desktop");
+
+  await desktop.getByRole("button", { name: "Lineage map" }).click();
   await desktop.locator(".metric-picker select").selectOption("metric_northstar_gross_profit");
-  await capture(desktop, "04-dependency-graph-desktop");
+  await capture(desktop, "04-lineage-map-desktop");
 
   await desktop.getByLabel("Active model").selectOption("model_harbor_national");
-  await capture(desktop, "05-bank-model-desktop");
+  await capture(desktop, "05-bank-table-desktop");
 
   const mobile = await browser.newPage({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 1 });
   await mobile.goto(baseUrl, { waitUntil: "networkidle" });
-  await capture(mobile, "06-overview-mobile");
+  await capture(mobile, "06-table-mobile");
   await browser.close();
 
   const thumbWidth = 680;

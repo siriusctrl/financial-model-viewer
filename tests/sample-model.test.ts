@@ -6,7 +6,7 @@ import { assertValidModelDatabase } from "../src/model-db/validate";
 const queries = new ModelDatabaseQueries(assertValidModelDatabase(sample));
 
 describe("query projections", () => {
-  it("builds the SaaS financial table without row identity", () => {
+  it("builds the SaaS financial table from ordered presentation metadata", () => {
     const table = queries.getFinancialTable({
       modelId: "model_northstar_cloud",
       scenarioId: "scenario_base",
@@ -19,7 +19,18 @@ describe("query projections", () => {
       "FY25E",
       "FY26E",
     ]);
-    expect(table.rows[0].metric.name).toBe("Cost of revenue");
+    expect(table.sections.map((section) => section.title)).toEqual([
+      "Revenue build",
+      "Gross profit",
+    ]);
+    expect(table.rows.map((row) => row.metric.name)).toEqual([
+      "Revenue",
+      "Subscription revenue",
+      "Services revenue",
+      "Cost of revenue",
+      "Gross profit",
+      "Gross margin",
+    ]);
     const revenue = table.rows.find(
       (row) => row.metric.id === "metric_northstar_revenue",
     );
@@ -65,5 +76,42 @@ describe("query projections", () => {
       cell: "E11",
     });
     expect(provenance.records[0].provenance.reviewStatus).toBe("unreviewed");
+  });
+
+  it("resolves the exact workbook inputs for a derived cell", () => {
+    const detail = queries.getObservationDetail(
+      "obs_northstar_gross_profit_fy2025",
+    );
+
+    expect(detail.transformation?.originalExpression).toBe("=B10-B16");
+    expect(detail.inputs.map((input) => input.metric.name)).toEqual([
+      "Revenue",
+      "Cost of revenue",
+    ]);
+    expect(
+      detail.inputs.map(
+        (input) => input.provenance.records[0]?.provenance.locator,
+      ),
+    ).toEqual([
+      { sheet: "Model", cell: "E10" },
+      { sheet: "Model", cell: "E16" },
+    ]);
+  });
+
+  it("resolves lagged formulas to the prior-period source cell", () => {
+    const lagged = structuredClone(sample);
+    const transformation = lagged.transformations.find(
+      (item) => item.id === "transformation_northstar_gross_profit",
+    );
+    if (!transformation) throw new Error("Missing representative transformation");
+    transformation.expression = 'lag("metric_northstar_revenue", 1)';
+    transformation.dependencyMetricIds = ["metric_northstar_revenue"];
+
+    const detail = new ModelDatabaseQueries(assertValidModelDatabase(lagged)).getObservationDetail(
+      "obs_northstar_gross_profit_fy2025",
+    );
+    expect(detail.inputs).toHaveLength(1);
+    expect(detail.inputs[0]?.period?.label).toBe("FY24A");
+    expect(detail.inputs[0]?.provenance.records[0]?.provenance.locator?.cell).toBe("D10");
   });
 });

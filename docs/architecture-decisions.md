@@ -8,13 +8,15 @@ The user-supplied model included `Observation.versionId` without a separate vers
 
 ## 2. Semantic identity excludes layout
 
-Spreadsheet coordinates, indentation, color, and display blocks are extraction signals. Only provenance locators retain sheet/cell/range information. Metric hierarchy uses explicit relationships, and the financial table is a query projection.
+Spreadsheet coordinates, indentation, color, and display blocks are extraction signals. Provenance locators retain sheet/cell/range information, while optional `tablePresentations` preserve only section titles and ordered metric references for the dedicated table viewer. This metadata is non-canonical: it cannot redefine a metric, observation, relationship, or formula dependency. Metric hierarchy continues to use explicit relationships.
 
-This allows the same core frontend to display SaaS and bank models with unrelated metric sets.
+When presentation metadata is absent and an open presentation issue explicitly acknowledges the gap, the table query falls back to semantic hierarchy ordered by metric provenance and emits a warning. Unacknowledged omissions fail validation. This allows the same frontend to display SaaS and bank models with unrelated metric sets without making fallback silent.
 
 ## 3. Expressions are parsed, not executed
 
 `model-expression@0.1` uses an expression parser to produce an AST. A validator accepts only literals, arithmetic, comparisons, conditional expressions, and approved function calls. The interpreter evaluates those nodes explicitly.
+
+Function arity is validated before import, and `lag`/`lead` offsets must be positive integer literals. That lets the inspector resolve a derived observation to the exact prior/current/future period observations and their workbook cells instead of guessing from metric-level dependencies.
 
 Member access, arbitrary identifiers/functions, arrays, assignment, loops, imports, async work, browser/network APIs, `eval`, and `new Function` are outside the language boundary.
 

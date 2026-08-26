@@ -10,14 +10,14 @@ Analyst workbook / lossless model IR
   → canonical TypeScript runtime schema
   → deterministic validator
   → query layer
-  → multiple visualizations
+  → dedicated table viewer + lineage inspector
 ```
 
 This project tests a product direction. It does not replace Excel, execute workbook macros, or provide a production database/editor.
 
 ## What the MVP proves
 
-- A runtime schema can represent models, entities, company-specific metrics, point-in-time observations, transformations, relationships, evidence, assumptions, decisions, lineage, extraction runs, and unresolved mappings.
+- A runtime schema can represent models, entities, company-specific metrics, point-in-time observations, transformations, relationships, evidence, assumptions, decisions, lineage, extraction runs, unresolved mappings, and lean table presentation metadata.
 - TypeScript types and portable JSON Schema come from one runtime contract.
 - A restricted expression interpreter can evaluate supported formulas without `eval` or arbitrary JavaScript.
 - A deterministic validator can report broken references, value-type mismatches, dependency cycles, duplicate points, unsupported syntax, and missing provenance with object-level repair guidance.
@@ -30,8 +30,8 @@ This project tests a product direction. It does not replace Excel, execute workb
 financial-model-viewer/
 ├── src/
 │   ├── model-db/                    # schema, inferred types, expressions, queries, validator
-│   ├── visualizations/              # overview, financial table, dependency graph
-│   └── components/                  # object/provenance detail surface
+│   ├── visualizations/              # financial table and dependency graph
+│   └── components/                  # persistent cell/property inspector
 ├── skills/extract-financial-model/ # reusable extraction workflow
 ├── schema/model-db.schema.json      # generated portable JSON Schema
 ├── examples/                        # validated cross-sector semantic fixture
@@ -46,7 +46,7 @@ financial-model-viewer/
 
 The canonical database stores what exists, what was observed, how metrics are calculated, why an analyst changed a forecast when evidence exists, and where each extracted object came from.
 
-It intentionally does **not** use spreadsheet blocks, rows, columns, indentation, or cells as business identity. Workbook coordinates appear only inside provenance locators.
+It intentionally does **not** use spreadsheet blocks, rows, columns, indentation, or cells as business identity. Workbook coordinates appear inside provenance locators. An optional `tablePresentations` layer records section titles and metric order for the viewer without changing canonical identity. If extraction cannot defend that structure, it must create an open presentation issue: the validator emits a warning and the query layer uses a deterministic fallback. Omitting both metadata and the issue is an error.
 
 Company and sector extensions happen by adding metrics and relationships, not by changing page layouts or introducing company-specific schema variants.
 
@@ -134,7 +134,7 @@ Implemented:
 - deterministic semantic validator;
 - extraction skill and contract;
 - validated cross-sector fixture and extraction report;
-- model overview, financial table, dependency graph, and provenance drawer;
+- table-first model viewer, dependency graph, and persistent cell/property inspector;
 - unit, cross-sector generality, browser, responsive, and visual-proof checks;
 - static GitHub Pages deployment.
 

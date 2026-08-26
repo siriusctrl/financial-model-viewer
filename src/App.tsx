@@ -1,21 +1,19 @@
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
-import { Icon, type IconName } from "./components/Icon";
+import { Icon } from "./components/Icon";
 import { ObjectDetailPanel } from "./components/ObjectDetailPanel";
 import { defaultDatabase } from "./data/database";
 import { parseModelDatabaseJson } from "./model-db/import";
 import { ModelDatabaseQueries } from "./model-db/queries";
 import type { ModelDatabase } from "./model-db/types";
-import type { ValidationError } from "./model-db/validate";
+import type { ValidationError, ValidationWarning } from "./model-db/validate";
 import { DependencyGraph } from "./visualizations/dependency-graph/DependencyGraph";
 import { FinancialTable } from "./visualizations/financial-table/FinancialTable";
-import { ModelOverview } from "./visualizations/model-overview/ModelOverview";
 
-type View = "overview" | "table" | "graph";
+type View = "table" | "graph";
 
-const views: Array<{ id: View; label: string; description: string; icon: IconName }> = [
-  { id: "overview", label: "Model overview", description: "Coverage & integrity", icon: "overview" },
-  { id: "table", label: "Financial table", description: "Metric × period", icon: "table" },
-  { id: "graph", label: "Dependency graph", description: "Formula lineage", icon: "graph" },
+const views: Array<{ id: View; label: string }> = [
+  { id: "table", label: "Model table" },
+  { id: "graph", label: "Lineage map" },
 ];
 
 const MAX_JSON_BYTES = 20 * 1024 * 1024;
@@ -25,7 +23,7 @@ type DatasetSource =
   | { kind: "file"; filename: string };
 
 type ImportNotice = {
-  kind: "success" | "error";
+  kind: "success" | "warning" | "error";
   title: string;
   message: string;
   errors?: ValidationError[];
@@ -51,24 +49,17 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [database, setDatabase] = useState(defaultDatabase);
   const [datasetSource, setDatasetSource] = useState<DatasetSource>({ kind: "sample" });
+  const [databaseWarnings, setDatabaseWarnings] = useState<ValidationWarning[]>([]);
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
-  const queries = useMemo(() => new ModelDatabaseQueries(database), [database]);
-  const models = queries.getModels();
   const [selectedModelId, setSelectedModelId] = useState(() => defaultModelId(defaultDatabase));
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>("table");
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [graphMetricId, setGraphMetricId] = useState<string | null>(() =>
     initialGraphMetric(defaultDatabase, defaultModelId(defaultDatabase)),
   );
 
-  const overview = useMemo(
-    () => queries.getModelOverview(selectedModelId),
-    [queries, selectedModelId],
-  );
-  const hierarchy = useMemo(
-    () => queries.getMetricHierarchy({ modelId: selectedModelId }),
-    [queries, selectedModelId],
-  );
+  const queries = useMemo(() => new ModelDatabaseQueries(database), [database]);
+  const models = queries.getModels();
   const table = useMemo(
     () =>
       queries.getFinancialTable({
@@ -92,23 +83,27 @@ export default function App() {
     setSelectedModelId(modelId);
     setGraphMetricId(initialGraphMetric(database, modelId));
     setSelectedTargetId(null);
-    setView("overview");
+    setView("table");
   };
 
   const focusGraph = (metricId: string) => {
     setGraphMetricId(metricId);
     setView("graph");
-    setSelectedTargetId(null);
   };
 
-  const activateDatabase = (nextDatabase: ModelDatabase, source: DatasetSource) => {
+  const activateDatabase = (
+    nextDatabase: ModelDatabase,
+    source: DatasetSource,
+    warnings: ValidationWarning[] = [],
+  ) => {
     const nextModelId = defaultModelId(nextDatabase);
     setDatabase(nextDatabase);
     setDatasetSource(source);
+    setDatabaseWarnings(warnings);
     setSelectedModelId(nextModelId);
     setGraphMetricId(initialGraphMetric(nextDatabase, nextModelId));
     setSelectedTargetId(null);
-    setView("overview");
+    setView("table");
   };
 
   const handleDatabaseFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -138,11 +133,18 @@ export default function App() {
         return;
       }
 
-      activateDatabase(result.data, { kind: "file", filename: file.name });
+      activateDatabase(
+        result.data,
+        { kind: "file", filename: file.name },
+        result.warnings,
+      );
       setImportNotice({
-        kind: "success",
-        title: `Previewing ${file.name}`,
+        kind: result.warnings.length > 0 ? "warning" : "success",
+        title: result.warnings.length > 0
+          ? `Previewing ${file.name} with ${result.warnings.length} warning${result.warnings.length === 1 ? "" : "s"}`
+          : `Previewing ${file.name}`,
         message: `${result.stats.models} model${result.stats.models === 1 ? "" : "s"}, ${result.stats.metrics} metrics, and ${result.stats.observations} observations validated locally. The file stays in this browser tab.`,
+        errors: result.warnings,
       });
     } catch (cause) {
       setImportNotice({
@@ -166,17 +168,17 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="navigation-rail">
-        <div className="brand-lockup">
-          <span className="brand-mark"><Icon name="database" size={20} /></span>
+      <header className="viewer-header">
+        <div className="product-lockup">
+          <span className="product-monogram">FM</span>
           <span>
-            <strong>Ledgerglass</strong>
-            <small>Semantic model viewer</small>
+            <strong>Financial model viewer</strong>
+            <small>Semantic database inspector</small>
           </span>
         </div>
 
         <label className="model-switcher">
-          <span>Active model</span>
+          <span>Model</span>
           <select
             aria-label="Active model"
             value={selectedModelId}
@@ -186,11 +188,72 @@ export default function App() {
               <option key={model.id} value={model.id}>{model.name}</option>
             ))}
           </select>
-          <small>{overview.entity.name} · {overview.model.baseCurrency}</small>
         </label>
 
-        <nav className="primary-nav" aria-label="Model visualizations">
-          <span className="nav-label">Workspace</span>
+        <div className="header-actions">
+          <span className={`validation-status ${databaseWarnings.length > 0 ? "has-warning" : ""}`}>
+            <Icon name={databaseWarnings.length > 0 ? "warning" : "check"} size={14} />
+            {databaseWarnings.length > 0
+              ? `${databaseWarnings.length} structure warning${databaseWarnings.length === 1 ? "" : "s"}`
+              : "Validated locally"}
+          </span>
+          <input
+            ref={fileInputRef}
+            className="json-file-input"
+            data-testid="json-file-input"
+            type="file"
+            accept="application/json,.json"
+            onChange={handleDatabaseFile}
+          />
+          <button
+            className="upload-button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Open a model-db JSON file locally in this browser"
+          >
+            <Icon name="upload" size={15} /> Open JSON
+          </button>
+          {datasetSource.kind === "file" && (
+            <button className="text-button" onClick={restoreSample}>Restore sample</button>
+          )}
+        </div>
+      </header>
+
+      {importNotice && (
+        <section
+          className={`import-notice import-notice--${importNotice.kind}`}
+          data-testid="import-notice"
+          role={importNotice.kind === "error" ? "alert" : "status"}
+        >
+          <Icon name={importNotice.kind === "error" ? "warning" : "check"} size={17} />
+          <div>
+            <strong>{importNotice.title}</strong>
+            <p>{importNotice.message}</p>
+            {importNotice.errors && importNotice.errors.length > 0 && (
+              <ul>
+                {importNotice.errors.slice(0, 3).map((item, index) => (
+                  <li key={`${item.code}-${item.objectId}-${item.field}-${index}`}>
+                    <code>{item.objectId}.{item.field}</code>: {item.reason}
+                  </li>
+                ))}
+                {importNotice.errors.length > 3 && (
+                  <li>Plus {importNotice.errors.length - 3} more issues. Run <code>npm run validate</code> for the complete report.</li>
+                )}
+              </ul>
+            )}
+          </div>
+          <button className="icon-button" aria-label="Dismiss import message" onClick={() => setImportNotice(null)}>
+            <Icon name="close" size={15} />
+          </button>
+        </section>
+      )}
+
+      <section className="model-toolbar">
+        <div className="model-heading">
+          <span className="dataset-breadcrumb">{database.dataset.name}</span>
+          <h1>{table.entity.name}</h1>
+          <p>{table.model.name} · {table.model.baseCurrency} · as of {table.model.asOf}</p>
+        </div>
+        <nav className="view-tabs" aria-label="Viewer mode">
           {views.map((item) => (
             <button
               key={item.id}
@@ -198,98 +261,18 @@ export default function App() {
               onClick={() => setView(item.id)}
               aria-current={view === item.id ? "page" : undefined}
             >
-              <Icon name={item.icon} size={18} />
-              <span><strong>{item.label}</strong><small>{item.description}</small></span>
+              {item.label}
             </button>
           ))}
         </nav>
+      </section>
 
-        <div className="rail-status">
-          <div className="status-heading">
-            <span className="status-pulse" />
-            <strong>Dataset validated</strong>
-          </div>
-          <p>model-db@{database.schemaVersion} · {datasetSource.kind === "file" ? "local" : "sample"}</p>
-          <div className="status-line"><span>Schema</span><strong>Runtime-derived</strong></div>
-          <div className="status-line"><span>Lineage</span><strong>{database.provenanceRecords.length} records</strong></div>
-          <div className="status-line"><span>Source</span><strong>{datasetSource.kind === "file" ? "Browser only" : "Bundled"}</strong></div>
-          {datasetSource.kind === "file" && (
-            <button className="restore-sample-button" onClick={restoreSample}>Restore sample</button>
-          )}
-        </div>
-      </aside>
-
-      <main className="main-workspace">
-        <header className="workspace-topbar">
-          <div className="dataset-breadcrumb">
-            <span>{database.dataset.name}</span>
-            <i>/</i>
-            <strong>{views.find((item) => item.id === view)?.label}</strong>
-          </div>
-          <div className="topbar-meta">
-            <input
-              ref={fileInputRef}
-              className="json-file-input"
-              data-testid="json-file-input"
-              type="file"
-              accept="application/json,.json"
-              onChange={handleDatabaseFile}
-            />
-            <button
-              className="upload-button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Open a model-db JSON file locally in this browser"
-            >
-              <Icon name="upload" size={14} /> Open JSON
-            </button>
-            <span className="validated-badge"><Icon name="check" size={14} /> Deterministic pass</span>
-            <button className="schema-button" onClick={() => setSelectedTargetId(selectedModelId)}>
-              Inspect model <Icon name="arrow" size={14} />
-            </button>
-          </div>
-        </header>
-
-        {importNotice && (
-          <section
-            className={`import-notice import-notice--${importNotice.kind}`}
-            data-testid="import-notice"
-            role={importNotice.kind === "error" ? "alert" : "status"}
-          >
-            <Icon name={importNotice.kind === "error" ? "warning" : "check"} size={18} />
-            <div>
-              <strong>{importNotice.title}</strong>
-              <p>{importNotice.message}</p>
-              {importNotice.errors && importNotice.errors.length > 0 && (
-                <ul>
-                  {importNotice.errors.slice(0, 3).map((item, index) => (
-                    <li key={`${item.code}-${item.objectId}-${item.field}-${index}`}>
-                      <code>{item.objectId}.{item.field}</code>: {item.reason}
-                    </li>
-                  ))}
-                  {importNotice.errors.length > 3 && (
-                    <li>Plus {importNotice.errors.length - 3} more issues. Run <code>npm run validate</code> for the complete report.</li>
-                  )}
-                </ul>
-              )}
-            </div>
-            <button className="icon-button" aria-label="Dismiss import message" onClick={() => setImportNotice(null)}>
-              <Icon name="close" size={15} />
-            </button>
-          </section>
-        )}
-
-        <div className="workspace-content">
-          {view === "overview" && (
-            <ModelOverview
-              overview={overview}
-              hierarchy={hierarchy}
-              onSelect={setSelectedTargetId}
-              onNavigate={setView}
-            />
-          )}
+      <div className="viewer-layout">
+        <main className="model-canvas">
           {view === "table" && (
             <FinancialTable
               projection={table}
+              selectedTargetId={selectedTargetId}
               onSelectMetric={setSelectedTargetId}
               onSelectObservation={setSelectedTargetId}
             />
@@ -305,20 +288,22 @@ export default function App() {
           )}
           {view === "graph" && !graph && (
             <section className="empty-projection" data-testid="empty-dependency-graph">
-              <span className="eyebrow">No graph available</span>
-              <h1>This model has no observed metrics yet.</h1>
-              <p>Add observations and transformations to the model database, then open the JSON again.</p>
+              <Icon name="graph" size={24} />
+              <h2>No dependency graph is available.</h2>
+              <p>Add observations and transformations, then open the database again.</p>
             </section>
           )}
-        </div>
-      </main>
+        </main>
 
-      <ObjectDetailPanel
-        targetId={selectedTargetId}
-        queries={queries}
-        onClose={() => setSelectedTargetId(null)}
-        onFocusGraph={focusGraph}
-      />
+        <ObjectDetailPanel
+          targetId={selectedTargetId}
+          modelId={selectedModelId}
+          queries={queries}
+          onClose={() => setSelectedTargetId(null)}
+          onSelectTarget={setSelectedTargetId}
+          onFocusGraph={focusGraph}
+        />
+      </div>
     </div>
   );
 }

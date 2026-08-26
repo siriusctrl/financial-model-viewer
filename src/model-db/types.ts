@@ -17,6 +17,8 @@ import type {
   ScenarioSchema,
   SourceArtifactSchema,
   SourceLocatorSchema,
+  TablePresentationSchema,
+  TableSectionSchema,
   TransformationSchema,
   UnresolvedItemSchema,
 } from "./schema";
@@ -32,6 +34,8 @@ export type Transformation = z.infer<typeof TransformationSchema>;
 export type Relationship = z.infer<typeof RelationshipSchema>;
 export type SourceArtifact = z.infer<typeof SourceArtifactSchema>;
 export type SourceLocator = z.infer<typeof SourceLocatorSchema>;
+export type TableSection = z.infer<typeof TableSectionSchema>;
+export type TablePresentation = z.infer<typeof TablePresentationSchema>;
 export type ProvenanceRecord = z.infer<typeof ProvenanceRecordSchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type Assumption = z.infer<typeof AssumptionSchema>;

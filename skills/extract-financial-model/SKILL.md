@@ -34,6 +34,8 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - Represent companies, segments, products, and geographies as entities.
    - Treat indentation, position, color, and font as extraction signals only.
    - Convert hierarchy into `component_of` relationships.
+   - When worksheet section labels and reading order are explicit, preserve them as one ordered `tablePresentations` entry for the model. Reference metric IDs and retain the source range; never make a row or cell the metric identity.
+   - If grouping is ambiguous, omit the presentation metadata and create an open `presentation` unresolved item instead of inventing a polished layout. Never omit both: the validator treats an unacknowledged fallback as an error.
    - Never use a cell, row, column, block, display label, or current view as a stable object ID.
 
 4. Translate calculations.
@@ -55,7 +57,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - Before reporting completion, run `npm run extraction:check -- path/to/output-directory`. This loads `model-db.json` through the viewer's runtime contract and checks that `extraction-report.md` has every required, non-empty section in contract order.
    - The checker resolves repository code relative to itself, so an agent outside the repository root may run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/check-extraction.mjs path/to/output-directory`.
    - From the repository root, run `npm run check` after changing schema, fixtures, expressions, validator, or query code.
-   - Do not report success while validator errors or missing-lineage objects remain.
+   - Copy every validator warning into the report and leave the corresponding unresolved item open. Do not report success while validator errors, silent presentation fallbacks, or missing-lineage objects remain.
 
 ## Output discipline
 

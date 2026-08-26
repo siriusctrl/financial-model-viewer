@@ -9,6 +9,10 @@ describe("model-expression@0.1", () => {
 
     expect(result.valid).toBe(true);
     expect(result.dependencies).toEqual(["metric_profit", "metric_revenue"]);
+    expect(result.references).toEqual([
+      { metricId: "metric_revenue", periodOffset: 0 },
+      { metricId: "metric_profit", periodOffset: 0 },
+    ]);
   });
 
   it("evaluates arithmetic without executing JavaScript", () => {
@@ -27,12 +31,28 @@ describe("model-expression@0.1", () => {
 
   it("supports explicit lag and lead context", () => {
     expect(
+      validateExpression('lag("metric_revenue", 1) + lead("metric_revenue", 2)').references,
+    ).toEqual([
+      { metricId: "metric_revenue", periodOffset: -1 },
+      { metricId: "metric_revenue", periodOffset: 2 },
+    ]);
+    expect(
       evaluateExpression('lag("metric_revenue", 1) + lead("metric_revenue", 1)', {
         ref: () => null,
         lag: () => 90,
         lead: () => 110,
       }),
     ).toBe(200);
+  });
+
+  it.each([
+    'ref("metric_revenue", 1)',
+    "when(true, 1)",
+    "sum()",
+    'lag("metric_revenue", 0)',
+    'lead("metric_revenue", 1 + 1)',
+  ])("rejects formulas that cannot compile to deterministic cell lineage: %s", (expression) => {
+    expect(validateExpression(expression).valid).toBe(false);
   });
 
   it.each([

@@ -1,5 +1,9 @@
 import type { ModelDatabase } from "./types";
-import type { ValidationError, ValidationStats } from "./validate";
+import type {
+  ValidationError,
+  ValidationStats,
+  ValidationWarning,
+} from "./validate";
 import { validateModelDatabase } from "./validate";
 
 export type ModelDatabaseImportResult =
@@ -7,6 +11,7 @@ export type ModelDatabaseImportResult =
       success: true;
       data: ModelDatabase;
       stats: ValidationStats;
+      warnings: ValidationWarning[];
     }
   | {
       success: false;
@@ -39,5 +44,10 @@ export function parseModelDatabaseJson(text: string): ModelDatabaseImportResult 
     };
   }
 
-  return { success: true, data: result.data, stats: result.stats };
+  return {
+    success: true,
+    data: result.data,
+    stats: result.stats,
+    warnings: result.warnings,
+  };
 }

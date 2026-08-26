@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import sample from "../../examples/sample-model-db.json" with { type: "json" };
+import type { ModelDatabase } from "../../src/model-db/types";
 
 async function uploadJson(
   page: Page,
@@ -19,38 +20,57 @@ async function uploadJson(
   );
 }
 
-test("moves from model overview to a sourced forecast observation", async ({ page }) => {
+test("opens on the extracted model table and inspects a sourced cell", async ({ page }) => {
   await page.goto("./");
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
-  await expect(page.getByText("Validated", { exact: true })).toBeVisible();
-
-  await page.locator(".primary-nav button").filter({ hasText: "Financial table" }).click();
-  await expect(page.getByRole("heading", { name: "Financial table" })).toBeVisible();
-  await expect(page.getByText("Subscription revenue", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("financial-table-view")).toBeVisible();
+  await expect(page.getByText("Revenue build", { exact: true })).toBeVisible();
+  await expect(page.getByText("Gross profit", { exact: true }).first()).toBeVisible();
 
   const forecastCell = page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/);
   await expect(forecastCell).toContainText("1,315.0");
   await forecastCell.click();
-  await expect(page.getByTestId("detail-panel")).toBeVisible();
-  await expect(page.getByText("Model!E11")).toBeVisible();
-  await expect(page.getByText("94%")).toBeVisible();
-  await expect(page.getByText("unreviewed", { exact: true }).first()).toBeVisible();
+
+  const inspector = page.getByTestId("detail-panel");
+  await expect(inspector.getByText("Selected cell · FY25E")).toBeVisible();
+  await expect(inspector.getByText("Model!E11")).toBeVisible();
+  await expect(inspector.getByText("94%")).toBeVisible();
+  await expect(inspector.getByText("unreviewed", { exact: true })).toBeVisible();
 });
 
-test("uses one frontend for a structurally different bank model", async ({ page }) => {
+test("shows actual workbook inputs for a derived cell", async ({ page }) => {
+  await page.goto("./");
+  await page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/).click();
+  const derivedCell = page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/);
+  await derivedCell.click();
+  await expect(derivedCell).toHaveClass(/selected/);
+  await expect(page.locator(".value-button.selected")).toHaveAttribute(
+    "title",
+    /obs_northstar_gross_profit_fy2025/,
+  );
+
+  const lineage = page.getByTestId("formula-lineage");
+  await expect(lineage).toContainText("Derived from 2 inputs");
+  await expect(lineage).toContainText("Revenue");
+  await expect(lineage).toContainText("Model!E10");
+  await expect(lineage).toContainText("Cost of revenue");
+  await expect(lineage).toContainText("Model!E16");
+  await expect(lineage.getByText("=B10-B16", { exact: true })).toBeVisible();
+});
+
+test("uses extracted sections for a structurally different bank model", async ({ page }) => {
   await page.goto("./");
   await page.getByLabel("Active model").selectOption("model_harbor_national");
   await expect(page.getByRole("heading", { name: "Harbor National" })).toBeVisible();
-  await expect(page.getByText("Needs review")).toBeVisible();
-
-  await page.locator(".primary-nav button").filter({ hasText: "Financial table" }).click();
+  await expect(page.getByText("Operating income", { exact: true })).toBeVisible();
+  await expect(page.getByText("Credit and costs", { exact: true })).toBeVisible();
   await expect(page.getByText("Provision for credit losses", { exact: true })).toBeVisible();
   await expect(page.getByText("Subscription revenue", { exact: true })).toHaveCount(0);
 });
 
-test("renders formula-derived dependency edges and details", async ({ page }) => {
+test("renders formula-derived dependency edges in the optional lineage map", async ({ page }) => {
   await page.goto("./");
-  await page.locator(".primary-nav button").filter({ hasText: "Dependency graph" }).click();
+  await page.getByRole("button", { name: "Lineage map" }).click();
   await expect(page.getByTestId("dependency-graph-view")).toBeVisible();
   await page.locator(".metric-picker select").selectOption("metric_northstar_gross_profit");
   await expect(
@@ -64,27 +84,17 @@ test("renders formula-derived dependency edges and details", async ({ page }) =>
     ),
   ).toHaveCount(1);
   await expect(page.locator(".graph-node--focus .node-name")).toHaveText("Gross profit");
-
-  await page
-    .locator('[data-transformation-id="transformation_northstar_gross_profit"]')
-    .click();
-  const detailPanel = page.getByTestId("detail-panel");
-  await expect(detailPanel.getByText("Formula lineage")).toBeVisible();
-  await expect(detailPanel.locator(".formula-pair code").filter({ hasText: "=B10-B16" })).toBeVisible();
 });
 
 test("keeps the mobile shell within the viewport", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "mobile-only layout assertion");
   await page.goto("./");
-  await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
+  await expect(page.getByTestId("financial-table-view")).toBeVisible();
   const dimensions = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,
   }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
-
-  await page.locator(".primary-nav button").filter({ hasText: "Financial table" }).click();
-  await expect(page.getByTestId("financial-table-view")).toBeVisible();
   await expect(page.locator(".financial-table-wrap")).toHaveCSS("overflow-x", "auto");
 });
 
@@ -102,9 +112,39 @@ test("previews a validated model database JSON file locally", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
 });
 
+test("surfaces an explicitly acknowledged presentation fallback", async ({ page }) => {
+  await page.goto("./");
+  const imported = structuredClone(sample) as ModelDatabase;
+  imported.tablePresentations = imported.tablePresentations.filter(
+    (presentation) => presentation.modelId !== "model_northstar_cloud",
+  );
+  imported.unresolvedItems.push({
+    id: "unresolved_northstar_table_presentation",
+    modelId: "model_northstar_cloud",
+    category: "presentation",
+    description: "The workbook does not expose defensible table sections.",
+    sourceArtifactId: "artifact_northstar_workbook",
+    status: "open",
+  });
+  imported.provenanceRecords.push({
+    id: "provenance_unresolved_northstar_table_presentation",
+    targetId: "unresolved_northstar_table_presentation",
+    sourceArtifactId: "artifact_northstar_workbook",
+    locator: { sheet: "Model" },
+    extractionRunId: "run_northstar_2025_03_15",
+    confidence: 0.4,
+    reviewStatus: "unreviewed",
+  });
+
+  await uploadJson(page, "fallback-model.json", imported);
+
+  await expect(page.getByTestId("import-notice")).toContainText("with 1 warning");
+  await expect(page.getByText("1 structure warning")).toBeVisible();
+  await expect(page.getByText("Source-order fallback")).toBeVisible();
+});
+
 test("keeps the current preview when an uploaded file is malformed", async ({ page }) => {
   await page.goto("./");
-
   await uploadJson(page, "broken.json", '{"schemaVersion":');
 
   await expect(page.getByRole("alert")).toContainText("Could not read this JSON");
@@ -112,7 +152,7 @@ test("keeps the current preview when an uploaded file is malformed", async ({ pa
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
 });
 
-test("shows actionable semantic errors before replacing the preview", async ({ page }) => {
+test("shows semantic errors before replacing the preview", async ({ page }) => {
   await page.goto("./");
   const invalid = structuredClone(sample);
   invalid.observations[0].metricId = "metric_missing_reference";

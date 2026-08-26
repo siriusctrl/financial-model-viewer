@@ -57,8 +57,22 @@ Map input concepts as follows:
 | Source passage supporting a view | `Evidence` | Preserve a short excerpt or locator, subject to source policy. |
 | Forward-looking analyst belief | `Assumption` | Require evidence; formulas alone are insufficient. |
 | Deliberate forecast change | `Decision` + `DecisionChange` | Record rationale only when present in an input source. |
+| Explicit worksheet section and metric order | `TablePresentation` | Preserve a lean, non-canonical table grouping with ordered metric IDs and the source range. |
 
 Do not add a `calculated_from` relationship when the same edge is derivable from a transformation's dependencies.
+
+### Table presentation metadata
+
+Emit at most one `tablePresentations` entry per model. Use it only when worksheet structure provides a defensible reading order.
+
+- Give each section a semantic snake-case ID and source-facing title.
+- List each observed model metric exactly once across the ordered sections.
+- Preserve the workbook sheet/range in `sourceLocator` when available.
+- Use `component_of` for semantic hierarchy; table sections do not create business relationships.
+- Do not preserve blank rows, merged cells, indentation, coordinates, or formatting as canonical identity.
+- If the grouping is uncertain, omit the presentation and add an unresolved item. The viewer will fall back to semantic hierarchy and provenance order.
+
+The validator enforces presentation coverage automatically. If a presentation exists, every observed model metric must appear exactly once and every model, metric, section, and source reference must resolve. If it does not exist, add an open unresolved item with `category: presentation`; the validator emits a visible fallback warning. Missing both the presentation and that unresolved item is an error.
 
 ## 4. Formula translation
 
@@ -67,6 +81,8 @@ Translate only to `model-expression@0.1`. Allowed operations are literals, arith
 ```text
 ref sum average min max when lag lead coalesce abs round
 ```
+
+Function arity is compiled strictly. `ref` and `abs` take one argument; `lag`, `lead`, and `round` take one or two; `when` takes three; aggregate/coalesce calls take at least one. The optional `lag`/`lead` period count must be a positive integer literal so a derived value can resolve to exact input-period observations and workbook cells.
 
 Examples:
 
@@ -137,6 +153,7 @@ Write `extraction-report.md` with these sections:
 ## Inputs and hashes
 ## Inventory
 ## Object counts
+## Table presentation
 ## Actual / estimate boundary
 ## Formula coverage
 ## Unresolved mappings
@@ -145,4 +162,4 @@ Write `extraction-report.md` with these sections:
 ## Analyst questions
 ```
 
-Formula coverage must count supported, opaque, and unresolved transformations. Object counts must include entities, metrics, observations, transformations, relationships, assumptions, decisions, and unresolved items. The validator section must include the command, result, and every remaining error; do not summarize a failed validator as successful.
+The table-presentation section must list every model, its ordered sections, metric coverage, source range, and any fallback warning. Formula coverage must count supported, opaque, and unresolved transformations. Object counts must include entities, metrics, observations, transformations, relationships, table presentation sections, assumptions, decisions, and unresolved items. The validator section must include the command, result, every remaining error, and every warning; do not summarize a failed validator as successful.

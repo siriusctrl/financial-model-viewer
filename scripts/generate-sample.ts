@@ -17,6 +17,7 @@ import type {
   Scenario,
   SourceArtifact,
   SourceLocator,
+  TablePresentation,
   Transformation,
   UnresolvedItem,
 } from "../src/model-db/types";
@@ -213,6 +214,66 @@ const relationships: Relationship[] = [
   { id: "relationship_northstar_services_component", fromId: "metric_northstar_services_revenue", type: "component_of", toId: "metric_northstar_revenue" },
   { id: "relationship_harbor_interest_component", fromId: "metric_harbor_net_interest_income", type: "component_of", toId: "metric_harbor_operating_income" },
   { id: "relationship_harbor_non_interest_component", fromId: "metric_harbor_non_interest_income", type: "component_of", toId: "metric_harbor_operating_income" },
+];
+
+const tablePresentations: TablePresentation[] = [
+  {
+    modelId: "model_northstar_cloud",
+    sourceArtifactId: "artifact_northstar_workbook",
+    sections: [
+      {
+        id: "section_northstar_revenue_build",
+        title: "Revenue build",
+        metricIds: [
+          "metric_northstar_revenue",
+          "metric_northstar_subscription_revenue",
+          "metric_northstar_services_revenue",
+        ],
+        sourceLocator: { sheet: "Model", range: "A10:F12" },
+      },
+      {
+        id: "section_northstar_gross_profit",
+        title: "Gross profit",
+        metricIds: [
+          "metric_northstar_cost_of_revenue",
+          "metric_northstar_gross_profit",
+          "metric_northstar_gross_margin",
+        ],
+        sourceLocator: { sheet: "Model", range: "A16:F19" },
+      },
+    ],
+  },
+  {
+    modelId: "model_harbor_national",
+    sourceArtifactId: "artifact_harbor_workbook",
+    sections: [
+      {
+        id: "section_harbor_operating_income",
+        title: "Operating income",
+        metricIds: [
+          "metric_harbor_operating_income",
+          "metric_harbor_net_interest_income",
+          "metric_harbor_non_interest_income",
+        ],
+        sourceLocator: { sheet: "Model", range: "A8:F10" },
+      },
+      {
+        id: "section_harbor_credit_and_costs",
+        title: "Credit and costs",
+        metricIds: [
+          "metric_harbor_provision",
+          "metric_harbor_non_interest_expense",
+        ],
+        sourceLocator: { sheet: "Model", range: "A14:F18" },
+      },
+      {
+        id: "section_harbor_pre_tax_earnings",
+        title: "Pre-tax earnings",
+        metricIds: ["metric_harbor_pre_tax_income"],
+        sourceLocator: { sheet: "Model", range: "A21:F21" },
+      },
+    ],
+  },
 ];
 
 const observations: Observation[] = [];
@@ -446,6 +507,7 @@ const database: ModelDatabase = {
   decisionChanges,
   extractionRuns: runs,
   unresolvedItems,
+  tablePresentations,
 };
 
 const validation = validateModelDatabase(database);

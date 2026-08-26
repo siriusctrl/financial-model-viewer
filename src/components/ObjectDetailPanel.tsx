@@ -1,12 +1,17 @@
-import { useEffect } from "react";
 import { Icon } from "./Icon";
-import type { ModelDatabaseQueries } from "../model-db/queries";
-import type { Transformation } from "../model-db/types";
+import type {
+  ModelDatabaseQueries,
+  ObservationDetailProjection,
+  ProvenanceProjection,
+} from "../model-db/queries";
+import type { Metric, Observation, SourceLocator } from "../model-db/types";
 
 type Props = {
   targetId: string | null;
+  modelId: string;
   queries: ModelDatabaseQueries;
   onClose: () => void;
+  onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
 };
 
@@ -21,32 +26,30 @@ function objectLabel(value: unknown, fallback: string): string {
   );
 }
 
-function objectKind(id: string): string {
-  const kind = id.split("_")[0];
-  const labels: Record<string, string> = {
-    metric: "Metric definition",
-    obs: "Observation",
-    transformation: "Transformation",
-    relationship: "Semantic relationship",
-    assumption: "Analyst assumption",
-    evidence: "Evidence",
-    decision: "Decision",
-    change: "Decision change",
-    unresolved: "Unresolved item",
-    model: "Model",
-    entity: "Entity",
-    period: "Period",
-  };
-  return labels[kind] ?? "Canonical object";
-}
-
-function formatLocator(locator: Record<string, unknown> | undefined): string {
-  if (!locator) return "No narrow locator supplied";
+function formatLocator(locator: SourceLocator | undefined): string {
+  if (!locator) return "No narrow source locator";
   if (locator.sheet && locator.cell) return `${locator.sheet}!${locator.cell}`;
   if (locator.sheet && locator.range) return `${locator.sheet}!${locator.range}`;
   if (locator.page) return `Page ${locator.page}${locator.passage ? ` · ${locator.passage}` : ""}`;
   if (locator.timecode) return `${locator.timecode}${locator.passage ? ` · ${locator.passage}` : ""}`;
-  return String(locator.passage ?? "Source-level lineage only");
+  return String(locator.passage ?? locator.sheet ?? "Source-level lineage only");
+}
+
+function formatValue(value: Observation["value"], metric: Metric): string {
+  if (value === null) return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "string") return value;
+  if (metric.dataType === "percentage") {
+    return new Intl.NumberFormat("en-US", {
+      style: "percent",
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: metric.dataType === "count" ? 0 : 1,
+    maximumFractionDigits: metric.dataType === "count" ? 0 : 2,
+  }).format(value);
 }
 
 function fieldValue(value: unknown): string {
@@ -56,149 +59,223 @@ function fieldValue(value: unknown): string {
   return String(value);
 }
 
-function relatedTitle(value: unknown, fallback: string): string {
-  return objectLabel(value, fallback);
+export function ObjectDetailPanel({
+  targetId,
+  modelId,
+  queries,
+  onClose,
+  onSelectTarget,
+  onFocusGraph,
+}: Props) {
+  const observation = targetId
+    ? queries.database.observations.find((item) => item.id === targetId)
+    : undefined;
+
+  return (
+    <aside className="inspector-panel" aria-label="Cell inspector" data-testid="detail-panel">
+      {observation ? (
+        <CellDetail
+          detail={queries.getObservationDetail(observation.id)}
+          onClose={onClose}
+          onSelectTarget={onSelectTarget}
+          onFocusGraph={onFocusGraph}
+        />
+      ) : targetId ? (
+        <ObjectDetail targetId={targetId} queries={queries} onClose={onClose} />
+      ) : (
+        <EmptyInspector modelId={modelId} queries={queries} />
+      )}
+    </aside>
+  );
 }
 
-export function ObjectDetailPanel({
+function EmptyInspector({
+  modelId,
+  queries,
+}: {
+  modelId: string;
+  queries: ModelDatabaseQueries;
+}) {
+  const model = queries.getModel(modelId);
+  const observed = queries.database.observations.filter(
+    (item) => item.modelId === modelId,
+  ).length;
+  return (
+    <div className="inspector-empty">
+      <div className="inspector-heading">
+        <span>Cell inspector</span>
+        <strong>No cell selected</strong>
+      </div>
+      <div className="empty-inspector-copy">
+        <span className="selection-glyph"><Icon name="table" size={22} /></span>
+        <h2>Select any value in the table.</h2>
+        <p>Its model properties, workbook locator, review state, and formula inputs will appear here.</p>
+      </div>
+      <dl className="inspector-summary">
+        <div><dt>Model</dt><dd>{model.name}</dd></div>
+        <div><dt>As of</dt><dd>{model.asOf}</dd></div>
+        <div><dt>Observed cells</dt><dd>{observed}</dd></div>
+      </dl>
+    </div>
+  );
+}
+
+function CellDetail({
+  detail,
+  onClose,
+  onSelectTarget,
+  onFocusGraph,
+}: {
+  detail: ObservationDetailProjection;
+  onClose: () => void;
+  onSelectTarget: (targetId: string) => void;
+  onFocusGraph: (metricId: string) => void;
+}) {
+  return (
+    <>
+      <header className="inspector-header">
+        <div>
+          <span>Selected cell · {detail.period.label}</span>
+          <h2>{detail.metric.name}</h2>
+        </div>
+        <button className="icon-button" onClick={onClose} aria-label="Clear selection">
+          <Icon name="close" size={17} />
+        </button>
+      </header>
+
+      <div className="inspector-body">
+        <section className="cell-value-block">
+          <strong>{formatValue(detail.observation.value, detail.metric)}</strong>
+          <span>{detail.observation.unit ?? detail.metric.unit ?? detail.metric.dataType}</span>
+          <div className="cell-state-line">
+            <span className={`value-kind value-kind--${detail.observation.valueType}`}>
+              {detail.observation.valueType.replaceAll("_", " ")}
+            </span>
+            <span>{detail.observation.actuality}</span>
+          </div>
+        </section>
+
+        <section className="inspector-section">
+          <h3>Properties</h3>
+          <dl className="property-list">
+            <div><dt>Metric</dt><dd>{detail.metric.id}</dd></div>
+            <div><dt>Period</dt><dd>{detail.period.label}</dd></div>
+            <div><dt>Scenario</dt><dd>{detail.scenario?.name ?? "None"}</dd></div>
+            <div><dt>As of</dt><dd>{detail.observation.asOf}</dd></div>
+            <div><dt>Version</dt><dd>{detail.observation.versionId}</dd></div>
+          </dl>
+        </section>
+
+        {detail.transformation && (
+          <section className="inspector-section formula-lineage" data-testid="formula-lineage">
+            <div className="inspector-section-heading">
+              <h3>Derived from {detail.inputs.length} input{detail.inputs.length === 1 ? "" : "s"}</h3>
+              <button className="text-button" onClick={() => onFocusGraph(detail.metric.id)}>
+                Open map <Icon name="arrow" size={13} />
+              </button>
+            </div>
+
+            <div className="lineage-inputs">
+              {detail.inputs.map((input) => {
+                const inputSource = input.provenance.records[0];
+                return (
+                  <button
+                    key={`${input.metric.id}:${input.periodOffset}`}
+                    className="lineage-input"
+                    disabled={!input.observation}
+                    onClick={() => input.observation && onSelectTarget(input.observation.id)}
+                  >
+                    <span>
+                      <strong>{input.metric.name}</strong>
+                      <small>
+                        {input.period ? `${input.period.label} · ` : ""}
+                        {inputSource ? formatLocator(inputSource.provenance.locator) : "No matching cell"}
+                      </small>
+                    </span>
+                    <b>{input.observation ? formatValue(input.observation.value, input.metric) : "—"}</b>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="formula-block">
+              <span>Workbook formula</span>
+              <code>{detail.transformation.originalExpression ?? "Not supplied"}</code>
+              <span>Canonical expression</span>
+              <code>{detail.transformation.expression}</code>
+            </div>
+          </section>
+        )}
+
+        <SourceSection provenance={detail.provenance} />
+      </div>
+    </>
+  );
+}
+
+function SourceSection({ provenance }: { provenance: ProvenanceProjection }) {
+  return (
+    <section className="inspector-section">
+      <h3>Source and review</h3>
+      {provenance.records.length === 0 ? (
+        <p className="missing-source">No provenance record resolved.</p>
+      ) : (
+        <div className="source-records">
+          {provenance.records.map(({ provenance: item, source, extractionRun }) => (
+            <article key={item.id}>
+              <div className="source-record-heading">
+                <span className="source-icon"><Icon name="source" size={16} /></span>
+                <span><strong>{formatLocator(item.locator)}</strong><small>{source.title}</small></span>
+              </div>
+              <dl className="property-list compact">
+                <div><dt>Confidence</dt><dd>{Math.round(item.confidence * 100)}%</dd></div>
+                <div><dt>Review</dt><dd>{item.reviewStatus}</dd></div>
+                <div><dt>Extraction</dt><dd>{extractionRun.id}</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ObjectDetail({
   targetId,
   queries,
   onClose,
-  onFocusGraph,
-}: Props) {
-  useEffect(() => {
-    if (!targetId) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose, targetId]);
-
-  if (!targetId) return null;
+}: {
+  targetId: string;
+  queries: ModelDatabaseQueries;
+  onClose: () => void;
+}) {
   const object = queries.getObject(targetId);
   const record = objectRecord(object);
-  const provenance = queries.getProvenance(targetId);
-  const relationships = queries.getRelationships(targetId);
-  const transformations: Transformation[] = targetId.startsWith("transformation_")
-    ? [object as Transformation]
-    : targetId.startsWith("metric_")
-      ? queries.database.transformations.filter((item) => item.outputMetricId === targetId)
-      : targetId.startsWith("obs_") && typeof record.transformationId === "string"
-        ? queries.database.transformations.filter((item) => item.id === record.transformationId)
-        : [];
-  const metricId = targetId.startsWith("metric_")
-    ? targetId
-    : typeof record.metricId === "string"
-      ? record.metricId
-      : undefined;
-
-  const hiddenFields = new Set(["id", "name", "title", "description", "statement"]);
   const fields = Object.entries(record).filter(
-    ([key, value]) => !hiddenFields.has(key) && value !== undefined,
+    ([key, value]) => !["id", "name", "title", "description"].includes(key) && value !== undefined,
   );
-
   return (
     <>
-      <button className="detail-scrim" aria-label="Close object details" onClick={onClose} />
-      <aside className="detail-panel" aria-label={`Details for ${targetId}`} data-testid="detail-panel">
-        <header className="detail-header">
-          <div>
-            <span className="eyebrow">{objectKind(targetId)}</span>
-            <h2>{objectLabel(object, targetId)}</h2>
-            {record.description ? <p>{String(record.description)}</p> : null}
-          </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close details">
-            <Icon name="close" size={19} />
-          </button>
-        </header>
-
-        <div className="detail-body">
-          {metricId && (
-            <button className="graph-focus-action" onClick={() => onFocusGraph(metricId)}>
-              <Icon name="graph" size={17} />
-              Focus in dependency graph
-              <Icon name="arrow" size={15} />
-            </button>
-          )}
-
-          <section className="detail-section">
-            <div className="detail-section-title">
-              <span>Canonical fields</span>
-              <code>{targetId}</code>
-            </div>
-            <dl className="object-fields">
-              {fields.map(([key, value]) => (
-                <div key={key}>
-                  <dt>{key}</dt>
-                  <dd>{fieldValue(value)}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-
-          {transformations.map((transformation) => (
-            <section className="detail-section formula-detail" key={transformation.id}>
-              <div className="detail-section-title">
-                <span><Icon name="formula" size={16} /> Formula lineage</span>
-                <span className={`status-chip ${transformation.status}`}>{transformation.status}</span>
-              </div>
-              <div className="formula-pair">
-                <div>
-                  <small>Canonical expression</small>
-                  <code>{transformation.expression}</code>
-                </div>
-                <div>
-                  <small>Original workbook formula</small>
-                  <code>{transformation.originalExpression ?? "Not supplied"}</code>
-                </div>
-              </div>
-            </section>
-          ))}
-
-          <section className="detail-section">
-            <div className="detail-section-title">
-              <span><Icon name="source" size={16} /> Provenance</span>
-              <span>{provenance.records.length} record{provenance.records.length === 1 ? "" : "s"}</span>
-            </div>
-            <div className="provenance-list">
-              {provenance.records.map(({ provenance: item, source, extractionRun }) => (
-                <article key={item.id}>
-                  <div className="source-title">
-                    <span className="source-icon"><Icon name="source" size={17} /></span>
-                    <div><strong>{source.title}</strong><small>{source.type}</small></div>
-                    <span className={`review-chip ${item.reviewStatus}`}>{item.reviewStatus}</span>
-                  </div>
-                  <dl>
-                    <div><dt>Locator</dt><dd>{formatLocator(item.locator)}</dd></div>
-                    <div><dt>Confidence</dt><dd>{Math.round(item.confidence * 100)}%</dd></div>
-                    <div><dt>Extraction run</dt><dd>{extractionRun.id}</dd></div>
-                    <div><dt>Content hash</dt><dd className="hash-value">{source.contentHash ?? "Not supplied"}</dd></div>
-                  </dl>
-                  <div className="confidence-track"><span style={{ width: `${item.confidence * 100}%` }} /></div>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          {relationships.length > 0 && (
-            <section className="detail-section">
-              <div className="detail-section-title">
-                <span>Related objects</span>
-                <span>{relationships.length}</span>
-              </div>
-              <div className="related-list">
-                {relationships.map(({ relationship, direction, relatedObject }) => (
-                  <div key={relationship.id}>
-                    <span>{direction === "outgoing" ? "→" : "←"} {relationship.type.replaceAll("_", " ")}</span>
-                    <strong>{relatedTitle(relatedObject, direction === "outgoing" ? relationship.toId : relationship.fromId)}</strong>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      </aside>
+      <header className="inspector-header">
+        <div><span>Model object</span><h2>{objectLabel(object, targetId)}</h2></div>
+        <button className="icon-button" onClick={onClose} aria-label="Clear selection">
+          <Icon name="close" size={17} />
+        </button>
+      </header>
+      <div className="inspector-body">
+        {record.description !== undefined && (
+          <p className="object-description">{String(record.description)}</p>
+        )}
+        <section className="inspector-section">
+          <h3>Properties</h3>
+          <dl className="property-list">
+            {fields.map(([key, value]) => (
+              <div key={key}><dt>{key}</dt><dd>{fieldValue(value)}</dd></div>
+            ))}
+          </dl>
+        </section>
+        <SourceSection provenance={queries.getProvenance(targetId)} />
+      </div>
     </>
   );
 }

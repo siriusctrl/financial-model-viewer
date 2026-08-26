@@ -187,6 +187,23 @@ export const SourceLocatorSchema = z
   })
   .strict();
 
+export const TableSectionSchema = z
+  .object({
+    id: IdSchema,
+    title: z.string().min(1),
+    metricIds: z.array(IdSchema).min(1),
+    sourceLocator: SourceLocatorSchema.optional(),
+  })
+  .strict();
+
+export const TablePresentationSchema = z
+  .object({
+    modelId: IdSchema,
+    sourceArtifactId: IdSchema.optional(),
+    sections: z.array(TableSectionSchema).min(1),
+  })
+  .strict();
+
 export const ProvenanceRecordSchema = z
   .object({
     id: IdSchema,
@@ -273,6 +290,7 @@ export const UnresolvedItemSchema = z
       "hierarchy",
       "lineage",
       "actuality_boundary",
+      "presentation",
       "other",
     ]),
     description: z.string().min(1),
@@ -304,10 +322,11 @@ export const ModelDatabaseSchema = z
     decisionChanges: z.array(DecisionChangeSchema),
     extractionRuns: z.array(ExtractionRunSchema).min(1),
     unresolvedItems: z.array(UnresolvedItemSchema),
+    tablePresentations: z.array(TablePresentationSchema).default([]),
   })
   .strict()
   .describe(
-    "Canonical semantic database for financial models. Layout, row, column, and cell identity are intentionally excluded from business objects.",
+    "Semantic financial-model database with a canonical object core and optional non-canonical table grouping metadata. Spreadsheet row, column, and cell identity are excluded from business objects.",
   );
 
 export const ModelDatabaseJsonSchema = z.toJSONSchema(ModelDatabaseSchema, {

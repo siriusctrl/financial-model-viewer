@@ -9,9 +9,13 @@ import type {
   Period,
   ProvenanceRecord,
   Relationship,
+  Scenario,
   SourceArtifact,
+  SourceLocator,
+  TablePresentation,
   Transformation,
 } from "./types";
+import { validateExpression } from "./expressions";
 
 export type MetricSeriesQuery = {
   modelId: string;
@@ -34,13 +38,23 @@ export type MetricHierarchyNode = {
 export type FinancialTableRow = {
   metric: Metric;
   depth: number;
+  sourceLocator?: SourceLocator;
   observations: Record<string, Observation | undefined>;
+};
+
+export type FinancialTableSection = {
+  id: string;
+  title: string;
+  sourceLocator?: SourceLocator;
+  rows: FinancialTableRow[];
 };
 
 export type FinancialTableProjection = {
   model: Model;
   entity: Entity;
   periods: Period[];
+  presentation?: TablePresentation;
+  sections: FinancialTableSection[];
   rows: FinancialTableRow[];
 };
 
@@ -65,6 +79,26 @@ export type ProvenanceProjection = {
   }>;
 };
 
+export type ObservationLineageInput = {
+  metric: Metric;
+  period?: Period;
+  periodOffset: number;
+  observation?: Observation;
+  provenance: ProvenanceProjection;
+};
+
+export type ObservationDetailProjection = {
+  observation: Observation;
+  metric: Metric;
+  period: Period;
+  model: Model;
+  entity: Entity;
+  scenario?: Scenario;
+  transformation?: Transformation;
+  provenance: ProvenanceProjection;
+  inputs: ObservationLineageInput[];
+};
+
 export type ModelOverviewProjection = {
   model: Model;
   entity: Entity;
@@ -83,6 +117,12 @@ function comparePeriods(left: Period, right: Period): number {
   return leftKey.localeCompare(rightKey);
 }
 
+function locatorRow(locator: SourceLocator | undefined): number | undefined {
+  const address = locator?.cell ?? locator?.range?.split(":")[0];
+  const match = address?.match(/\$?[A-Z]+\$?(\d+)/i);
+  return match ? Number(match[1]) : undefined;
+}
+
 function observationMatchesScenario(
   observation: Observation,
   scenarioId: string | undefined,
@@ -97,6 +137,8 @@ export class ModelDatabaseQueries {
   private readonly entities: Map<string, Entity>;
   private readonly metrics: Map<string, Metric>;
   private readonly periods: Map<string, Period>;
+  private readonly scenarios: Map<string, Scenario>;
+  private readonly observations: Map<string, Observation>;
   private readonly transformations: Map<string, Transformation>;
   private readonly relationships: Relationship[];
   private readonly objects: Map<string, CanonicalObject | SourceArtifact | ExtractionRun>;
@@ -107,6 +149,8 @@ export class ModelDatabaseQueries {
     this.entities = new Map(database.entities.map((item) => [item.id, item]));
     this.metrics = new Map(database.metrics.map((item) => [item.id, item]));
     this.periods = new Map(database.periods.map((item) => [item.id, item]));
+    this.scenarios = new Map(database.scenarios.map((item) => [item.id, item]));
+    this.observations = new Map(database.observations.map((item) => [item.id, item]));
     this.transformations = new Map(
       database.transformations.map((item) => [item.id, item]),
     );
@@ -229,6 +273,26 @@ export class ModelDatabaseQueries {
     );
   }
 
+  private primarySourceLocator(targetId: string): SourceLocator | undefined {
+    return this.database.provenanceRecords.find((item) => item.targetId === targetId)
+      ?.locator;
+  }
+
+  private compareMetricsBySource(left: Metric, right: Metric): number {
+    const leftLocator = this.primarySourceLocator(left.id);
+    const rightLocator = this.primarySourceLocator(right.id);
+    const sheetOrder = (leftLocator?.sheet ?? "").localeCompare(rightLocator?.sheet ?? "");
+    if (sheetOrder !== 0) return sheetOrder;
+    const leftRow = locatorRow(leftLocator);
+    const rightRow = locatorRow(rightLocator);
+    if (leftRow !== undefined && rightRow !== undefined && leftRow !== rightRow) {
+      return leftRow - rightRow;
+    }
+    if (leftRow !== undefined) return -1;
+    if (rightRow !== undefined) return 1;
+    return left.name.localeCompare(right.name);
+  }
+
   getMetricHierarchy({
     modelId,
     rootMetricId,
@@ -259,7 +323,7 @@ export class ModelDatabaseQueries {
         metric: this.getMetric(metricId),
         children: (childrenByParent.get(metricId) ?? [])
           .map((childId) => build(childId, nextAncestors))
-          .sort((left, right) => left.metric.name.localeCompare(right.metric.name)),
+          .sort((left, right) => this.compareMetricsBySource(left.metric, right.metric)),
       };
     };
 
@@ -267,7 +331,7 @@ export class ModelDatabaseQueries {
     return [...visible]
       .filter((metricId) => !childIds.has(metricId))
       .map((metricId) => build(metricId, new Set()))
-      .sort((left, right) => left.metric.name.localeCompare(right.metric.name));
+      .sort((left, right) => this.compareMetricsBySource(left.metric, right.metric));
   }
 
   getFinancialTable({
@@ -305,6 +369,7 @@ export class ModelDatabaseQueries {
       rows.push({
         metric: node.metric,
         depth,
+        sourceLocator: this.primarySourceLocator(node.metric.id),
         observations: Object.fromEntries(
           (seriesByMetric.get(node.metric.id) ?? []).map((point) => [
             point.period.id,
@@ -316,7 +381,114 @@ export class ModelDatabaseQueries {
     };
     hierarchy.forEach((node) => flatten(node, 0));
 
-    return { model, entity, periods, rows };
+    const presentation = this.database.tablePresentations.find(
+      (item) => item.modelId === modelId,
+    );
+    const rowsByMetric = new Map(rows.map((row) => [row.metric.id, row]));
+    const sections: FinancialTableSection[] = presentation
+      ? presentation.sections.map((section) => ({
+          id: section.id,
+          title: section.title,
+          sourceLocator: section.sourceLocator,
+          rows: section.metricIds
+            .map((metricId) => rowsByMetric.get(metricId))
+            .filter((row): row is FinancialTableRow => Boolean(row)),
+        }))
+      : [
+          {
+            id: `section_${modelId.replace(/^model_/, "")}_metrics`,
+            title: "Model metrics",
+            sourceLocator: rows.find((row) => row.sourceLocator)?.sourceLocator,
+            rows,
+          },
+        ];
+
+    return {
+      model,
+      entity,
+      periods,
+      presentation,
+      sections,
+      rows: sections.flatMap((section) => section.rows),
+    };
+  }
+
+  getObservationDetail(observationId: string): ObservationDetailProjection {
+    const observation = this.observations.get(observationId);
+    if (!observation) throw new Error(`Unknown observation ${observationId}`);
+    const model = this.getModel(observation.modelId);
+    const metric = this.getMetric(observation.metricId);
+    const period = this.periods.get(observation.periodId);
+    const entity = this.entities.get(observation.entityId);
+    if (!period || !entity) throw new Error(`Observation ${observationId} has broken context`);
+
+    const transformation = observation.transformationId
+      ? this.transformations.get(observation.transformationId)
+      : undefined;
+    const observedPeriods = [...new Set(
+      this.database.observations
+        .filter(
+          (candidate) =>
+            candidate.modelId === observation.modelId &&
+            candidate.entityId === observation.entityId &&
+            candidate.versionId === observation.versionId &&
+            candidate.asOf <= observation.asOf &&
+            observationMatchesScenario(candidate, observation.scenarioId),
+        )
+        .map((candidate) => candidate.periodId),
+    )]
+      .map((periodId) => this.periods.get(periodId))
+      .filter((candidate): candidate is Period => Boolean(candidate))
+      .sort(comparePeriods);
+    const currentPeriodIndex = observedPeriods.findIndex(
+      (candidate) => candidate.id === observation.periodId,
+    );
+    const references = transformation?.status === "supported"
+      ? validateExpression(transformation.expression).references
+      : [];
+    const inputs = references.map(({ metricId, periodOffset }) => {
+      const inputPeriod = observedPeriods[currentPeriodIndex + periodOffset];
+      const candidates = this.database.observations
+        .filter(
+          (candidate) =>
+            candidate.modelId === observation.modelId &&
+            candidate.metricId === metricId &&
+            candidate.entityId === observation.entityId &&
+            candidate.periodId === inputPeriod?.id &&
+            candidate.versionId === observation.versionId &&
+            candidate.asOf <= observation.asOf &&
+            observationMatchesScenario(candidate, observation.scenarioId),
+        )
+        .sort((left, right) => {
+          const leftExactScenario = left.scenarioId === observation.scenarioId ? 1 : 0;
+          const rightExactScenario = right.scenarioId === observation.scenarioId ? 1 : 0;
+          return rightExactScenario - leftExactScenario || right.asOf.localeCompare(left.asOf);
+        });
+      const inputObservation = candidates[0];
+      return {
+        metric: this.getMetric(metricId),
+        period: inputPeriod,
+        periodOffset,
+        observation: inputObservation,
+        provenance: inputObservation
+          ? this.getProvenance(inputObservation.id)
+          : { records: [] },
+      };
+    });
+
+    return {
+      observation,
+      metric,
+      period,
+      model,
+      entity,
+      scenario: observation.scenarioId
+        ? this.scenarios.get(observation.scenarioId)
+        : undefined,
+      transformation,
+      provenance: this.getProvenance(observation.id),
+      inputs,
+    };
   }
 
   getDependencies({

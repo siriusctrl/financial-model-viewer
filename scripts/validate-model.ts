@@ -19,6 +19,14 @@ if (result.success) {
   console.log(
     `models=${result.stats.models} metrics=${result.stats.metrics} observations=${result.stats.observations} transformations=${result.stats.transformations} unresolved=${result.stats.unresolved} unreviewed=${result.stats.unreviewed}`,
   );
+  if (result.warnings.length > 0) {
+    console.warn(`WARNINGS ${result.warnings.length}`);
+    for (const item of result.warnings) {
+      console.warn(`\n[${item.code}] ${item.objectId} · ${item.field}`);
+      console.warn(`  Reason: ${item.reason}`);
+      console.warn(`  Resolve: ${item.suggestion}`);
+    }
+  }
 } else {
   console.error(`INVALID ${inputPath} (${result.errors.length} errors)`);
   for (const item of result.errors) {

@@ -20,6 +20,7 @@ The URIs use the `fixtures://` scheme and do not point to source files. A real e
 - 5 fiscal-year periods per model context;
 - actual and base scenarios;
 - workbook-cell locators for modeled observations;
+- source-backed table sections and metric reading order;
 - note passages for evidence and assumption objects.
 
 Hidden sheets, named ranges, external references, macros, comments, and style signals were not available because the dataset is generated rather than parsed from `.xlsx`.
@@ -33,10 +34,15 @@ Hidden sheets, named ranges, external references, macros, comments, and style si
 | Observations | 60 |
 | Transformations | 5 |
 | Relationships | 9 |
+| Table presentation sections | 5 |
 | Assumptions | 2 |
 | Decisions | 1 |
 | Decision changes | 1 |
 | Unresolved items | 1 |
+
+## Table presentation
+
+Both representative models include source-backed table presentation metadata. Northstar Cloud has ordered `Revenue build` and `Gross profit` sections covering all 6 observed metrics. Harbor National has ordered `Operating income`, `Credit and costs`, and `Pre-tax earnings` sections covering all 6 observed metrics. Each section retains its source `Model` sheet range; the validator reports no presentation fallback warnings.
 
 ## Actual / estimate boundary
 

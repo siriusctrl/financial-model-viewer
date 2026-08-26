@@ -9,6 +9,7 @@ const REQUIRED_REPORT_SECTIONS = [
   "Inputs and hashes",
   "Inventory",
   "Object counts",
+  "Table presentation",
   "Actual / estimate boundary",
   "Formula coverage",
   "Unresolved mappings",

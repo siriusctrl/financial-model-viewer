@@ -102,4 +102,55 @@ describe("deterministic model database validator", () => {
       expect(result.errors.some((item) => item.code === "observation.duplicate_point")).toBe(true);
     }
   });
+
+  it("rejects incomplete or duplicated table presentation metrics", () => {
+    const database = fixture();
+    database.tablePresentations[0].sections[0].metricIds.push(
+      "metric_northstar_gross_profit",
+    );
+    database.tablePresentations[0].sections[1].metricIds =
+      database.tablePresentations[0].sections[1].metricIds.filter(
+        (metricId) => metricId !== "metric_northstar_gross_margin",
+      );
+
+    const result = validateModelDatabase(database);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors.some((item) => item.code === "presentation.duplicate_metric")).toBe(true);
+      expect(result.errors.some((item) => item.code === "presentation.metric_missing")).toBe(true);
+    }
+  });
+
+  it("allows an explicit presentation fallback but reports a warning", () => {
+    const database = fixture();
+    database.tablePresentations = database.tablePresentations.filter(
+      (presentation) => presentation.modelId !== "model_northstar_cloud",
+    );
+    database.unresolvedItems.push({
+      id: "unresolved_northstar_table_presentation",
+      modelId: "model_northstar_cloud",
+      category: "presentation",
+      description: "The source does not expose defensible worksheet sections.",
+      sourceArtifactId: "artifact_northstar_workbook",
+      confidence: 0.4,
+      status: "open",
+    });
+    database.provenanceRecords.push({
+      id: "provenance_unresolved_northstar_table_presentation",
+      targetId: "unresolved_northstar_table_presentation",
+      sourceArtifactId: "artifact_northstar_workbook",
+      locator: { sheet: "Model" },
+      extractionRunId: "run_northstar_2025_03_15",
+      confidence: 0.4,
+      reviewStatus: "unreviewed",
+    });
+
+    const result = validateModelDatabase(database);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.warnings).toContainEqual(
+        expect.objectContaining({ code: "presentation.fallback" }),
+      );
+    }
+  });
 });

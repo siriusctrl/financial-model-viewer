@@ -39,4 +39,15 @@ describe("model database JSON import", () => {
       );
     }
   });
+
+  it("rejects a silent table-presentation fallback", () => {
+    const legacy = structuredClone(sample) as Record<string, unknown>;
+    delete legacy.tablePresentations;
+
+    const result = parseModelDatabaseJson(JSON.stringify(legacy));
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors.some((item) => item.code === "presentation.missing")).toBe(true);
+    }
+  });
 });
