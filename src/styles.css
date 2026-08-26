@@ -308,6 +308,127 @@ button {
   border-bottom: 1px solid var(--line-strong);
 }
 
+.json-file-input {
+  display: none;
+}
+
+.upload-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  color: #f7f6f1;
+  font-size: 10px;
+  font-weight: 650;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+}
+
+.upload-button:hover {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.restore-sample-button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 8px;
+  color: #c7d0cc;
+  font-size: 9px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid #405049;
+  border-radius: 4px;
+}
+
+.restore-sample-button:hover {
+  color: #f8f7f2;
+  border-color: #718078;
+}
+
+.import-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 13px 30px;
+  border-bottom: 1px solid;
+}
+
+.import-notice--success {
+  color: var(--green);
+  background: #edf4f0;
+  border-color: #c9ddd3;
+}
+
+.import-notice--error {
+  color: var(--amber);
+  background: #faf0e5;
+  border-color: #e9cfb5;
+}
+
+.import-notice > div {
+  min-width: 0;
+}
+
+.import-notice strong {
+  display: block;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.import-notice p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.import-notice ul {
+  display: grid;
+  gap: 4px;
+  margin: 9px 0 0;
+  padding-left: 18px;
+  color: #77491f;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.import-notice code {
+  font-family: var(--mono);
+  font-size: 8px;
+}
+
+.import-notice .icon-button {
+  width: 28px;
+  height: 28px;
+  color: currentColor;
+  border-color: currentColor;
+}
+
+.empty-projection {
+  max-width: 700px;
+  padding: 80px 0;
+}
+
+.empty-projection h1 {
+  margin: 15px 0 0;
+  font-family: var(--serif);
+  font-size: clamp(38px, 5vw, 58px);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.empty-projection p {
+  max-width: 520px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
 .workspace-content {
   width: min(100%, 1460px);
   margin: 0 auto;
@@ -1630,6 +1751,14 @@ button {
     padding: 0 18px;
   }
 
+  .topbar-meta {
+    gap: 9px;
+  }
+
+  .import-notice {
+    padding-inline: 18px;
+  }
+
   .dataset-breadcrumb > span,
   .dataset-breadcrumb i,
   .validated-badge {
@@ -1715,7 +1844,17 @@ button {
   }
 
   .schema-button {
+    display: none;
+  }
+
+  .upload-button {
+    padding-inline: 9px;
     font-size: 9px;
+  }
+
+  .import-notice {
+    gap: 9px;
+    padding-inline: 14px;
   }
 
   .stat-ledger {

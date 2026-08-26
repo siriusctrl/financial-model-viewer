@@ -61,6 +61,17 @@ npm run dev
 
 The Vite development server prints its local URL. The production build uses `/financial-model-viewer/` as its Pages base path.
 
+## Preview a model database JSON file
+
+The public and local viewers include an **Open JSON** action. Choose a `model-db@0.1.0` JSON file to validate it against the runtime schema and deterministic semantic rules, then replace the bundled sample in the current browser tab.
+
+- Files are read locally with the browser File API and are never uploaded or persisted.
+- The existing preview stays active when JSON parsing or validation fails.
+- The page shows actionable object and field errors before accepting invalid data.
+- Files are limited to 20 MB to keep the static browser preview responsive.
+
+Reload the page or use **Restore sample** to return to the bundled cross-sector fixture.
+
 ## Deterministic data workflow
 
 Generate portable contracts and fixtures:

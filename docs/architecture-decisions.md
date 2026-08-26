@@ -38,6 +38,8 @@ The public viewer is a Vite static build deployed with GitHub Pages. The sample 
 
 This proves the contract and visualization loop without selecting a production database, API, authentication model, or collaboration system prematurely.
 
+Users may open a local `model-db@0.1.0` JSON file in the static viewer. The browser reads and validates the file in memory, and the accepted database replaces the sample only for the current tab. The viewer does not upload, persist, cache, or encode imported model data into the URL. This keeps local preview within the static-hosting boundary; sharing and storage remain explicitly deferred.
+
 ## 7. Representative fixtures are not real extraction evidence
 
 The checked-in SaaS and bank fixtures are synthetic and safe to publish. They prove cross-sector extensibility and deterministic behavior but cannot answer extraction-quality questions about a real analyst workbook.
