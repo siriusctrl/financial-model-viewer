@@ -301,9 +301,26 @@ class WorkbookToolTests(unittest.TestCase):
                 literal_average.expression,
                 "average(8.35, 10.76, 11.54)",
             )
+            conditional_translation = translator.translate(
+                "=IF(MOD(C1,4),90,91)", "C2", "period_fy2025", 90,
+            )
+            self.assertIsNotNone(conditional_translation)
             self.assertEqual(
-                translator.blocker("=IF(MOD(C1,4),90,91)"),
-                "unsupported Excel function(s): IF, MOD",
+                conditional_translation.expression,
+                'when((mod(ref("metric_test_input"), 4) != 0), 90, 91)',
+            )
+            comparison_translation = translator.translate(
+                "=IF(C1=3,365,366)", "C2", "period_fy2025", 365,
+            )
+            self.assertIsNotNone(comparison_translation)
+            self.assertEqual(
+                comparison_translation.expression,
+                'when((ref("metric_test_input") == 3), 365, 366)',
+            )
+            self.assertIsNone(
+                translator.translate(
+                    "=IF(MOD(C1,4),90,91)", "C2", "period_fy2025", 91,
+                ),
             )
             self.assertEqual(
                 translator.blocker("=E1"),
@@ -344,6 +361,27 @@ class WorkbookToolTests(unittest.TestCase):
             unmapped_sheet = qualified.blocker_details("='Unmapped'!B1", "Model")
             self.assertEqual(unmapped_sheet.kind, "unmapped_sheet")
             self.assertEqual(unmapped_sheet.coordinates, ("Unmapped!B1",))
+
+            header_literal = FormulaTranslator(
+                {"H2": {"value": 2020, "style": 0}},
+                {},
+                literal_coordinates={"H2"},
+            )
+            leap_year = header_literal.translate(
+                "=IF(MOD(H2,4),365,366)",
+                "H3",
+                "period_fy2020",
+                366,
+            )
+            self.assertIsNotNone(leap_year)
+            self.assertEqual(
+                (leap_year.expression, leap_year.dependency_metric_ids),
+                ("when((mod(2020, 4) != 0), 365, 366)", []),
+            )
+            self.assertEqual(
+                header_literal.blocker("=IFERROR(H2,0)"),
+                "unsupported Excel function(s): IFERROR",
+            )
 
     def test_mapped_extraction_rejects_formula_period_gaps(self) -> None:
         with TemporaryDirectory() as directory:
@@ -390,6 +428,7 @@ class WorkbookToolTests(unittest.TestCase):
                 '(period_ref("metric_test_output", "period_fy2024") * 2)',
             )
             self.assertEqual(result.database["unresolvedItems"], [])
+            self.assertEqual(result.formula_translation_tasks["items"], [])
             self.assertIn("2 formulas were auto-translated", result.report)
 
     def test_sparse_inventory_and_mapped_extraction(self) -> None:
@@ -451,6 +490,33 @@ class WorkbookToolTests(unittest.TestCase):
                 '(ref("metric_test_input") * 2)',
             )
             self.assertIn("2 formulas were auto-translated", automatic.report)
+
+            opaque_sheet = SHEET_XML.replace(
+                '<f t="shared" si="0" ref="B2:B3">B1*2</f><v>4</v>',
+                '<f>IFERROR(B1*2,0)</f><v>4</v>',
+            )
+            opaque_workbook = Path(directory) / "opaque.xlsx"
+            write_fixture(opaque_workbook, opaque_sheet)
+            opaque_mapping = deepcopy(mapping())
+            opaque_metric = opaque_mapping["sections"][0]["metrics"][1]
+            del opaque_metric["canonicalExpression"]
+            del opaque_metric["dependencyMetricIds"]
+            opaque = MappedWorkbookExtractor(opaque_workbook, opaque_mapping).extract()
+            self.assertEqual(len(opaque.formula_translation_tasks["items"]), 1)
+            self.assertEqual(
+                opaque.formula_translation_tasks["items"][0]["source"],
+                {"sheet": "Model", "cell": "B2"},
+            )
+            self.assertEqual(
+                opaque.formula_translation_tasks["items"][0]["blocker"]["reason"],
+                "unsupported Excel function(s): IFERROR",
+            )
+            opaque_action = next(
+                item
+                for item in opaque.database["unresolvedItems"]
+                if item["category"] == "formula"
+            )
+            self.assertEqual(opaque_action["attentionLevel"], "action_required")
 
             alternate_actuality_mapping = deepcopy(mapping())
             alternate_actuality_mapping["periods"][1]["actuality"] = "actual"

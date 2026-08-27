@@ -45,6 +45,70 @@ describe("deterministic model database validator", () => {
     }
   });
 
+  it("requires an open action while a transformation remains opaque", () => {
+    const database = fixture();
+    const transformation = database.transformations.find(
+      (item) => item.id === "transformation_northstar_gross_profit",
+    );
+    expect(transformation).toBeDefined();
+    transformation!.status = "opaque";
+
+    const withoutAction = validateModelDatabase(database);
+    expect(withoutAction.success).toBe(false);
+    if (!withoutAction.success) {
+      expect(withoutAction.errors).toContainEqual(
+        expect.objectContaining({
+          code: "transformation.opaque_action_required",
+          objectId: transformation!.id,
+        }),
+      );
+    }
+
+    database.unresolvedItems.push({
+      id: "unresolved_northstar_gross_profit_formula",
+      modelId: "model_northstar_cloud",
+      category: "formula",
+      description: "The workbook formula is preserved but has no canonical translation.",
+      targetId: transformation!.id,
+      sourceArtifactId: "artifact_northstar_workbook",
+      locator: { sheet: "Model", cell: "E17" },
+      attentionLevel: "action_required",
+      status: "open",
+    });
+    database.extractionRuns.find(
+      (run) => run.id === "run_northstar_2025_03_15",
+    )!.status = "completed_with_issues";
+    database.provenanceRecords.push({
+      id: "provenance_unresolved_northstar_gross_profit_formula",
+      targetId: "unresolved_northstar_gross_profit_formula",
+      sourceArtifactId: "artifact_northstar_workbook",
+      locator: { sheet: "Model", cell: "E17" },
+      extractionRunId: "run_northstar_2025_03_15",
+      confidence: 0.72,
+      reviewStatus: "unreviewed",
+    });
+
+    const withAction = validateModelDatabase(database);
+    expect(withAction.success).toBe(true);
+    if (withAction.success) {
+      expect(withAction.warnings).toContainEqual(
+        expect.objectContaining({
+          code: "transformation.opaque",
+          attentionLevel: "action_required",
+        }),
+      );
+    }
+
+    database.unresolvedItems.at(-1)!.status = "dismissed";
+    const dismissedTooEarly = validateModelDatabase(database);
+    expect(dismissedTooEarly.success).toBe(false);
+    if (!dismissedTooEarly.success) {
+      expect(dismissedTooEarly.errors).toContainEqual(
+        expect.objectContaining({ code: "transformation.opaque_action_required" }),
+      );
+    }
+  });
+
   it("does not call a run completed while attention items remain open", () => {
     const database = fixture();
     database.extractionRuns.find(

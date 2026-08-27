@@ -51,11 +51,12 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
 
 4. Translate calculations.
    - Preserve every original formula.
-   - Translate supported formulas to `model-expression@0.1`. For mapped XLSX files, let the deterministic translator convert numeric/percentage literals, basic arithmetic, and restricted `SUM`/`AVERAGE` calls only when every input cell has canonical metric/period metadata and cached-value replay matches; cross-period inputs must use exact `period_ref` references. Mapped blank references follow Excel numeric coercion (`0` in arithmetic and `SUM`, excluded from `AVERAGE`).
+   - Translate supported formulas to `model-expression@0.1`. For mapped XLSX files, let the deterministic translator convert numeric/percentage literals, basic arithmetic and comparisons, restricted `IF`/`MOD`, and `SUM`/`AVERAGE` calls only when semantic inputs have canonical metric/period metadata and cached-value replay matches; cross-period inputs must use exact `period_ref` references. Formula-free numeric cells inside the declared `periodHeaderRange` may be constant-folded, but arbitrary unmapped cells may not. Mapped blank references follow Excel numeric coercion (`0` in arithmetic and `SUM`, excluded from `AVERAGE`).
    - Inspect the exact blocker before accepting `opaque`. If referenced cells have defensible semantics, extend the explicit cell map and retry. Do not turn a map-coverage or translator-coverage gap into an analyst question.
    - Treat an otherwise supported legacy-grid formula blocked only by missing period columns as an extraction-map defect. Add the explicit source periods, rerun extraction, and verify the inputs.
    - Derive `dependencyMetricIds` from the parsed canonical expression.
-   - Mark unsupported formulas `opaque`; preserve the original formula and materialized workbook value.
+   - After every mapped extraction, open `formula-translation-tasks.json`. For each item, inspect the formula and named source cell, then prefer a reusable extension to the restricted translator plus replay tests. Rerun extraction until the task queue is empty. A task may remain only after a genuine safe-language or source-semantics blocker is documented; never treat the first unsupported-function result as final.
+   - Mark a genuinely unsupported formula `opaque`; preserve the original formula and materialized workbook value, and create an open `action_required` formula item. Opaque means canonical ingestion is incomplete, not merely “worth reviewing”; the action cannot be resolved or dismissed while the transformation remains opaque. Never generate or execute arbitrary TypeScript/JavaScript as the fallback—the agent translates into the reviewed restricted language or improves the deterministic translator.
    - Mark uncertain formulas `unresolved`; do not approximate silently.
 
 5. Separate evidence from inference.
@@ -64,11 +65,11 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - Add confidence, review status, source artifact, locator, and extraction run to every extracted canonical object.
    - Do not create an unresolved item for a high-confidence mapping that passed deterministic checks. This is the accepted state even when provenance remains `unreviewed`.
    - Use `attentionLevel: needs_review` for a useful, explicit, reversible assumption. Emit the provisional object and state the assumption.
-   - Use `attentionLevel: action_required` when a semantic decision or source repair is required. Do not emit a disputed value or invented interpretation.
+   - Use `attentionLevel: action_required` when a semantic decision, source repair, or engineering fix is required before canonical ingestion succeeds. Do not emit a disputed value or invented interpretation; an opaque cached value may remain only as explicit preview material.
    - Confidence, provenance review status, and attention level are independent; follow the decision table in `mapping-judgment.md`.
 
 6. Emit and validate.
-   - Write `model-db.json` and `extraction-report.md` next to the requested output.
+   - Write `model-db.json`, `extraction-report.md`, and `formula-translation-tasks.json` next to the requested output.
    - While iterating on the database, run `npm run validate -- path/to/model-db.json` for fast object-level repair output.
    - Before reporting completion, run `npm run extraction:check -- path/to/output-directory`. This loads `model-db.json` through the viewer's runtime contract and checks that `extraction-report.md` has every required, non-empty section in contract order.
    - The checker resolves repository code relative to itself, so an agent outside the repository root may run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/check-extraction.mjs path/to/output-directory`.
@@ -85,4 +86,4 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
 
 ## Output discipline
 
-Keep raw precision in `model-db.json`; apply display rounding only in visualization code. In the report, name every attention item, its worksheet/cell, the assumption already made, and the one instruction needed next under `Questions and next actions`. Label translator limitations as engineering follow-up. Ask an analyst only about genuine source ambiguity or source defects—not about limitations the extraction agent can resolve by expanding the map or code. New private maps should use `nextAction`; `analystQuestion` remains a legacy alias. Treat `viewer/` as a generated local review artifact: do not commit or publish it, especially when inputs are confidential, unless the user explicitly authorizes publication.
+Keep raw precision in `model-db.json`; apply display rounding only in visualization code. In the report, name every attention item, its worksheet/cell, the assumption already made, and the one instruction needed next under `Questions and next actions`. Label translator limitations as engineering follow-up and consume the corresponding `formula-translation-tasks.json` items before final handoff. Ask an analyst only about genuine source ambiguity or source defects—not about limitations the extraction agent can resolve by expanding the map or code. New private maps should use `nextAction`; `analystQuestion` remains a legacy alias. Treat `viewer/` as a generated local review artifact: do not commit or publish it, especially when inputs are confidential, unless the user explicitly authorizes publication.

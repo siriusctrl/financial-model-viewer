@@ -418,6 +418,16 @@ export function setUnresolvedItemStatus(
   const next = structuredClone(database) as ModelDatabase;
   const item = next.unresolvedItems.find((candidate) => candidate.id === itemId);
   if (!item) throw new Error(`Unknown unresolved item ${itemId}`);
+  const blocksOpaqueFormula = item.category === "formula" && next.transformations.some(
+    (transformation) =>
+      transformation.status === "opaque" &&
+      (item.targetId === transformation.id || item.targetId === transformation.outputMetricId),
+  );
+  if (blocksOpaqueFormula) {
+    throw new Error(
+      "Opaque formula actions stay open until a replay-checked canonical translation succeeds",
+    );
+  }
   item.status = status;
   for (const provenance of next.provenanceRecords) {
     if (provenance.targetId === itemId) {

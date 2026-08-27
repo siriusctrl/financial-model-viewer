@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 import json
 
-from formula_translation import FormulaTranslation, FormulaTranslator
+from formula_translation import FormulaTranslation, FormulaTranslator, expand_cell_range
 from ooxml import WorkbookPackage
 
 
@@ -153,6 +153,7 @@ class ExtractionResult:
     report: str
     inventory: dict[str, Any]
     style_evidence: dict[str, Any]
+    formula_translation_tasks: dict[str, Any]
 
 
 class MappedWorkbookExtractor:
@@ -317,11 +318,15 @@ class MappedWorkbookExtractor:
             for mapped_period in self.mapping["periods"]
         }
         self._assignments_by_metric = self._build_assignments(periods_by_id)
+        period_header_locator = _mapped_locator(
+            self.mapping["periodHeaderRange"], self.sheet_name, kind="range"
+        )
         selected_sheets = {
             assignment["sheet"]
             for assignments in self._assignments_by_metric.values()
             for assignment in assignments
         }
+        selected_sheets.add(period_header_locator["sheet"])
         with WorkbookPackage(self.workbook) as package:
             inventory = package.inventory("none")
             available_sheets = {sheet["name"] for sheet in inventory["sheets"]}
@@ -413,11 +418,26 @@ class MappedWorkbookExtractor:
             "cells" not in metric
             for metric in metrics_by_id.values()
         )
+        header_range = period_header_locator["range"]
+        if ":" in header_range:
+            header_start, header_end = header_range.split(":", 1)
+            header_coordinates = expand_cell_range(header_start, header_end)
+        else:
+            header_coordinates = [header_range.replace("$", "").upper()]
+        if not header_coordinates:
+            raise ValueError(
+                "periodHeaderRange must be a valid, forward, bounded A1 range of at most 1,000 cells"
+            )
+        literal_coordinates = {
+            _cell_key(period_header_locator["sheet"], coordinate)
+            for coordinate in header_coordinates
+        }
         self._formula_translator = FormulaTranslator(
             cells,
             coordinate_semantics,
             default_sheet=self.sheet_name,
             strict_grid=strict_grid,
+            literal_coordinates=literal_coordinates,
         )
 
         comments_used: set[str] = set()
@@ -426,6 +446,7 @@ class MappedWorkbookExtractor:
             list[tuple[str, str, tuple[str, ...]]],
         ] = defaultdict(list)
         period_mapping_gaps: list[tuple[str, tuple[str, ...]]] = []
+        formula_translation_items: list[dict[str, Any]] = []
         sections = []
         for section in self.mapping["sections"]:
             section_metric_ids = []
@@ -511,6 +532,28 @@ class MappedWorkbookExtractor:
                                 blocker.reason,
                                 blocker.coordinates,
                             ))
+                            formula_translation_items.append({
+                                "id": f"formula_translation_task_{transformation['id']}",
+                                "transformationId": transformation["id"],
+                                "metricId": metric["id"],
+                                "periodId": period_id,
+                                "source": {"sheet": sheet, "cell": coordinate},
+                                "originalFormula": cell["formula"],
+                                "cachedValue": value,
+                                "blocker": {
+                                    "kind": blocker.kind,
+                                    "reason": blocker.reason,
+                                    "coordinates": list(blocker.coordinates),
+                                },
+                                "targetLanguage": "model-expression@0.1",
+                                "acceptance": [
+                                    "Use only approved restricted-expression syntax; never emit executable TypeScript or JavaScript.",
+                                    "Preserve the original Excel formula and source-cell provenance.",
+                                    "Rerun extraction and accept the translation only when cached-value replay matches.",
+                                    "Prefer a reusable deterministic translator extension over a one-cell exception.",
+                                    "Keep the linked action_required item open while the transformation remains opaque.",
+                                ],
+                            })
                     elif style_record.get("semantic", {}).get("valueType"):
                         observation["valueType"] = style_record["semantic"]["valueType"]
                     self.database["observations"].append(observation)
@@ -611,7 +654,7 @@ class MappedWorkbookExtractor:
                 "sourceArtifactId": source["id"],
                 "locator": _locator_from_key(coordinates[0]),
                 "confidence": 0.72,
-                "attentionLevel": "needs_review",
+                "attentionLevel": "action_required",
                 "status": "open",
                 "nextAction": (
                     "No analyst decision is required for this translator-coverage item. "
@@ -628,6 +671,18 @@ class MappedWorkbookExtractor:
                 run["status"] = "completed_with_issues"
 
         style_evidence = self._style_evidence(inventory)
+        formula_translation_tasks = {
+            "format": "financial-model-formula-translation-tasks@0.1",
+            "sourceArtifactId": source["id"],
+            "extractionRunId": run["id"],
+            "targetLanguage": "model-expression@0.1",
+            "instructions": (
+                "The extraction agent must resolve reusable translator-coverage items, rerun extraction, "
+                "and require cached-value replay before treating this bundle as complete. "
+                "Do not execute source formulas or emit arbitrary TypeScript/JavaScript."
+            ),
+            "items": formula_translation_items,
+        }
         return ExtractionResult(
             self.database,
             self._report(
@@ -639,6 +694,7 @@ class MappedWorkbookExtractor:
             ),
             inventory,
             style_evidence,
+            formula_translation_tasks,
         )
 
     def _matching_style_semantic(
@@ -977,6 +1033,7 @@ class MappedWorkbookExtractor:
             "", "## Formula coverage", "",
             f"- {statuses['supported']} supported, {statuses['opaque']} opaque, and {statuses['unresolved']} unresolved transformations.",
             f"- {self._auto_translated_count} formulas were auto-translated from mapped cells and accepted only after cached-value replay matched the XLSX result.",
+            f"- {statuses['opaque']} engineering follow-up tasks were written to `formula-translation-tasks.json`; each opaque transformation must have exactly one task.",
             f"- {len(comments_used)} comments on selected observation cells were preserved as evidence and linked to those observations.",
             (
                 f"- {len(unmapped_comments)} comments outside the selected observation graph remain preserved "

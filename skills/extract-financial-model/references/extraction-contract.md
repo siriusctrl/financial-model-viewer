@@ -83,10 +83,10 @@ The validator enforces presentation coverage automatically. If a presentation ex
 Translate only to `model-expression@0.1`. Allowed operations are literals, arithmetic, comparisons, conditional expressions, and these calls:
 
 ```text
-ref period_ref sum average min max when lag lead coalesce abs round
+ref period_ref sum average min max when lag lead coalesce abs round mod
 ```
 
-Function arity is compiled strictly. `ref` and `abs` take one argument; `period_ref` takes a metric ID and an exact period ID; `lag`, `lead`, and `round` take one or two; `when` takes three; aggregate/coalesce calls take at least one. The optional `lag`/`lead` period count must be a positive integer literal. Use `period_ref` when one formula combines periods of a different frequency, such as four quarters into a fiscal year, so the inspector can resolve every exact input observation and workbook cell.
+Function arity is compiled strictly. `ref` and `abs` take one argument; `mod` takes a value and nonzero divisor and follows Excel modulo semantics; `period_ref` takes a metric ID and an exact period ID; `lag`, `lead`, and `round` take one or two; `when` takes three; aggregate/coalesce calls take at least one. The optional `lag`/`lead` period count must be a positive integer literal. Use `period_ref` when one formula combines periods of a different frequency, such as four quarters into a fiscal year, so the inspector can resolve every exact input observation and workbook cell.
 
 Examples:
 
@@ -94,8 +94,8 @@ Examples:
 =B10-B16
 ref("metric_acme_revenue") - ref("metric_acme_cost_of_revenue")
 
-=IFERROR(B18/B10,0)
-when(ref("metric_acme_revenue") == 0, null,
+=IF(B10=0,0,B18/B10)
+when(ref("metric_acme_revenue") == 0, 0,
   ref("metric_acme_gross_profit") / ref("metric_acme_revenue"))
 
 =B10/A10-1
@@ -110,14 +110,15 @@ sum(period_ref("metric_acme_revenue", "period_q1_2025"),
 
 Never use `eval`, `new Function`, assignment, loops, imports, async work, property access, DOM/network APIs, or arbitrary JavaScript. Parse to an AST and let the deterministic interpreter evaluate the AST.
 
-The mapped XLSX extractor may auto-translate numeric and percentage literals, `+`, `-`, `*`, `/`, and restricted `SUM`/`AVERAGE` calls only when every referenced cell already has an explicit metric/period mapping. Mappings may come from a legacy metric-row/period-column grid or explicit per-metric cells on any mapped worksheet. It follows Excel's numeric handling for mapped blank references: direct arithmetic and `SUM` coerce them to zero, while `AVERAGE` excludes them. It must replay the restricted expression against source cached values and accept the translation only when the result matches the formula cell's cached result. An accepted source-derived translation takes precedence over a generic mapped expression because it preserves the actual period-specific lineage. Before leaving a formula opaque, expand the semantic map for every defensible referenced cell. Unsupported syntax or replay mismatch uses a reviewed mapped expression when one exists; otherwise preserve the formula as opaque and classify the remaining issue under Section 7.
+The mapped XLSX extractor may auto-translate numeric and percentage literals, `+`, `-`, `*`, `/`, comparisons, restricted `IF`/`MOD`, and `SUM`/`AVERAGE` calls. Semantic references must have an explicit metric/period mapping from a legacy grid or explicit per-metric cells on any mapped worksheet. Formula-free numeric cells inside the declared `periodHeaderRange` are the sole non-semantic references that may be constant-folded; arbitrary unmapped cells may not. It follows Excel's numeric handling for mapped blank references: direct arithmetic and `SUM` coerce them to zero, while `AVERAGE` excludes them. It must replay the restricted expression against source cached values and accept the translation only when the result matches the formula cell's cached result. An accepted source-derived translation takes precedence over a generic mapped expression because it preserves the actual period-specific lineage. Before leaving a formula opaque, expand the semantic map for every defensible referenced cell. The CLI writes every remaining translation blocker to `formula-translation-tasks.json`; the extraction agent must inspect that queue, prefer reusable restricted-translator support, and rerun replay. Unsupported syntax or replay mismatch uses a reviewed mapped expression when one exists; otherwise preserve the formula as opaque and classify the remaining issue under Section 7. Never execute the source formula or agent-authored TypeScript/JavaScript.
 
 For an unsupported formula:
 
 - set `status` to `opaque`;
 - preserve `originalExpression`;
 - use the workbook's materialized value in the observation;
-- add an unresolved item when the business meaning or dependencies are uncertain.
+- add an open `action_required` formula item targeting the transformation or its output metric; it must remain open until canonical translation succeeds.
+- add a structured `formula-translation-tasks.json` item and process it before final handoff.
 
 ## 5. Actual and estimate boundary
 
@@ -153,7 +154,7 @@ Do not create an unresolved item merely because the extraction agent or current 
 Use:
 
 - `attentionLevel: needs_review` when a useful, reversible interpretation can be emitted with its assumption stated;
-- `attentionLevel: action_required` when the source must be repaired or a person must choose among materially different meanings. Do not emit the disputed claim.
+- `attentionLevel: action_required` when the source must be repaired, a person must choose among materially different meanings, or canonical ingestion is blocked by an unresolved engineering gap such as an opaque formula. Do not emit a disputed claim; cached opaque values may be retained only for explicit preview.
 
 Accepted mappings have no open unresolved item. They may still have `reviewStatus: unreviewed`; acceptance means extraction may proceed, not that a person confirmed it.
 

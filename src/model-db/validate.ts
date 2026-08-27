@@ -708,6 +708,38 @@ export function validateModelDatabase(input: unknown): ValidationResult {
         ),
       );
     }
+    if (transformation.status === "opaque") {
+      const opaqueAction = database.unresolvedItems.find(
+        (item) =>
+          item.category === "formula" &&
+          item.status === "open" &&
+          item.attentionLevel === "action_required" &&
+          (item.targetId === transformation.id || item.targetId === transformation.outputMetricId),
+      );
+      if (!opaqueAction) {
+        errors.push(
+          error(
+            "transformation.opaque_action_required",
+            transformation.id,
+            "status",
+            "Opaque formulas have not entered the canonical calculation graph and require an open formula action",
+            "Add an action_required formula item targeting this transformation or its output metric, then translate and rerun extraction",
+          ),
+        );
+      } else {
+        specificallyReportedUnresolvedIds.add(opaqueAction.id);
+        warnings.push(
+          warning(
+            "action_required",
+            "transformation.opaque",
+            transformation.id,
+            "status",
+            `Formula translation remains blocked and is tracked by ${opaqueAction.id}`,
+            "Process the formula translation task, rerun extraction, and replace the opaque transformation with a replay-checked supported expression",
+          ),
+        );
+      }
+    }
   }
 
   for (const cycle of detectCycles(database)) {

@@ -33,6 +33,8 @@ FUNCTION_CALL = re.compile(
     re.IGNORECASE,
 )
 COORDINATE = re.compile(r"(?P<column>[A-Z]{1,3})(?P<row>[1-9][0-9]*)", re.IGNORECASE)
+EXCEL_EQUALITY = re.compile(r"(?<![<>=!])=(?!=)")
+EXCEL_BOOLEAN = re.compile(r"(?<![A-Z0-9_.])(?P<value>TRUE|FALSE)(?![A-Z0-9_])", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,11 @@ def _expand_range(start: str, end: str) -> list[str]:
     ]
 
 
+def expand_cell_range(start: str, end: str) -> list[str]:
+    """Expand a bounded A1 range for explicitly trusted workbook-map locators."""
+    return _expand_range(start, end)
+
+
 def _numeric(value: Any) -> float | int | None:
     if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
         return value
@@ -99,6 +106,16 @@ def _percentage_value(match: re.Match[str]) -> str:
     return format(Decimal(match.group("number")) / Decimal(100), "f")
 
 
+def _boolean_value(match: re.Match[str]) -> str:
+    return "True" if match.group("value").upper() == "TRUE" else "False"
+
+
+def _excel_mod(value: float | int, divisor: float | int) -> float | int:
+    if divisor == 0:
+        raise ZeroDivisionError
+    return value - divisor * math.floor(value / divisor)
+
+
 class FormulaTranslator:
     """Compile a small Excel subset only through explicitly mapped numeric cells."""
 
@@ -108,11 +125,13 @@ class FormulaTranslator:
         coordinate_semantics: dict[str, dict[str, str]],
         default_sheet: str | None = None,
         strict_grid: bool = True,
+        literal_coordinates: set[str] | None = None,
     ):
         self.cells = cells
         self.coordinate_semantics = coordinate_semantics
         self.default_sheet = default_sheet
         self.strict_grid = strict_grid
+        self.literal_coordinates = literal_coordinates or set()
         self.qualified = default_sheet is not None or any(
             "!" in coordinate for coordinate in coordinate_semantics
         )
@@ -163,7 +182,13 @@ class FormulaTranslator:
             return None
         semantic = self.coordinate_semantics.get(key)
         if not semantic:
-            return None
+            if key not in self.literal_coordinates:
+                return None
+            cell = self.cells.get(key)
+            if cell and "formula" in cell:
+                return None
+            value = _numeric(cell.get("value") if cell else None)
+            return (repr(value), value, None) if value is not None else None
         data_type = semantic["dataType"]
         if data_type not in {"number", "percentage", "currency", "count"}:
             return None
@@ -276,6 +301,7 @@ class FormulaTranslator:
         if '"' in formula_body:
             return None
         formula_body = PERCENT_LITERAL.sub(_percentage_value, formula_body)
+        formula_body = EXCEL_BOOLEAN.sub(_boolean_value, formula_body)
         compiled_names: dict[str, tuple[str, float | int, list[str]]] = {}
         unsupported_aggregate = False
 
@@ -316,6 +342,8 @@ class FormulaTranslator:
             return name
 
         python_expression = QUALIFIED_CELL_REFERENCE.sub(replace_reference, formula_body)
+        python_expression = python_expression.replace("<>", "!=")
+        python_expression = EXCEL_EQUALITY.sub("==", python_expression)
         try:
             parsed = ast.parse(python_expression, mode="eval")
         except SyntaxError:
@@ -323,10 +351,12 @@ class FormulaTranslator:
 
         dependencies: set[str] = set()
 
-        def compile_node(node: ast.AST) -> tuple[str, float | int] | None:
+        def compile_node(node: ast.AST) -> tuple[str, float | int | bool] | None:
             if isinstance(node, ast.Expression):
                 return compile_node(node.body)
             if isinstance(node, ast.Constant):
+                if isinstance(node.value, bool):
+                    return ("true" if node.value else "false", node.value)
                 value = _numeric(node.value)
                 return (repr(value), value) if value is not None else None
             if isinstance(node, ast.Name):
@@ -352,30 +382,61 @@ class FormulaTranslator:
                 return reference[0], reference[1]
             if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
                 operand = compile_node(node.operand)
-                if operand is None:
+                if operand is None or isinstance(operand[1], bool):
                     return None
                 return (
                     (f"(-{operand[0]})", -operand[1])
                     if isinstance(node.op, ast.USub)
                     else (f"(+{operand[0]})", operand[1])
                 )
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id.upper() in {"SUM", "AVERAGE"}
-                and node.args
-                and not node.keywords
-            ):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
+                normalized_name = node.func.id.upper()
+                if normalized_name == "MOD" and len(node.args) == 2:
+                    left = compile_node(node.args[0])
+                    right = compile_node(node.args[1])
+                    if (
+                        left is None
+                        or right is None
+                        or isinstance(left[1], bool)
+                        or isinstance(right[1], bool)
+                    ):
+                        return None
+                    try:
+                        calculated = _excel_mod(left[1], right[1])
+                    except ZeroDivisionError:
+                        return None
+                    return f"mod({left[0]}, {right[0]})", calculated
+                if normalized_name == "IF" and len(node.args) == 3:
+                    condition = compile_node(node.args[0])
+                    consequent = compile_node(node.args[1])
+                    alternate = compile_node(node.args[2])
+                    if condition is None or consequent is None or alternate is None:
+                        return None
+                    condition_expression, condition_value = condition
+                    if isinstance(condition_value, bool):
+                        truthy = condition_value
+                    else:
+                        condition_expression = f"({condition_expression} != 0)"
+                        truthy = condition_value != 0
+                    return (
+                        f"when({condition_expression}, {consequent[0]}, {alternate[0]})",
+                        consequent[1] if truthy else alternate[1],
+                    )
+                if normalized_name not in {"SUM", "AVERAGE"} or not node.args:
+                    return None
                 argument_nodes = node.args
                 arguments = [compile_node(argument) for argument in argument_nodes]
-                if any(argument is None for argument in arguments):
+                if any(
+                    argument is None or isinstance(argument[1], bool)
+                    for argument in arguments
+                ):
                     return None
                 compiled_arguments = [
                     (argument_node, argument)
                     for argument_node, argument in zip(argument_nodes, arguments, strict=True)
                     if argument is not None
                 ]
-                function_name = node.func.id.lower()
+                function_name = normalized_name.lower()
                 if function_name == "average":
                     compiled_arguments = [
                         (argument_node, argument)
@@ -404,13 +465,46 @@ class FormulaTranslator:
                     f"{function_name}({', '.join(argument[0] for _node, argument in compiled_arguments)})",
                     calculated,
                 )
+            if isinstance(node, ast.Compare) and len(node.ops) == 1 and len(node.comparators) == 1:
+                left = compile_node(node.left)
+                right = compile_node(node.comparators[0])
+                if left is None or right is None:
+                    return None
+                operator = {
+                    ast.Eq: "==",
+                    ast.NotEq: "!=",
+                    ast.Gt: ">",
+                    ast.GtE: ">=",
+                    ast.Lt: "<",
+                    ast.LtE: "<=",
+                }.get(type(node.ops[0]))
+                if operator is None:
+                    return None
+                if operator in {">", ">=", "<", "<="} and (
+                    isinstance(left[1], bool) or isinstance(right[1], bool)
+                ):
+                    return None
+                calculated = {
+                    "==": left[1] == right[1],
+                    "!=": left[1] != right[1],
+                    ">": left[1] > right[1],
+                    ">=": left[1] >= right[1],
+                    "<": left[1] < right[1],
+                    "<=": left[1] <= right[1],
+                }[operator]
+                return f"({left[0]} {operator} {right[0]})", calculated
             if isinstance(node, ast.BinOp) and isinstance(
                 node.op,
                 (ast.Add, ast.Sub, ast.Mult, ast.Div),
             ):
                 left = compile_node(node.left)
                 right = compile_node(node.right)
-                if left is None or right is None:
+                if (
+                    left is None
+                    or right is None
+                    or isinstance(left[1], bool)
+                    or isinstance(right[1], bool)
+                ):
                     return None
                 operator = {
                     ast.Add: "+",
@@ -433,7 +527,11 @@ class FormulaTranslator:
             return None
 
         compiled = compile_node(parsed)
-        if compiled is None or not _values_match(compiled[1], target_value):
+        if (
+            compiled is None
+            or isinstance(compiled[1], bool)
+            or not _values_match(compiled[1], target_value)
+        ):
             return None
         return FormulaTranslation(compiled[0], sorted(dependencies))
 
@@ -472,7 +570,7 @@ class FormulaTranslator:
         unsupported_functions = sorted({
             match.group("name").upper()
             for match in FUNCTION_CALL.finditer(formula_body)
-            if match.group("name").upper() not in {"SUM", "AVERAGE"}
+            if match.group("name").upper() not in {"SUM", "AVERAGE", "IF", "MOD"}
         })
         if unsupported_functions:
             return FormulaBlocker(
@@ -506,6 +604,7 @@ class FormulaTranslator:
             coordinate
             for coordinate in referenced_coordinates
             if coordinate not in self.coordinate_semantics
+            and coordinate not in self.literal_coordinates
         )
         if missing_coordinates:
             missing_sheets = sorted({

@@ -61,6 +61,7 @@ function resolveArtifacts(arguments_) {
     return {
       databasePath: join(targetPath, "model-db.json"),
       reportPath: join(targetPath, "extraction-report.md"),
+      translationTasksPath: join(targetPath, "formula-translation-tasks.json"),
     };
   }
 
@@ -74,7 +75,71 @@ function resolveArtifacts(arguments_) {
     reportPath: arguments_[1]
       ? resolve(process.cwd(), arguments_[1])
       : join(dirname(targetPath), "extraction-report.md"),
+    translationTasksPath: join(dirname(targetPath), "formula-translation-tasks.json"),
   };
+}
+
+function checkFormulaTranslationTasks(tasksPath, databasePath) {
+  if (!existsSync(databasePath) || !statSync(databasePath).isFile()) return false;
+
+  try {
+    const database = JSON.parse(readFileSync(databasePath, "utf8"));
+    const opaque = Array.isArray(database.transformations)
+      ? database.transformations.filter((item) => item?.status === "opaque")
+      : [];
+
+    if (!existsSync(tasksPath)) {
+      if (opaque.length > 0) {
+        fail(`Missing formula translation task bundle for ${opaque.length} opaque transformation(s): ${tasksPath}`);
+        return false;
+      }
+      return true;
+    }
+
+    const bundle = JSON.parse(readFileSync(tasksPath, "utf8"));
+    if (bundle?.format !== "financial-model-formula-translation-tasks@0.1" || !Array.isArray(bundle.items)) {
+      fail(`${tasksPath} must use financial-model-formula-translation-tasks@0.1 with an items array.`);
+      return false;
+    }
+
+    const opaqueById = new Map(opaque.map((item) => [item.id, item]));
+    const taskIds = new Set();
+    let valid = true;
+    for (const item of bundle.items) {
+      if (!item || typeof item.transformationId !== "string") {
+        fail(`${tasksPath} contains a task without transformationId.`);
+        valid = false;
+        continue;
+      }
+      if (taskIds.has(item.transformationId)) {
+        fail(`${tasksPath} contains duplicate task ${item.transformationId}.`);
+        valid = false;
+      }
+      taskIds.add(item.transformationId);
+      const transformation = opaqueById.get(item.transformationId);
+      if (!transformation) {
+        fail(`${tasksPath} task ${item.transformationId} does not target an opaque transformation.`);
+        valid = false;
+      } else if (item.originalFormula !== transformation.originalExpression) {
+        fail(`${tasksPath} task ${item.transformationId} does not preserve its original formula.`);
+        valid = false;
+      }
+    }
+    for (const transformationId of opaqueById.keys()) {
+      if (!taskIds.has(transformationId)) {
+        fail(`${tasksPath} is missing opaque transformation ${transformationId}.`);
+        valid = false;
+      }
+    }
+    if (valid) {
+      console.log(`VALID ${tasksPath}`);
+      console.log(`formulaTranslationTasks=${bundle.items.length}`);
+    }
+    return valid;
+  } catch (cause) {
+    fail(`Could not validate ${tasksPath}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    return false;
+  }
 }
 
 function checkReport(reportPath, databasePath) {
@@ -202,11 +267,12 @@ function checkDatabase(databasePath) {
   return true;
 }
 
-const { databasePath, reportPath } = resolveArtifacts(process.argv.slice(2));
+const { databasePath, reportPath, translationTasksPath } = resolveArtifacts(process.argv.slice(2));
 const reportIsValid = checkReport(reportPath, databasePath);
 const databaseIsValid = checkDatabase(databasePath);
+const translationTasksAreValid = checkFormulaTranslationTasks(translationTasksPath, databasePath);
 
-if (!reportIsValid || !databaseIsValid) {
+if (!reportIsValid || !databaseIsValid || !translationTasksAreValid) {
   process.exitCode = 1;
 } else {
   console.log("PASS extraction package matches the viewer contract and report format.");

@@ -201,6 +201,29 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
   transformation.status = "opaque";
   transformation.expression = "0";
   transformation.dependencyMetricIds = [];
+  imported.unresolvedItems.push({
+    id: "unresolved_northstar_gross_profit_formula",
+    modelId: "model_northstar_cloud",
+    category: "formula",
+    description: "The workbook formula is preserved but has no canonical translation.",
+    targetId: transformation.outputMetricId,
+    sourceArtifactId: "artifact_northstar_workbook",
+    locator: { sheet: "Model", cell: "E17" },
+    attentionLevel: "action_required",
+    status: "open",
+  });
+  imported.extractionRuns.find(
+    (run) => run.id === "run_northstar_2025_03_15",
+  )!.status = "completed_with_issues";
+  imported.provenanceRecords.push({
+    id: "provenance_unresolved_northstar_gross_profit_formula",
+    targetId: "unresolved_northstar_gross_profit_formula",
+    sourceArtifactId: "artifact_northstar_workbook",
+    locator: { sheet: "Model", cell: "E17" },
+    extractionRunId: "run_northstar_2025_03_15",
+    confidence: 0.72,
+    reviewStatus: "unreviewed",
+  });
 
   await uploadJson(page, "opaque-formula.json", imported);
   await page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/).click();
@@ -208,6 +231,12 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
   await expect(lineage).toContainText("Opaque workbook formula");
   await expect(lineage).toContainText("Not translated (opaque)");
   await expect(lineage).not.toContainText("Derived from 0 inputs");
+  await expect(page.getByTestId("opaque-action-lock")).toContainText(
+    "Translate the workbook formula and rerun extraction",
+  );
+  const inspector = page.getByTestId("detail-panel");
+  await expect(inspector.getByRole("button", { name: "Resolve" })).toHaveCount(0);
+  await expect(inspector.getByRole("button", { name: "Dismiss" })).toHaveCount(0);
 });
 
 test("uses extracted sections for a structurally different bank model", async ({ page }) => {

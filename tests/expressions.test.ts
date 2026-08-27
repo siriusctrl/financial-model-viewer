@@ -66,9 +66,21 @@ describe("model-expression@0.1", () => {
     ).toBe(100);
   });
 
+  it("supports replay-safe Excel-style modulo and conditions", () => {
+    const expression = "when(mod(2024, 4) != 0, 365, 366)";
+
+    expect(validateExpression(expression).valid).toBe(true);
+    expect(evaluateExpression(expression, { ref: () => null })).toBe(366);
+    expect(evaluateExpression("mod(-3, 2)", { ref: () => null })).toBe(1);
+    expect(() => evaluateExpression("mod(3, 0)", { ref: () => null })).toThrow(
+      "mod() divisor must not be zero",
+    );
+  });
+
   it.each([
     'ref("metric_revenue", 1)',
     "when(true, 1)",
+    "mod(1)",
     "sum()",
     'lag("metric_revenue", 0)',
     'lead("metric_revenue", 1 + 1)',

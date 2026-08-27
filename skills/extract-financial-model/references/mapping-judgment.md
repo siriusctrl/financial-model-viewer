@@ -16,7 +16,7 @@ Do not call a workbook concept ambiguous merely because the current map or trans
 Classify a failure first:
 
 - **Map coverage gap:** referenced cells have clear labels, periods, units, or formula roles, but are absent from the semantic map. Extend the map and rerun without asking an analyst.
-- **Translator coverage gap:** every referenced cell has semantics, but the restricted expression language does not support the Excel syntax. Preserve the exact formula and cached value as `opaque`; record a `needs_review` item unless the formula's business meaning is also unknown.
+- **Translator coverage gap:** every referenced cell has semantics, but the deterministic translator does not yet cover the Excel syntax. Process its `formula-translation-tasks.json` item, prefer a reusable restricted-translator extension with replay tests, and rerun. Preserve the exact formula and cached value as `opaque` only if the safe-language blocker remains after that engineering pass; record an open `action_required` formula item because canonical ingestion is incomplete.
 - **Source ambiguity:** the workbook lacks enough evidence to name a metric, choose a period, determine actuality, or resolve conflicting meanings. Do not invent the answer; create an `action_required` item.
 - **Source defect:** a required cached value is missing, a cell contains an incompatible value, or a reference is broken. Do not fabricate a value; create an `action_required` item.
 
@@ -30,7 +30,7 @@ Start from the values the user wants to inspect, then follow formula references 
 2. Parse its references without executing or recalculating the workbook.
 3. For every referenced cell, determine whether it already maps to a metric-period point.
 4. Extend the map for high-confidence drivers, helper calculations, and copied values.
-5. Repeat until every selected formula reference is mapped, deliberately opaque, or explicitly action-required.
+5. Process every generated formula-translation task and repeat until every selected formula reference is mapped, deliberately opaque after an engineering pass, or explicitly action-required.
 6. Run cached-value replay after every expansion.
 
 Do not limit this closure to visible table rows. Inputs may live above the table, below it, in a vertical chain, in a driver block, in hidden rows, or on another worksheet.
@@ -45,7 +45,7 @@ Use the preferred `financial-model-workbook-map@0.2` format for new maps.
 - Use metric `cells` for arbitrary layouts. Each entry explicitly declares `sheet`, `cell`, `periodId`, and optional confidence.
 - Mix grid metrics and explicit-cell metrics in the same model when the workbook mixes statements, assumptions, and driver blocks.
 - Put every observed metric in exactly one presentation section, even when its source cells are scattered. Presentation order is a viewer concern; cell coordinates remain provenance.
-- Map cross-sheet inputs explicitly. The translator supports mapped cross-sheet arithmetic, `SUM`, and `AVERAGE` references; an unmapped worksheet is not automatically an opaque formula.
+- Map cross-sheet inputs explicitly. The translator supports mapped cross-sheet arithmetic, comparisons, `IF`/`MOD`, `SUM`, and `AVERAGE` references; an unmapped worksheet is not automatically an opaque formula.
 
 Example:
 
@@ -83,7 +83,6 @@ Typical `needs_review` cases:
 
 - a high-confidence label normalization supported by neighboring rows;
 - a hierarchy inferred from repeated indentation plus subtotal formulas;
-- an opaque formula whose cached value and input semantics are preserved;
 - an actual/estimate boundary supported by multiple signals but not explicitly stated.
 
 Typical `action_required` cases:
@@ -93,6 +92,7 @@ Typical `action_required` cases:
 - the source value conflicts with the mapped data type;
 - period or scenario identity cannot be determined;
 - source evidence conflicts and choosing either interpretation would materially change the model.
+- any opaque formula, even when its cached value is usable for preview, because canonical calculation lineage is still missing.
 
 Do not create unresolved items for harmless formatting differences, unsupported non-model workbook parts, deliberately out-of-scope worksheets, or facts already settled by deterministic evidence. Record scope exclusions explicitly in the map and report. Preserve comments outside the selected semantic graph in `workbook-inventory.json`; attach material in-scope comments as evidence instead of asking an analyst to classify every comment.
 
@@ -107,10 +107,11 @@ Before accepting an opaque formula:
 1. Inspect its exact blocker and referenced cells.
 2. Extend the semantic map for every defensible missing input.
 3. Retry translation and cached-value replay.
-4. Use a reviewed canonical expression only when it matches the source formula's meaning for that specific period type.
-5. Keep the formula opaque only when syntax remains outside `model-expression@0.1` or source meaning is genuinely unresolved.
+4. Open its generated `formula-translation-tasks.json` item. Extend the reusable restricted translator and tests when the syntax has defensible general semantics, then rerun extraction.
+5. Use a reviewed canonical expression only when it matches the source formula's meaning for that specific period type.
+6. Keep the formula opaque only when syntax remains outside `model-expression@0.1` after the engineering pass or source meaning is genuinely unresolved.
 
-An opaque formula with a materialized value and mapped business meaning is normally `needs_review`. If only translator syntax is missing, name the engineering follow-up and do not ask the analyst to decide whether the formula should be translated. Missing values, broken references, or unknown business meaning are `action_required`.
+An opaque formula is always `action_required`: its cached value may support an honest preview, but its calculation did not enter the canonical graph. If only translator syntax is missing, name the engineering follow-up and do not ask the analyst to decide whether the formula should be translated. Do not resolve or dismiss the action while the transformation remains opaque. Missing values, broken references, or unknown business meaning are also `action_required`.
 
 ## 6. Stop conditions
 
@@ -118,6 +119,7 @@ An extraction iteration is ready for preview when:
 
 - every selected output has provenance;
 - referenced-cell closure has no silent gaps;
+- every formula-translation task was processed, with any remaining task explicitly justified as outside the safe language;
 - every remaining opaque formula names its blocker and source cells;
 - every provisional interpretation is `needs_review`;
 - every blocked decision is `action_required` and no disputed value was invented;

@@ -89,4 +89,29 @@ describe("local model editing", () => {
     expect(new ModelDatabaseQueries(next).getAttentionItems()).toHaveLength(0);
     expect(() => assertValidModelDatabase(next as ModelDatabase)).not.toThrow();
   });
+
+  it("keeps an opaque formula action open until translation succeeds", () => {
+    const database = structuredClone(sample) as ModelDatabase;
+    const transformation = database.transformations.find(
+      (candidate) => candidate.id === "transformation_northstar_gross_profit",
+    );
+    expect(transformation).toBeDefined();
+    transformation!.status = "opaque";
+    database.unresolvedItems.push({
+      id: "unresolved_northstar_gross_profit_formula",
+      modelId: "model_northstar_cloud",
+      category: "formula",
+      description: "Canonical formula translation is incomplete.",
+      targetId: transformation!.outputMetricId,
+      sourceArtifactId: "artifact_northstar_workbook",
+      attentionLevel: "action_required",
+      status: "open",
+    });
+
+    expect(() => setUnresolvedItemStatus(
+      database,
+      "unresolved_northstar_gross_profit_formula",
+      "dismissed",
+    )).toThrow("Opaque formula actions stay open");
+  });
 });

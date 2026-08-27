@@ -41,6 +41,10 @@ def main() -> int:
             f"{json.dumps(result.style_evidence, ensure_ascii=False, indent=2)}\n",
             encoding="utf-8",
         )
+        (arguments.output / "formula-translation-tasks.json").write_text(
+            f"{json.dumps(result.formula_translation_tasks, ensure_ascii=False, indent=2)}\n",
+            encoding="utf-8",
+        )
     except Exception as cause:  # CLI boundary: provide one concise diagnostic.
         print(f"ERROR Extraction failed: {cause}", file=sys.stderr)
         return 1
@@ -64,6 +68,7 @@ def main() -> int:
     print(
         f"metrics={len(result.database['metrics'])} observations={len(result.database['observations'])} "
         f"transformations={len(result.database['transformations'])} unresolved={len(result.database['unresolvedItems'])}"
+        f" formulaTranslationTasks={len(result.formula_translation_tasks['items'])}"
     )
     return 0
 

@@ -30,6 +30,7 @@ const ALLOWED_FUNCTIONS = new Set([
   "coalesce",
   "abs",
   "round",
+  "mod",
 ]);
 
 type ExpressionValue = ScalarValue | ExpressionValue[];
@@ -139,7 +140,7 @@ function inspectNode(
         issues.push({
           path: `${path}.callee`,
           reason: "Only direct calls to approved functions are allowed",
-          suggestion: "Use ref(), period_ref(), sum(), average(), min(), max(), when(), lag(), lead(), coalesce(), abs(), or round()",
+          suggestion: "Use ref(), period_ref(), sum(), average(), min(), max(), when(), lag(), lead(), coalesce(), abs(), round(), or mod()",
         });
       } else {
         const functionName = asNode<jsep.Identifier>(call.callee).name;
@@ -156,13 +157,14 @@ function inspectNode(
           (functionName === "period_ref" && arity === 2) ||
           (["lag", "lead", "round"].includes(functionName) && (arity === 1 || arity === 2)) ||
           (functionName === "abs" && arity === 1) ||
+          (functionName === "mod" && arity === 2) ||
           (functionName === "when" && arity === 3) ||
           (["sum", "average", "min", "max", "coalesce"].includes(functionName) && arity >= 1);
         if (ALLOWED_FUNCTIONS.has(functionName) && !arityValid) {
           issues.push({
             path: `${path}.arguments`,
             reason: `Function ${functionName} received ${arity} arguments`,
-            suggestion: "Use ref(metric), period_ref(metric, period), lag/lead(metric[, periods]), round(value[, digits]), abs(value), when(condition, yes, no), or one or more aggregate arguments",
+            suggestion: "Use ref(metric), period_ref(metric, period), lag/lead(metric[, periods]), round(value[, digits]), abs(value), mod(value, divisor), when(condition, yes, no), or one or more aggregate arguments",
           });
         }
         if (["ref", "period_ref", "lag", "lead"].includes(functionName)) {
@@ -335,6 +337,12 @@ function evaluateCall(
     }
     case "abs":
       return Math.abs(numberValue(args[0], "abs()"));
+    case "mod": {
+      const value = numberValue(args[0], "mod()");
+      const divisor = numberValue(args[1], "mod()");
+      if (divisor === 0) throw new Error("mod() divisor must not be zero");
+      return value - divisor * Math.floor(value / divisor);
+    }
     case "round": {
       const value = numberValue(args[0], "round()");
       const digits = args[1] === undefined ? 0 : numberValue(args[1], "round()");

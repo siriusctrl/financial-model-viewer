@@ -162,6 +162,7 @@ export function ObjectDetailPanel({
       {observation && displayTargetId ? (
         <CellDetail
           detail={queries.getObservationDetail(observation.id)}
+          queries={queries}
           onClose={onClose}
           onSelectTarget={onSelectTarget}
           onFocusGraph={onFocusGraph}
@@ -201,6 +202,17 @@ function AttentionActions({
       >
         Dismiss
       </button>
+    </div>
+  );
+}
+
+function OpaqueFormulaActionLock() {
+  return (
+    <div className="opaque-action-lock" data-testid="opaque-action-lock">
+      <strong>Translation required</strong>
+      <p>
+        This cached value is preview-only. Translate the workbook formula and rerun extraction before closing this action.
+      </p>
     </div>
   );
 }
@@ -333,6 +345,7 @@ function ReverseLineage({
 
 function CellDetail({
   detail,
+  queries,
   onClose,
   onSelectTarget,
   onFocusGraph,
@@ -340,6 +353,7 @@ function CellDetail({
   onResolveAttention,
 }: {
   detail: ObservationDetailProjection;
+  queries: ModelDatabaseQueries;
   onClose: () => void;
   onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
@@ -409,10 +423,14 @@ function CellDetail({
                         {item.locator ? ` · ${formatLocator(item.locator)}` : ""}
                         {item.confidence !== undefined ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}
                       </p>
-                      <AttentionActions
-                        itemId={item.id}
-                        onResolveAttention={onResolveAttention}
-                      />
+                      {queries.isOpaqueFormulaAction(item.id) ? (
+                        <OpaqueFormulaActionLock />
+                      ) : (
+                        <AttentionActions
+                          itemId={item.id}
+                          onResolveAttention={onResolveAttention}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -542,6 +560,7 @@ function ObjectDetail({
     : record.attentionLevel === "needs_review"
       ? "needs_review"
       : null;
+  const opaqueFormulaAction = queries.isOpaqueFormulaAction(targetId);
   const fields = Object.entries(record).filter(
     ([key, value]) => !["id", "name", "title", "description", "attentionLevel"].includes(key) && value !== undefined,
   );
@@ -568,14 +587,20 @@ function ObjectDetail({
         )}
         {attentionLevel && record.status === "open" && (
           <section className="attention-resolution">
-            <span>Local review decision</span>
-            <p>
-              Resolve confirms the extracted interpretation. Dismiss removes the item without inventing a value.
-            </p>
-            <AttentionActions
-              itemId={targetId}
-              onResolveAttention={onResolveAttention}
-            />
+            {opaqueFormulaAction ? (
+              <OpaqueFormulaActionLock />
+            ) : (
+              <>
+                <span>Local review decision</span>
+                <p>
+                  Resolve confirms the extracted interpretation. Dismiss removes the item without inventing a value.
+                </p>
+                <AttentionActions
+                  itemId={targetId}
+                  onResolveAttention={onResolveAttention}
+                />
+              </>
+            )}
           </section>
         )}
         <section className="inspector-section">
