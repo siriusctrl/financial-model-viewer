@@ -46,7 +46,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
 
 4. Translate calculations.
    - Preserve every original formula.
-   - Translate supported formulas to `model-expression@0.1`.
+   - Translate supported formulas to `model-expression@0.1`. For mapped XLSX files, let the deterministic translator convert numeric/percentage literals, basic arithmetic, and `SUM(range)` only when every input cell has canonical metric/period metadata and cached-value replay matches; cross-period inputs must use exact `period_ref` references.
    - Derive `dependencyMetricIds` from the parsed canonical expression.
    - Mark unsupported formulas `opaque`; preserve the original formula and materialized workbook value.
    - Mark uncertain formulas `unresolved`; do not approximate silently.

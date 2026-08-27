@@ -16,6 +16,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
 - `skills/extract-financial-model/`: reusable workbook/model extraction workflow and contract.
 - `skills/extract-financial-model/scripts/ooxml.py`: sparse read-only XLSX package access used by inventory and mapped extraction.
+- `skills/extract-financial-model/scripts/formula_translation.py`: restricted mapped-cell arithmetic/SUM translation with cached-value replay.
 - `workbook-style-evidence.json` in a mapped extraction output: non-canonical per-cell styles, matches from the fixed Alice convention, and conflicts.
 - `skills/extract-financial-model/scripts/build-preview.mjs`: validates, compiles, and Playwright-reviews a local extraction bundle without changing GitHub Pages.
 - `examples/`: generated semantic dataset and its extraction report.

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 import json
 
+from formula_translation import FormulaTranslator
 from ooxml import WorkbookPackage
 
 
@@ -50,8 +51,6 @@ STYLE_SEMANTICS = {
         ),
     },
 }
-
-
 def _without_prefix(value: str, prefix: str) -> str:
     return value[len(prefix):] if value.startswith(prefix) else value
 
@@ -158,6 +157,8 @@ class MappedWorkbookExtractor:
         self._evidence_styles: dict[int, dict[str, Any]] = {}
         self._style_records: list[dict[str, Any]] = []
         self._style_conflicts: list[dict[str, Any]] = []
+        self._formula_translator: FormulaTranslator | None = None
+        self._auto_translated_count = 0
         if "styleSemantics" in mapping:
             raise ValueError(
                 f"Configurable styleSemantics rules are not supported; use styleConvention={STYLE_CONVENTION!r}"
@@ -244,8 +245,20 @@ class MappedWorkbookExtractor:
                 0.99,
             )
 
+        coordinate_semantics = {
+            f"{mapped_period['column']}{mapped_metric['row']}": {
+                "metricId": mapped_metric["id"],
+                "periodId": period_id,
+                "dataType": mapped_metric["dataType"],
+            }
+            for section in self.mapping["sections"]
+            for mapped_metric in section["metrics"]
+            for period_id, mapped_period in periods_by_id.items()
+        }
+        self._formula_translator = FormulaTranslator(cells, coordinate_semantics)
+
         comments_used: set[str] = set()
-        opaque_cells: dict[str, list[str]] = defaultdict(list)
+        opaque_cells: dict[str, list[tuple[str, str]]] = defaultdict(list)
         sections = []
         metric_ids: set[str] = set()
         for section in self.mapping["sections"]:
@@ -293,6 +306,8 @@ class MappedWorkbookExtractor:
                             mapped_metric,
                             mapped_period,
                             period_id,
+                            coordinate,
+                            value,
                             cell["formula"],
                         )
                         self.database["transformations"].append(transformation)
@@ -304,7 +319,10 @@ class MappedWorkbookExtractor:
                             0.94 if transformation["status"] == "supported" else 0.78,
                         )
                         if transformation["status"] == "opaque":
-                            opaque_cells[metric["id"]].append(coordinate)
+                            opaque_cells[metric["id"]].append((
+                                coordinate,
+                                self._formula_translator.blocker(cell["formula"]),
+                            ))
                     elif (
                         style_record.get("semantic", {}).get("valueType")
                         and not style_record.get("actualityConflict")
@@ -349,13 +367,22 @@ class MappedWorkbookExtractor:
             "sections": sections,
         }]
 
-        for metric_id, coordinates in opaque_cells.items():
+        for metric_id, blocked_formulas in opaque_cells.items():
             suffix = _without_prefix(metric_id, "metric_")
+            coordinates = [coordinate for coordinate, _reason in blocked_formulas]
+            blocker_counts = Counter(reason for _coordinate, reason in blocked_formulas)
+            blockers = "; ".join(
+                f"{count} formula{'s' if count != 1 else ''}: {reason}"
+                for reason, count in sorted(blocker_counts.items())
+            )
             self._unresolved({
                 "id": f"unresolved_opaque_formula_{suffix}",
                 "modelId": model["id"],
                 "category": "formula",
-                "description": f"{len(coordinates)} materialized workbook formulas are preserved as opaque because they were not safely translated to model-expression@0.1.",
+                "description": (
+                    f"{len(coordinates)} materialized workbook formulas are preserved as opaque because "
+                    f"they were not safely translated to model-expression@0.1. Translation blockers: {blockers}."
+                ),
                 "targetId": metric_id,
                 "sourceArtifactId": source["id"],
                 "locator": _locator(self.sheet_name, range_=f"{coordinates[0]}:{coordinates[-1]}"),
@@ -589,21 +616,42 @@ class MappedWorkbookExtractor:
             observation["scenarioId"] = model["defaultScenarioId"]
         return observation
 
-    @staticmethod
     def _transformation(
+        self,
         metric: dict[str, Any],
         mapped_metric: dict[str, Any],
         mapped_period: dict[str, Any],
         period_id: str,
+        coordinate: str,
+        target_value: Any,
         original_formula: str,
     ) -> dict[str, Any]:
         period_expression = mapped_metric.get("canonicalExpressions", {}).get(mapped_period["type"])
-        expression = period_expression.get("expression") if period_expression else mapped_metric.get("canonicalExpression")
-        dependencies = (
+        mapped_expression = (
+            period_expression.get("expression")
+            if period_expression
+            else mapped_metric.get("canonicalExpression")
+        )
+        mapped_dependencies = (
             period_expression.get("dependencyMetricIds", [])
             if period_expression
             else mapped_metric.get("dependencyMetricIds", [])
         )
+        if self._formula_translator is None:
+            raise RuntimeError("Formula translator is unavailable before workbook extraction")
+        automatic = self._formula_translator.translate(
+            original_formula,
+            coordinate,
+            period_id,
+            target_value,
+        )
+        if automatic:
+            expression = automatic.expression
+            dependencies = automatic.dependency_metric_ids
+            self._auto_translated_count += 1
+        else:
+            expression = mapped_expression
+            dependencies = mapped_dependencies
         supported = expression is not None
         return {
             "id": _transformation_id(metric["id"], period_id),
@@ -746,6 +794,7 @@ class MappedWorkbookExtractor:
             "", "## Actual / estimate boundary", "", self.mapping["actualityBasis"],
             "", "## Formula coverage", "",
             f"- {statuses['supported']} supported, {statuses['opaque']} opaque, and {statuses['unresolved']} unresolved transformations.",
+            f"- {self._auto_translated_count} formulas were auto-translated from mapped cells and accepted only after cached-value replay matched the XLSX result.",
             f"- {len(comments_used)} comments on selected observation cells were preserved as evidence and linked to those observations.",
             "", "## Unresolved mappings", "",
         ])

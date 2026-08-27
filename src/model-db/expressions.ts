@@ -19,6 +19,7 @@ const ALLOWED_BINARY_OPERATORS = new Set([
 const ALLOWED_UNARY_OPERATORS = new Set(["+", "-", "!"]);
 const ALLOWED_FUNCTIONS = new Set([
   "ref",
+  "period_ref",
   "sum",
   "average",
   "min",
@@ -49,10 +50,12 @@ export type ExpressionValidation = {
 export type ExpressionReference = {
   metricId: string;
   periodOffset: number;
+  periodId?: string;
 };
 
 export type EvaluationContext = {
   ref(metricId: string): ScalarValue;
+  periodRef?(metricId: string, periodId: string): ScalarValue;
   lag?(metricId: string, periods: number): ScalarValue;
   lead?(metricId: string, periods: number): ScalarValue;
 };
@@ -136,7 +139,7 @@ function inspectNode(
         issues.push({
           path: `${path}.callee`,
           reason: "Only direct calls to approved functions are allowed",
-          suggestion: "Use ref(), sum(), average(), min(), max(), when(), lag(), lead(), coalesce(), abs(), or round()",
+          suggestion: "Use ref(), period_ref(), sum(), average(), min(), max(), when(), lag(), lead(), coalesce(), abs(), or round()",
         });
       } else {
         const functionName = asNode<jsep.Identifier>(call.callee).name;
@@ -150,6 +153,7 @@ function inspectNode(
         const arity = call.arguments.length;
         const arityValid =
           (functionName === "ref" && arity === 1) ||
+          (functionName === "period_ref" && arity === 2) ||
           (["lag", "lead", "round"].includes(functionName) && (arity === 1 || arity === 2)) ||
           (functionName === "abs" && arity === 1) ||
           (functionName === "when" && arity === 3) ||
@@ -158,10 +162,10 @@ function inspectNode(
           issues.push({
             path: `${path}.arguments`,
             reason: `Function ${functionName} received ${arity} arguments`,
-            suggestion: "Use ref(value), lag/lead(value[, periods]), round(value[, digits]), abs(value), when(condition, yes, no), or one or more aggregate arguments",
+            suggestion: "Use ref(metric), period_ref(metric, period), lag/lead(metric[, periods]), round(value[, digits]), abs(value), when(condition, yes, no), or one or more aggregate arguments",
           });
         }
-        if (["ref", "lag", "lead"].includes(functionName)) {
+        if (["ref", "period_ref", "lag", "lead"].includes(functionName)) {
           const metricId = call.arguments[0]
             ? literalString(call.arguments[0])
             : undefined;
@@ -173,24 +177,43 @@ function inspectNode(
             });
           } else {
             dependencies.add(metricId);
-            let periodOffset = 0;
-            if (functionName === "lag" || functionName === "lead") {
-              const periodsNode = call.arguments[1];
-              const periods = periodsNode?.type === "Literal"
-                ? asNode<jsep.Literal>(periodsNode).value
-                : periodsNode === undefined ? 1 : undefined;
-              if (!Number.isInteger(periods) || Number(periods) <= 0) {
+            if (functionName === "period_ref") {
+              const periodId = call.arguments[1]
+                ? literalString(call.arguments[1])
+                : undefined;
+              if (!periodId) {
                 issues.push({
                   path: `${path}.arguments[1]`,
-                  reason: `${functionName}() period count must be a positive integer literal`,
-                  suggestion: `Use ${functionName}("${metricId}", 1) or another explicit positive period count`,
+                  reason: "period_ref() requires a literal period ID as its second argument",
+                  suggestion: `Use period_ref("${metricId}", "period_fy2025")`,
                 });
               } else {
-                periodOffset = functionName === "lag" ? -Number(periods) : Number(periods);
+                references.set(`${metricId}|period:${periodId}`, {
+                  metricId,
+                  periodOffset: 0,
+                  periodId,
+                });
               }
-            }
-            if (periodOffset !== 0 || functionName === "ref") {
-              references.set(`${metricId}|${periodOffset}`, { metricId, periodOffset });
+            } else {
+              let periodOffset = 0;
+              if (functionName === "lag" || functionName === "lead") {
+                const periodsNode = call.arguments[1];
+                const periods = periodsNode?.type === "Literal"
+                  ? asNode<jsep.Literal>(periodsNode).value
+                  : periodsNode === undefined ? 1 : undefined;
+                if (!Number.isInteger(periods) || Number(periods) <= 0) {
+                  issues.push({
+                    path: `${path}.arguments[1]`,
+                    reason: `${functionName}() period count must be a positive integer literal`,
+                    suggestion: `Use ${functionName}("${metricId}", 1) or another explicit positive period count`,
+                  });
+                } else {
+                  periodOffset = functionName === "lag" ? -Number(periods) : Number(periods);
+                }
+              }
+              if (periodOffset !== 0 || functionName === "ref") {
+                references.set(`${metricId}|${periodOffset}`, { metricId, periodOffset });
+              }
             }
           }
         }
@@ -279,6 +302,10 @@ function evaluateCall(
   switch (functionName) {
     case "ref":
       return context.ref(String(args[0]));
+    case "period_ref": {
+      if (!context.periodRef) throw new Error("period_ref() is not available in this context");
+      return context.periodRef(String(args[0]), String(args[1]));
+    }
     case "lag": {
       if (!context.lag) throw new Error("lag() is not available in this context");
       const periods = args[1] === undefined ? 1 : numberValue(args[1], "lag()");

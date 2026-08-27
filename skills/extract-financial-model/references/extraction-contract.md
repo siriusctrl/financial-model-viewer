@@ -83,10 +83,10 @@ The validator enforces presentation coverage automatically. If a presentation ex
 Translate only to `model-expression@0.1`. Allowed operations are literals, arithmetic, comparisons, conditional expressions, and these calls:
 
 ```text
-ref sum average min max when lag lead coalesce abs round
+ref period_ref sum average min max when lag lead coalesce abs round
 ```
 
-Function arity is compiled strictly. `ref` and `abs` take one argument; `lag`, `lead`, and `round` take one or two; `when` takes three; aggregate/coalesce calls take at least one. The optional `lag`/`lead` period count must be a positive integer literal so a derived value can resolve to exact input-period observations and workbook cells.
+Function arity is compiled strictly. `ref` and `abs` take one argument; `period_ref` takes a metric ID and an exact period ID; `lag`, `lead`, and `round` take one or two; `when` takes three; aggregate/coalesce calls take at least one. The optional `lag`/`lead` period count must be a positive integer literal. Use `period_ref` when one formula combines periods of a different frequency, such as four quarters into a fiscal year, so the inspector can resolve every exact input observation and workbook cell.
 
 Examples:
 
@@ -100,9 +100,17 @@ when(ref("metric_acme_revenue") == 0, null,
 
 =B10/A10-1
 ref("metric_acme_revenue") / lag("metric_acme_revenue", 1) - 1
+
+=SUM(B10:E10)
+sum(period_ref("metric_acme_revenue", "period_q1_2025"),
+  period_ref("metric_acme_revenue", "period_q2_2025"),
+  period_ref("metric_acme_revenue", "period_q3_2025"),
+  period_ref("metric_acme_revenue", "period_q4_2025"))
 ```
 
 Never use `eval`, `new Function`, assignment, loops, imports, async work, property access, DOM/network APIs, or arbitrary JavaScript. Parse to an AST and let the deterministic interpreter evaluate the AST.
+
+The mapped XLSX extractor may auto-translate numeric and percentage literals, `+`, `-`, `*`, `/`, and `SUM(range)` only when every referenced cell already has an explicit metric/period mapping. It must replay the restricted expression against source cached values and accept the translation only when the result matches the formula cell's cached result. An accepted source-derived translation takes precedence over a generic mapped expression because it preserves the actual period-specific lineage. A source cell outside the semantic map, unsupported syntax, non-numeric dependency, or replay mismatch uses a reviewed mapped expression when one exists; otherwise it keeps the formula opaque and creates a visible warning.
 
 For an unsupported formula:
 

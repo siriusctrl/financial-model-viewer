@@ -70,6 +70,83 @@ describe("deterministic model database validator", () => {
     }
   });
 
+  it("allows explicit prior-period self references without treating them as cycles", () => {
+    const database = fixture();
+    const transformation = database.transformations[0];
+    transformation.expression =
+      'period_ref("metric_northstar_revenue", "period_fy2024")';
+    transformation.dependencyMetricIds = ["metric_northstar_revenue"];
+    transformation.appliesWhen = { periodIds: ["period_fy2025"] };
+
+    expect(validateModelDatabase(database).success).toBe(true);
+  });
+
+  it("does not mistake a prior-period driver loop for a same-cell cycle", () => {
+    const database = fixture();
+    database.transformations.push({
+      id: "transformation_cross_period_driver_fixture",
+      outputMetricId: "metric_northstar_subscription_revenue",
+      language: "model-expression@0.1",
+      expression:
+        'period_ref("metric_northstar_revenue", "period_fy2024")',
+      dependencyMetricIds: ["metric_northstar_revenue"],
+      appliesWhen: { periodIds: ["period_fy2025"] },
+      status: "supported",
+    });
+    database.provenanceRecords.push({
+      id: "provenance_transformation_cross_period_driver_fixture",
+      targetId: "transformation_cross_period_driver_fixture",
+      sourceArtifactId: database.sourceArtifacts[0].id,
+      extractionRunId: database.extractionRuns[0].id,
+      confidence: 1,
+      reviewStatus: "confirmed",
+    });
+
+    expect(validateModelDatabase(database).success).toBe(true);
+  });
+
+  it("still detects an exact-period cross-metric cycle", () => {
+    const database = fixture();
+    database.transformations.push({
+      id: "transformation_same_period_driver_fixture",
+      outputMetricId: "metric_northstar_subscription_revenue",
+      language: "model-expression@0.1",
+      expression:
+        'period_ref("metric_northstar_revenue", "period_fy2025")',
+      dependencyMetricIds: ["metric_northstar_revenue"],
+      appliesWhen: { periodIds: ["period_fy2025"] },
+      status: "supported",
+    });
+
+    const result = validateModelDatabase(database);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "transformation.cycle" }),
+      );
+    }
+  });
+
+  it("rejects exact-period references to missing periods", () => {
+    const database = fixture();
+    const transformation = database.transformations[0];
+    transformation.expression =
+      'period_ref("metric_northstar_subscription_revenue", "period_missing")';
+    transformation.dependencyMetricIds = ["metric_northstar_subscription_revenue"];
+
+    const result = validateModelDatabase(database);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({
+          code: "reference.missing",
+          objectId: transformation.id,
+          field: "expression.periodId",
+        }),
+      );
+    }
+  });
+
   it("requires provenance for every extracted canonical object", () => {
     const database = fixture();
     const targetId = database.metrics[0].id;

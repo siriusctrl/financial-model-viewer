@@ -59,6 +59,39 @@ export async function reviewPreview(viewerDirectory, extraction) {
   const failedResponses = [];
   let browser;
 
+  const transformations = new Map(
+    extraction.database.transformations.map((transformation) => [transformation.id, transformation]),
+  );
+  const periods = new Map(
+    extraction.database.periods.map((period) => [period.id, period]),
+  );
+  const derivedObservations = extraction.database.observations
+    .map((observation) => ({
+      observation,
+      transformation: observation.transformationId
+        ? transformations.get(observation.transformationId)
+        : undefined,
+    }))
+    .filter(({ observation, transformation }) =>
+      observation.valueType === "derived" && transformation?.status === "supported",
+    );
+  const toView = ({ observation }) => ({
+    modelId: observation.modelId,
+    periodType: periods.get(observation.periodId)?.type,
+    observationId: observation.id,
+  });
+  const exactLineage = [...derivedObservations]
+    .filter(({ transformation }) => transformation.expression.includes("period_ref("))
+    .sort(({ transformation: left }, { transformation: right }) =>
+      (right.expression.match(/period_ref\(/g)?.length ?? 0) -
+      (left.expression.match(/period_ref\(/g)?.length ?? 0),
+    )[0];
+  const graphLineage = derivedObservations.find(({ transformation }) =>
+    transformation.dependencyMetricIds.some(
+      (metricId) => metricId !== transformation.outputMetricId,
+    ),
+  );
+
   try {
     browser = await chromium.launch();
     const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -71,7 +104,17 @@ export async function reviewPreview(viewerDirectory, extraction) {
       options.map((option) => ({ label: option.textContent?.trim() || option.value, value: option.value })),
     );
     const defaultModelId = await modelSelect.inputValue();
-    let derivedView;
+    let derivedView = exactLineage
+      ? {
+          ...toView(exactLineage),
+          expectedInputCount: new Set(
+            [...exactLineage.transformation.expression.matchAll(
+              /period_ref\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/g,
+            )].map((match) => `${match[1]}|${match[2]}`),
+          ).size,
+        }
+      : undefined;
+    let graphView = graphLineage ? toView(graphLineage) : undefined;
     let unresolvedView;
     const tableScreenshots = [];
     let periodViewsRendered = 0;
@@ -94,6 +137,9 @@ export async function reviewPreview(viewerDirectory, extraction) {
         }
         if (!derivedView && await desktop.locator(".value-button.derived").count() > 0) {
           derivedView = { modelId: model.value, periodType: periodOption.value };
+        }
+        if (!graphView && await desktop.locator(".value-button.derived").count() > 0) {
+          graphView = { modelId: model.value, periodType: periodOption.value };
         }
         if (!unresolvedView && await desktop.locator(".row-warning").count() > 0) {
           unresolvedView = { modelId: model.value, periodType: periodOption.value };
@@ -128,11 +174,40 @@ export async function reviewPreview(viewerDirectory, extraction) {
       if (derivedView.periodType && await periodSelect.count() > 0) {
         await periodSelect.selectOption(derivedView.periodType);
       }
-      const derivedCell = desktop.locator(".value-button.derived").first();
+      const preferredDerivedCell = derivedView.observationId
+        ? desktop.getByTitle(`Derived · ${derivedView.observationId}`)
+        : desktop.locator(".value-button.derived").first();
+      const derivedCell = await preferredDerivedCell.count() > 0
+        ? preferredDerivedCell
+        : desktop.locator(".value-button.derived").first();
       await derivedCell.click();
       await desktop.getByTestId("formula-lineage").waitFor({ state: "visible" });
+      if (derivedView.expectedInputCount !== undefined) {
+        const actualInputCount = await desktop.locator(".lineage-input").count();
+        if (actualInputCount !== derivedView.expectedInputCount) {
+          throw new Error(
+            `Exact-period lineage rendered ${actualInputCount} inputs; expected ${derivedView.expectedInputCount}`,
+          );
+        }
+      }
       derivedLineage = "passed";
       derivedScreenshot = await capture(desktop, reviewDirectory, "03-derived-lineage", captures);
+    }
+
+    if (graphView) {
+      await modelSelect.selectOption(graphView.modelId);
+      const periodSelect = desktop.getByLabel("Period view");
+      if (graphView.periodType && await periodSelect.count() > 0) {
+        await periodSelect.selectOption(graphView.periodType);
+      }
+      const preferredGraphCell = graphView.observationId
+        ? desktop.getByTitle(`Derived · ${graphView.observationId}`)
+        : desktop.locator(".value-button.derived").first();
+      const graphCell = await preferredGraphCell.count() > 0
+        ? preferredGraphCell
+        : desktop.locator(".value-button.derived").first();
+      await graphCell.click();
+      await desktop.getByTestId("formula-lineage").waitFor({ state: "visible" });
       const openMap = desktop.getByRole("button", { name: "Open map" });
       if (await openMap.count() > 0) {
         await openMap.click();

@@ -142,38 +142,140 @@ function canonicalCollections(database: ModelDatabase): [string, { id: string }[
   ];
 }
 
-function detectCycles(database: ModelDatabase): string[][] {
+type FormulaCycle = {
+  objectId: string;
+  path: string[];
+};
+
+function conditionValues(value: string | string[] | undefined): string[] {
+  if (typeof value === "string") return [value];
+  return value ?? [];
+}
+
+function detectCycles(database: ModelDatabase): FormulaCycle[] {
   const graph = new Map<string, string[]>();
+  const nodeLabels = new Map<string, { metricId: string; periodId?: string }>();
+  const periods = new Map(database.periods.map((period) => [period.id, period]));
+  const observedPeriodIdsByModel = new Map<string, Set<string>>();
+  for (const observation of database.observations) {
+    const observed = observedPeriodIdsByModel.get(observation.modelId) ?? new Set<string>();
+    observed.add(observation.periodId);
+    observedPeriodIdsByModel.set(observation.modelId, observed);
+  }
+  const periodsByModelAndType = new Map<string, ModelDatabase["periods"]>();
+  for (const [modelId, periodIds] of observedPeriodIdsByModel) {
+    for (const periodId of periodIds) {
+      const period = periods.get(periodId);
+      if (!period) continue;
+      const key = `${modelId}|${period.type}`;
+      const sameType = periodsByModelAndType.get(key) ?? [];
+      sameType.push(period);
+      periodsByModelAndType.set(key, sameType);
+    }
+  }
+  for (const sameType of periodsByModelAndType.values()) {
+    sameType.sort((left, right) =>
+      (left.startDate ?? left.endDate ?? left.label).localeCompare(
+        right.startDate ?? right.endDate ?? right.label,
+      ),
+    );
+  }
+
+  const cellNode = (modelId: string, metricId: string, periodId: string): string => {
+    const key = `cell|${modelId}|${metricId}|${periodId}`;
+    nodeLabels.set(key, { metricId, periodId });
+    return key;
+  };
+  const metricNode = (metricId: string): string => {
+    const key = `metric|${metricId}`;
+    nodeLabels.set(key, { metricId });
+    return key;
+  };
+
   for (const transformation of database.transformations) {
     if (transformation.status !== "supported") continue;
-    const dependencies = graph.get(transformation.outputMetricId) ?? [];
-    graph.set(transformation.outputMetricId, [
-      ...dependencies,
-      ...transformation.dependencyMetricIds,
-    ]);
+    const expression = validateExpression(transformation.expression);
+    const modelIds = new Set(conditionValues(transformation.appliesWhen?.modelId));
+    const periodIds = new Set(conditionValues(transformation.appliesWhen?.periodIds));
+    const linkedOutputs = database.observations.filter(
+      (observation) =>
+        observation.transformationId === transformation.id &&
+        (modelIds.size === 0 || modelIds.has(observation.modelId)) &&
+        (periodIds.size === 0 || periodIds.has(observation.periodId)),
+    );
+    const inferredOutputs = database.observations.filter(
+      (observation) =>
+        observation.metricId === transformation.outputMetricId &&
+        (modelIds.size === 0 || modelIds.has(observation.modelId)) &&
+        (periodIds.size === 0 || periodIds.has(observation.periodId)),
+    );
+    const outputs = linkedOutputs.length > 0 ? linkedOutputs : inferredOutputs;
+
+    if (outputs.length === 0) {
+      const outputNode = metricNode(transformation.outputMetricId);
+      graph.set(outputNode, [
+        ...(graph.get(outputNode) ?? []),
+        ...transformation.dependencyMetricIds.map(metricNode),
+      ]);
+      continue;
+    }
+
+    for (const output of outputs) {
+      const outputNode = cellNode(
+        output.modelId,
+        transformation.outputMetricId,
+        output.periodId,
+      );
+      const dependencyNodes = expression.references.flatMap((reference) => {
+        if (reference.periodId) {
+          return [cellNode(output.modelId, reference.metricId, reference.periodId)];
+        }
+        if (reference.periodOffset === 0) {
+          return [cellNode(output.modelId, reference.metricId, output.periodId)];
+        }
+        const outputPeriod = periods.get(output.periodId);
+        if (!outputPeriod) return [];
+        const sameType = periodsByModelAndType.get(
+          `${output.modelId}|${outputPeriod.type}`,
+        ) ?? [];
+        const outputIndex = sameType.findIndex((period) => period.id === output.periodId);
+        const inputPeriod = sameType[outputIndex + reference.periodOffset];
+        return inputPeriod
+          ? [cellNode(output.modelId, reference.metricId, inputPeriod.id)]
+          : [];
+      });
+      graph.set(outputNode, [...(graph.get(outputNode) ?? []), ...dependencyNodes]);
+    }
   }
 
   const visited = new Set<string>();
   const active = new Set<string>();
   const stack: string[] = [];
-  const cycles: string[][] = [];
+  const cycles: FormulaCycle[] = [];
 
-  const visit = (metricId: string): void => {
-    if (active.has(metricId)) {
-      const start = stack.indexOf(metricId);
-      cycles.push([...stack.slice(start), metricId]);
+  const visit = (nodeId: string): void => {
+    if (active.has(nodeId)) {
+      const start = stack.indexOf(nodeId);
+      const path = [...stack.slice(start), nodeId].map((key) => {
+        const node = nodeLabels.get(key);
+        return node?.periodId ? `${node.metricId}[${node.periodId}]` : (node?.metricId ?? key);
+      });
+      cycles.push({
+        objectId: nodeLabels.get(nodeId)?.metricId ?? nodeId,
+        path,
+      });
       return;
     }
-    if (visited.has(metricId)) return;
-    visited.add(metricId);
-    active.add(metricId);
-    stack.push(metricId);
-    for (const dependency of graph.get(metricId) ?? []) visit(dependency);
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+    active.add(nodeId);
+    stack.push(nodeId);
+    for (const dependency of graph.get(nodeId) ?? []) visit(dependency);
     stack.pop();
-    active.delete(metricId);
+    active.delete(nodeId);
   };
 
-  for (const metricId of graph.keys()) visit(metricId);
+  for (const nodeId of graph.keys()) visit(nodeId);
   return cycles;
 }
 
@@ -560,6 +662,16 @@ export function validateModelDatabase(input: unknown): ValidationResult {
           ),
         );
       }
+      for (const reference of expression.references) {
+        pushMissingReference(
+          errors,
+          transformation.id,
+          "expression.periodId",
+          reference.periodId,
+          periodIds,
+          "Period",
+        );
+      }
     } else if (!transformation.originalExpression) {
       errors.push(
         error(
@@ -577,9 +689,9 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     errors.push(
       error(
         "transformation.cycle",
-        cycle[0],
+        cycle.objectId,
         "dependencyMetricIds",
-        `Dependency cycle detected: ${cycle.join(" -> ")}`,
+        `Dependency cycle detected: ${cycle.path.join(" -> ")}`,
         "Break the cycle or mark an unsupported transformation as opaque",
       ),
     );

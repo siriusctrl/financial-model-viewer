@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 import unittest
 
+from formula_translation import FormulaTranslator
 from mapped_workbook import MappedWorkbookExtractor, _is_specific_blue_font
 from ooxml import WorkbookPackage, translate_shared_formula
 
@@ -193,6 +194,81 @@ class WorkbookToolTests(unittest.TestCase):
             'B2+$A2+B$1+$A$1+Sheet2!C3+"A1"+LOG10(C2)',
         )
 
+    def test_formula_translation_requires_mapped_inputs_and_cached_value_replay(self) -> None:
+        with TemporaryDirectory() as directory:
+            workbook = Path(directory) / "fixture.xlsx"
+            write_fixture(workbook)
+            with WorkbookPackage(workbook) as package:
+                translator = FormulaTranslator(package.cells("Model"), {
+                    "B1": {
+                        "metricId": "metric_test_input",
+                        "periodId": "period_fy2024",
+                        "dataType": "number",
+                    },
+                    "C1": {
+                        "metricId": "metric_test_input",
+                        "periodId": "period_fy2025",
+                        "dataType": "number",
+                    },
+                })
+
+            sum_translation = translator.translate(
+                "=SUM(B1:C1)", "C2", "period_fy2025", 5,
+            )
+            self.assertIsNotNone(sum_translation)
+            self.assertEqual(
+                (sum_translation.expression, sum_translation.dependency_metric_ids),
+                (
+                    'sum(period_ref("metric_test_input", "period_fy2024"), '
+                    'ref("metric_test_input"))',
+                    ["metric_test_input"],
+                ),
+            )
+            self.assertIsNone(
+                translator.translate(
+                    "=SUM(B1:C1)", "C2", "period_fy2025", 6,
+                ),
+            )
+
+            literal_translation = translator.translate(
+                "=380+440", "C2", "period_fy2025", 820,
+            )
+            self.assertIsNotNone(literal_translation)
+            self.assertEqual(
+                (literal_translation.expression, literal_translation.dependency_metric_ids),
+                ("(380 + 440)", []),
+            )
+
+            percent_translation = translator.translate(
+                "=B1+0.2%", "C2", "period_fy2025", 2.002,
+            )
+            self.assertIsNotNone(percent_translation)
+            self.assertEqual(
+                (percent_translation.expression, percent_translation.dependency_metric_ids),
+                (
+                    '(period_ref("metric_test_input", "period_fy2024") + 0.002)',
+                    ["metric_test_input"],
+                ),
+            )
+
+            nested_sum = translator.translate(
+                "=C1-SUM(B1:B1)", "C2", "period_fy2025", 1,
+            )
+            self.assertIsNotNone(nested_sum)
+            self.assertEqual(
+                nested_sum.expression,
+                '(ref("metric_test_input") - '
+                'sum(period_ref("metric_test_input", "period_fy2024")))',
+            )
+            self.assertEqual(
+                translator.blocker("=D1"),
+                "referenced cells outside the selected semantic map",
+            )
+            self.assertEqual(
+                translator.blocker("='Reported'!B1"),
+                "cross-sheet reference without an explicit semantic map for that source sheet",
+            )
+
     def test_sparse_inventory_and_mapped_extraction(self) -> None:
         with TemporaryDirectory() as directory:
             workbook = Path(directory) / "fixture.xlsx"
@@ -234,6 +310,21 @@ class WorkbookToolTests(unittest.TestCase):
                 result.style_evidence["styles"][2]["fill"]["foregroundColor"]["rgb"],
                 "FFFFFF00",
             )
+
+            automatic_mapping = deepcopy(mapping())
+            output_metric = automatic_mapping["sections"][0]["metrics"][1]
+            del output_metric["canonicalExpression"]
+            del output_metric["dependencyMetricIds"]
+            automatic = MappedWorkbookExtractor(workbook, automatic_mapping).extract()
+            self.assertEqual(
+                [item["status"] for item in automatic.database["transformations"]],
+                ["supported", "supported"],
+            )
+            self.assertEqual(
+                automatic.database["transformations"][0]["expression"],
+                '(ref("metric_test_input") * 2)',
+            )
+            self.assertIn("2 formulas were auto-translated", automatic.report)
 
             conflicting_mapping = deepcopy(mapping())
             conflicting_mapping["periods"][1]["actuality"] = "actual"

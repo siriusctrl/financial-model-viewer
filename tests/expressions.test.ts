@@ -45,12 +45,35 @@ describe("model-expression@0.1", () => {
     ).toBe(200);
   });
 
+  it("supports exact cross-period references", () => {
+    const expression =
+      'sum(period_ref("metric_revenue", "period_q1_2025"), period_ref("metric_revenue", "period_q2_2025"))';
+
+    expect(validateExpression(expression)).toMatchObject({
+      valid: true,
+      dependencies: ["metric_revenue"],
+      references: [
+        { metricId: "metric_revenue", periodOffset: 0, periodId: "period_q1_2025" },
+        { metricId: "metric_revenue", periodOffset: 0, periodId: "period_q2_2025" },
+      ],
+    });
+    expect(
+      evaluateExpression(expression, {
+        ref: () => null,
+        periodRef: (_metricId, periodId) =>
+          periodId === "period_q1_2025" ? 40 : 60,
+      }),
+    ).toBe(100);
+  });
+
   it.each([
     'ref("metric_revenue", 1)',
     "when(true, 1)",
     "sum()",
     'lag("metric_revenue", 0)',
     'lead("metric_revenue", 1 + 1)',
+    'period_ref("metric_revenue")',
+    'period_ref("metric_revenue", period_q1_2025)',
   ])("rejects formulas that cannot compile to deterministic cell lineage: %s", (expression) => {
     expect(validateExpression(expression).valid).toBe(false);
   });

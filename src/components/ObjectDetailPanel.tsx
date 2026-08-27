@@ -203,7 +203,7 @@ function CellDetail({
                   const inputSource = input.provenance.records[0];
                   return (
                     <button
-                      key={`${input.metric.id}:${input.periodOffset}`}
+                      key={`${input.metric.id}:${input.referencePeriodId ?? input.periodOffset}`}
                       className="lineage-input"
                       disabled={!input.observation}
                       onClick={() => input.observation && onSelectTarget(input.observation.id)}

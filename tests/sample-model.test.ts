@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import sample from "../examples/sample-model-db.json";
 import { ModelDatabaseQueries } from "../src/model-db/queries";
+import type { ModelDatabase } from "../src/model-db/types";
 import { assertValidModelDatabase } from "../src/model-db/validate";
 
 const queries = new ModelDatabaseQueries(assertValidModelDatabase(sample));
@@ -193,6 +194,26 @@ describe("query projections", () => {
       modelId: "model_northstar_cloud",
       periodType: "fiscal_quarter",
     }).periods.map((item) => item.id)).toEqual(["period_q4_2024"]);
+  });
+
+  it("resolves explicit cross-period formulas to the exact source cell", () => {
+    const explicit = structuredClone(sample) as ModelDatabase;
+    const transformation = explicit.transformations.find(
+      (item) => item.id === "transformation_northstar_gross_profit",
+    );
+    if (!transformation) throw new Error("Missing representative transformation");
+    transformation.expression =
+      'period_ref("metric_northstar_revenue", "period_fy2024")';
+    transformation.dependencyMetricIds = ["metric_northstar_revenue"];
+    transformation.appliesWhen = { periodIds: ["period_fy2025"] };
+
+    const detail = new ModelDatabaseQueries(
+      assertValidModelDatabase(explicit),
+    ).getObservationDetail("obs_northstar_gross_profit_fy2025");
+    expect(detail.inputs).toHaveLength(1);
+    expect(detail.inputs[0]?.period?.label).toBe("FY24A");
+    expect(detail.inputs[0]?.referencePeriodId).toBe("period_fy2024");
+    expect(detail.inputs[0]?.provenance.records[0]?.provenance.locator?.cell).toBe("D10");
   });
 
   it("projects open metric issues into the affected cell detail", () => {

@@ -114,7 +114,7 @@ npm run workbook:extract -- model.xlsx extraction-map.json output-directory
 
 The style inventory keeps compact cell-to-style references plus reusable theme, font, fill, number-format, alignment, and cell-format catalogs. The confirmed Alice workbook convention is enabled explicitly with `styleConvention: alice-blue-yellow@0.1`; there is no configurable color-rule language. The mapped extractor writes a deduplicated selected-style catalog and per-cell audit trail to `workbook-style-evidence.json`; formulas remain derived and style/actuality conflicts become explicit warnings.
 
-The mapped extractor also preserves exact formulas and selected comments, and turns missing values, incompatible source types, untranslated formulas, unmapped comments, and style conflicts into explicit unresolved items. It automatically runs the strict package checker and exits nonzero on failure; it does not infer company-specific semantics from layout alone.
+The mapped extractor also preserves exact formulas and selected comments. Numeric/percentage literals, basic arithmetic, and `SUM(range)` are translated automatically when every input cell has explicit metric/period metadata and replaying cached values reproduces the XLSX result; exact cross-period references remain inspectable in the viewer. Missing values, incompatible source types, formulas blocked by unmapped inputs or unsupported syntax, unmapped comments, and style conflicts become explicit unresolved items. The extractor automatically runs the strict package checker and exits nonzero on failure; it does not infer company-specific semantics from layout alone.
 
 Compile the checked extraction into a local static viewer and run its Playwright review loop:
 

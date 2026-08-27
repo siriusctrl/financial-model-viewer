@@ -86,6 +86,7 @@ export type ObservationLineageInput = {
   metric: Metric;
   period?: Period;
   periodOffset: number;
+  referencePeriodId?: string;
   observation?: Observation;
   provenance: ProvenanceProjection;
 };
@@ -481,8 +482,10 @@ export class ModelDatabaseQueries {
     const references = transformation?.status === "supported"
       ? validateExpression(transformation.expression).references
       : [];
-    const inputs = references.map(({ metricId, periodOffset }) => {
-      const inputPeriod = observedPeriods[currentPeriodIndex + periodOffset];
+    const inputs = references.map(({ metricId, periodOffset, periodId }) => {
+      const inputPeriod = periodId
+        ? this.periods.get(periodId)
+        : observedPeriods[currentPeriodIndex + periodOffset];
       const candidates = this.database.observations
         .filter(
           (candidate) =>
@@ -504,6 +507,7 @@ export class ModelDatabaseQueries {
         metric: this.getMetric(metricId),
         period: inputPeriod,
         periodOffset,
+        referencePeriodId: periodId,
         observation: inputObservation,
         provenance: inputObservation
           ? this.getProvenance(inputObservation.id)
@@ -560,6 +564,7 @@ export class ModelDatabaseQueries {
         )) {
           transformationIds.add(transformation.id);
           for (const dependencyMetricId of transformation.dependencyMetricIds) {
+            if (dependencyMetricId === transformation.outputMetricId) continue;
             edges.push({
               fromId: dependencyMetricId,
               toId: transformation.outputMetricId,
@@ -576,6 +581,7 @@ export class ModelDatabaseQueries {
           item.status === "supported" && item.dependencyMetricIds.includes(current.metricId),
         )) {
           transformationIds.add(transformation.id);
+          if (current.metricId === transformation.outputMetricId) continue;
           edges.push({
             fromId: current.metricId,
             toId: transformation.outputMetricId,

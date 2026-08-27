@@ -16,7 +16,7 @@ When presentation metadata is absent and an open presentation issue explicitly a
 
 `model-expression@0.1` uses an expression parser to produce an AST. A validator accepts only literals, arithmetic, comparisons, conditional expressions, and approved function calls. The interpreter evaluates those nodes explicitly.
 
-Function arity is validated before import, and `lag`/`lead` offsets must be positive integer literals. That lets the inspector resolve a derived observation to the exact prior/current/future period observations and their workbook cells instead of guessing from metric-level dependencies.
+Function arity is validated before import, and `lag`/`lead` offsets must be positive integer literals. `period_ref(metricId, periodId)` represents an exact cross-frequency reference, such as a fiscal-year total derived from four explicitly identified quarters. That lets the inspector resolve a derived observation to exact prior/current/future or named-period observations and their workbook cells instead of guessing from metric-level dependencies.
 
 When a model contains multiple period frequencies, lagged references stay within the current observation's period type. The table exposes period type as an explicit view instead of interleaving annual and quarterly columns. Metric-level dependency graphs deduplicate equivalent period-specific transformations, while the cell inspector retains the exact transformation and workbook formula for each observation.
 
@@ -59,6 +59,8 @@ A real authorized workbook is required to measure formula coverage, hierarchy ac
 Workbook inventory reads OOXML package parts directly and iterates stored cells rather than a worksheet's rectangular dimension. This avoids pathological empty-range scans, preserves formula text and cached values separately, and records comments, hidden state, media, links, and opaque binary parts without recalculation or workbook mutation.
 
 The reusable mapped extractor consumes a private semantic map that declares stable metric IDs, source rows, period columns, actual/estimate status, sections, and any supported canonical expressions. The map is the reviewable semantic decision boundary. Company-specific rows never become branches in repository code, and cell coordinates remain provenance rather than canonical identity.
+
+The extractor first attempts to translate numeric and percentage literals, restricted arithmetic, and `SUM(range)` whose source cells all resolve through that semantic map. It emits exact `period_ref` calls for cross-period inputs and accepts the result only after deterministic replay matches the workbook's cached formula value. A successful source-derived translation takes precedence over a generic mapped expression; the latter remains a reviewed fallback for formulas outside the restricted translator. This prevents a generic metric formula from erasing period-specific driver copies while still avoiding coordinates or LLM guesses as canonical lineage.
 
 Unsupported formulas keep their materialized value and exact workbook expression as opaque transformations. Missing cached values, incompatible source cell types, and untranslated formula families create explicit unresolved items. This enables partial but honest extraction of a complex workbook without pretending to be a lossless Excel execution engine.
 
