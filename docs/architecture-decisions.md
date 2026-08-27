@@ -61,3 +61,9 @@ Workbook inventory reads OOXML package parts directly and iterates stored cells 
 The reusable mapped extractor consumes a private semantic map that declares stable metric IDs, source rows, period columns, actual/estimate status, sections, and any supported canonical expressions. The map is the reviewable semantic decision boundary. Company-specific rows never become branches in repository code, and cell coordinates remain provenance rather than canonical identity.
 
 Unsupported formulas keep their materialized value and exact workbook expression as opaque transformations. Missing cached values, incompatible source cell types, and untranslated formula families create explicit unresolved items. This enables partial but honest extraction of a complex workbook without pretending to be a lossless Excel execution engine.
+
+## 9. Workbook style meaning is extraction evidence
+
+The sparse workbook inventory preserves compact cell-to-style references and a reusable OOXML style catalog, including theme/tint colors, fonts, fills, number formats, alignment, protection, and conditional-formatting rules. It does not copy workbook styling into canonical business objects.
+
+Workbook-specific conventions are declared as ordered rules in the private extraction map. Matched roles and their resolved source styles are written to `workbook-style-evidence.json`. A source formula remains canonically derived even when formatting marks it as analyst-controlled, and a style rule that disagrees with the mapped actual/estimate boundary produces an unresolved item. This keeps visual conventions useful without making color a universal business rule.

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
@@ -26,13 +27,46 @@ WORKBOOK_RELS = """<?xml version="1.0" encoding="UTF-8"?>
 
 SHEET_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <dimension ref="A1:B3"/>
+  <dimension ref="A1:C3"/>
   <sheetData>
-    <row r="1"><c r="A1" t="inlineStr"><is><t>Input</t></is></c><c r="B1"><v>2</v></c></row>
-    <row r="2"><c r="A2" t="inlineStr"><is><t>Output</t></is></c><c r="B2"><f t="shared" si="0" ref="B2:B3">B1*2</f><v>4</v></c></row>
+    <row r="1"><c r="A1" t="inlineStr"><is><t>Input</t></is></c><c r="B1" s="1"><v>2</v></c><c r="C1" s="2"><v>3</v></c></row>
+    <row r="2"><c r="A2" t="inlineStr"><is><t>Output</t></is></c><c r="B2"><f t="shared" si="0" ref="B2:B3">B1*2</f><v>4</v></c><c r="C2"><f>C1*2</f><v>6</v></c></row>
     <row r="3"><c r="A3" t="inlineStr"><is><t>Next</t></is></c><c r="B3"><f t="shared" si="0"/><v>8</v></c></row>
   </sheetData>
 </worksheet>"""
+
+STYLES_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><name val="Arial"/><sz val="10"/><color theme="1"/></font>
+    <font><name val="Arial"/><sz val="10"/><color theme="8"/></font>
+  </fonts>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="1"><border/></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+  </cellXfs>
+</styleSheet>"""
+
+THEME_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Test">
+  <a:themeElements><a:clrScheme name="Test">
+    <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
+    <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+    <a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>
+    <a:accent1><a:srgbClr val="5B9BD5"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2>
+    <a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4>
+    <a:accent5><a:srgbClr val="4472C4"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6>
+    <a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink>
+  </a:clrScheme><a:fontScheme name="Test"/><a:fmtScheme name="Test"/></a:themeElements>
+</a:theme>"""
 
 SHEET_RELS = """<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -53,6 +87,8 @@ def write_fixture(path: Path) -> None:
         archive.writestr("xl/worksheets/sheet1.xml", SHEET_XML)
         archive.writestr("xl/worksheets/_rels/sheet1.xml.rels", SHEET_RELS)
         archive.writestr("xl/comments1.xml", COMMENTS_XML)
+        archive.writestr("xl/styles.xml", STYLES_XML)
+        archive.writestr("xl/theme/theme1.xml", THEME_XML)
 
 
 def mapping() -> dict:
@@ -89,16 +125,56 @@ def mapping() -> dict:
         "periodHeaderRange": "B1:B1",
         "scope": "Synthetic two-row fixture.",
         "actualityBasis": "The sole period is explicitly mapped as actual.",
-        "periods": [{
-            "id": "period_fy2024",
-            "label": "FY24A",
-            "type": "fiscal_year",
-            "startDate": "2024-01-01",
-            "endDate": "2024-12-31",
-            "column": "B",
-            "headerCell": "B1",
-            "actuality": "actual",
-        }],
+        "periods": [
+            {
+                "id": "period_fy2024",
+                "label": "FY24A",
+                "type": "fiscal_year",
+                "startDate": "2024-01-01",
+                "endDate": "2024-12-31",
+                "column": "B",
+                "headerCell": "B1",
+                "actuality": "actual",
+            },
+            {
+                "id": "period_fy2025",
+                "label": "FY25E",
+                "type": "fiscal_year",
+                "startDate": "2025-01-01",
+                "endDate": "2025-12-31",
+                "column": "C",
+                "headerCell": "C1",
+                "actuality": "estimate",
+            },
+        ],
+        "styleSemantics": {
+            "rules": [
+                {
+                    "id": "analyst_hardcode",
+                    "role": "analyst_hardcode",
+                    "description": "Blue font on yellow fill is an analyst-controlled assumption.",
+                    "match": {
+                        "fontColors": [{"theme": 8}],
+                        "fillColors": [{"rgb": "FFFFFF00"}],
+                    },
+                    "expectedActuality": "estimate",
+                    "valueType": "assumption",
+                    "adjustable": True,
+                },
+                {
+                    "id": "reported_source",
+                    "role": "reported_source",
+                    "description": "Blue font without yellow fill is sourced from reported results.",
+                    "match": {
+                        "fontColors": [{"theme": 8}],
+                        "excludeFillColors": [{"rgb": "FFFFFF00"}],
+                    },
+                    "expectedActuality": "actual",
+                    "valueType": "reported",
+                    "adjustable": False,
+                },
+            ]
+        },
         "sections": [{
             "id": "section_test",
             "title": "Test",
@@ -138,19 +214,51 @@ class WorkbookToolTests(unittest.TestCase):
             write_fixture(workbook)
             with WorkbookPackage(workbook) as package:
                 inventory = package.inventory()
+                style_inventory = package.inventory("style")
                 cells = package.cells("Model")
-            self.assertEqual(inventory["sheets"][0]["storedCellCount"], 6)
-            self.assertEqual(inventory["sheets"][0]["formulaCount"], 2)
+            self.assertEqual(inventory["sheets"][0]["storedCellCount"], 8)
+            self.assertEqual(inventory["sheets"][0]["formulaCount"], 3)
             self.assertEqual(inventory["sheets"][0]["commentCount"], 1)
             self.assertEqual(cells["B3"]["formula"], "=B2*2")
+            self.assertEqual(package.resolved_style(1)["font"]["color"]["theme"], 8)
+            self.assertEqual(package.resolved_style(2)["fill"]["foregroundColor"]["rgb"], "FFFFFF00")
+            self.assertEqual(style_inventory["sheets"][0]["cells"][2], {"cell": "C1", "styleId": 2})
 
             result = MappedWorkbookExtractor(workbook, mapping()).extract()
-            self.assertEqual(len(result.database["observations"]), 2)
-            self.assertEqual(result.database["observations"][1]["value"], 4)
+            self.assertEqual(len(result.database["observations"]), 4)
+            self.assertEqual(result.database["observations"][3]["value"], 6)
             self.assertEqual(result.database["transformations"][0]["originalExpression"], "=B1*2")
             self.assertEqual(result.database["transformations"][0]["status"], "supported")
             self.assertEqual(result.database["evidence"][0]["excerpt"], "Reviewed output")
             self.assertEqual(result.database["unresolvedItems"], [])
+            self.assertEqual(result.style_evidence["summary"]["byRole"], {
+                "analyst_hardcode": 1,
+                "reported_source": 1,
+                "unmatched": 2,
+            })
+            self.assertEqual(result.style_evidence["summary"]["actualityConflicts"], 0)
+            self.assertEqual(
+                result.style_evidence["cells"][0]["styleId"],
+                1,
+            )
+            self.assertEqual(
+                result.style_evidence["styles"][2]["fill"]["foregroundColor"]["rgb"],
+                "FFFFFF00",
+            )
+
+            conflicting_mapping = deepcopy(mapping())
+            conflicting_mapping["periods"][1]["actuality"] = "actual"
+            conflicting = MappedWorkbookExtractor(workbook, conflicting_mapping).extract()
+            self.assertEqual(conflicting.style_evidence["summary"]["actualityConflicts"], 1)
+            self.assertEqual(
+                conflicting.database["unresolvedItems"][0]["id"],
+                "unresolved_style_actuality_analyst_hardcode",
+            )
+
+            invalid_mapping = deepcopy(mapping())
+            invalid_mapping["styleSemantics"]["rules"][0]["match"] = {}
+            with self.assertRaisesRegex(ValueError, "non-empty match object"):
+                MappedWorkbookExtractor(workbook, invalid_mapping)
 
 
 if __name__ == "__main__":

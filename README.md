@@ -103,6 +103,7 @@ Inventory a complex XLSX package without opening Excel, recalculating formulas, 
 
 ```sh
 npm run workbook:inventory -- model.xlsx --out inventory.json
+npm run workbook:inventory -- model.xlsx --cells style --out style-inventory.json
 ```
 
 For a stable but complex model sheet, create an explicit private semantic map and extract only the declared concepts:
@@ -111,7 +112,9 @@ For a stable but complex model sheet, create an explicit private semantic map an
 npm run workbook:extract -- model.xlsx extraction-map.json output-directory
 ```
 
-The mapped extractor reads sparse OOXML cells and cached formula values, preserves exact formulas and selected comments, and turns missing values, incompatible source types, untranslated formulas, and unmapped comments into explicit unresolved items. It automatically runs the strict package checker and exits nonzero on failure; it does not infer company-specific semantics from layout alone.
+The style inventory keeps compact cell-to-style references plus reusable theme, font, fill, number-format, alignment, and cell-format catalogs. Workbook-specific meanings such as reported blue-font inputs or yellow-fill analyst hardcodes belong in the private semantic map. The mapped extractor writes a deduplicated selected-style catalog and per-cell audit trail to `workbook-style-evidence.json`; formulas remain derived and style/actuality conflicts become explicit warnings.
+
+The mapped extractor also preserves exact formulas and selected comments, and turns missing values, incompatible source types, untranslated formulas, unmapped comments, and style conflicts into explicit unresolved items. It automatically runs the strict package checker and exits nonzero on failure; it does not infer company-specific semantics from layout alone.
 
 Compile the checked extraction into a local static viewer and run its Playwright review loop:
 

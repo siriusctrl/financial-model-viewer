@@ -37,6 +37,10 @@ def main() -> int:
             f"{json.dumps(result.inventory, ensure_ascii=False, indent=2)}\n",
             encoding="utf-8",
         )
+        (arguments.output / "workbook-style-evidence.json").write_text(
+            f"{json.dumps(result.style_evidence, ensure_ascii=False, indent=2)}\n",
+            encoding="utf-8",
+        )
     except Exception as cause:  # CLI boundary: provide one concise diagnostic.
         print(f"ERROR Extraction failed: {cause}", file=sys.stderr)
         return 1

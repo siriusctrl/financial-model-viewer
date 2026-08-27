@@ -20,7 +20,52 @@ import xml.etree.ElementTree as ET
 MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 DOC_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
-NS = {"m": MAIN_NS, "r": DOC_REL_NS, "p": PKG_REL_NS}
+DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+NS = {"m": MAIN_NS, "r": DOC_REL_NS, "p": PKG_REL_NS, "a": DRAWING_NS}
+THEME_COLOR_NAMES = (
+    "dark1",
+    "light1",
+    "dark2",
+    "light2",
+    "accent1",
+    "accent2",
+    "accent3",
+    "accent4",
+    "accent5",
+    "accent6",
+    "hyperlink",
+    "followedHyperlink",
+)
+BUILTIN_NUMBER_FORMATS = {
+    0: "General",
+    1: "0",
+    2: "0.00",
+    3: "#,##0",
+    4: "#,##0.00",
+    9: "0%",
+    10: "0.00%",
+    11: "0.00E+00",
+    12: "# ?/?",
+    13: "# ??/??",
+    14: "mm-dd-yy",
+    15: "d-mmm-yy",
+    16: "d-mmm",
+    17: "mmm-yy",
+    18: "h:mm AM/PM",
+    19: "h:mm:ss AM/PM",
+    20: "h:mm",
+    21: "h:mm:ss",
+    22: "m/d/yy h:mm",
+    37: "#,##0 ;(#,##0)",
+    38: "#,##0 ;[Red](#,##0)",
+    39: "#,##0.00;(#,##0.00)",
+    40: "#,##0.00;[Red](#,##0.00)",
+    45: "mm:ss",
+    46: "[h]:mm:ss",
+    47: "mmss.0",
+    48: "##0.0E+0",
+    49: "@",
+}
 FORMULA_FUNCTION = re.compile(r"(?<![A-Z0-9_.])([A-Z][A-Z0-9_.]*)\s*\(", re.I)
 A1_REFERENCE = re.compile(
     r"(?<![A-Z0-9_.])"
@@ -64,6 +109,54 @@ def _file_sha256(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _flag(element: ET.Element | None) -> bool:
+    if element is None:
+        return False
+    return element.get("val", "1").lower() not in {"0", "false", "off"}
+
+
+def _typed_attributes(element: ET.Element | None) -> dict[str, Any]:
+    if element is None:
+        return {}
+    result: dict[str, Any] = {}
+    for key, raw in element.attrib.items():
+        if raw.lower() in {"true", "false"}:
+            result[key] = raw.lower() == "true"
+        else:
+            try:
+                number = float(raw)
+                result[key] = int(number) if number.is_integer() else number
+            except ValueError:
+                result[key] = raw
+    return result
+
+
+def _color(
+    element: ET.Element | None,
+    theme_colors: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if element is None:
+        return None
+    color: dict[str, Any]
+    if element.get("rgb") is not None:
+        rgb = element.get("rgb", "").upper()
+        color = {"type": "rgb", "rgb": rgb if len(rgb) == 8 else f"FF{rgb}"}
+    elif element.get("theme") is not None:
+        theme = int(element.get("theme", "0"))
+        color = {"type": "theme", "theme": theme}
+        if 0 <= theme < len(theme_colors):
+            color["themeColor"] = theme_colors[theme]
+    elif element.get("indexed") is not None:
+        color = {"type": "indexed", "indexed": int(element.get("indexed", "0"))}
+    elif element.get("auto") is not None:
+        color = {"type": "auto", "auto": element.get("auto") in {"1", "true"}}
+    else:
+        return None
+    if element.get("tint") is not None:
+        color["tint"] = float(element.get("tint", "0"))
+    return color
 
 
 def _ranges(values: Iterable[int]) -> list[str]:
@@ -154,6 +247,8 @@ class WorkbookPackage:
         self.path = Path(path).resolve()
         self.archive = ZipFile(self.path)
         self.parts = set(self.archive.namelist())
+        self.theme_colors = self._read_theme_colors()
+        self.style_catalog = self._read_styles()
         self.shared_strings = self._read_shared_strings()
         self.workbook_root = self._xml("xl/workbook.xml")
         workbook_relationships = self._relationships("xl/workbook.xml")
@@ -209,6 +304,173 @@ class WorkbookPackage:
             return []
         root = self._xml("xl/sharedStrings.xml")
         return ["".join(item.itertext()) for item in root.findall("m:si", NS)]
+
+    def _read_theme_colors(self) -> list[dict[str, Any]]:
+        theme_part = "xl/theme/theme1.xml"
+        if theme_part not in self.parts:
+            return []
+        root = self._xml(theme_part)
+        scheme = root.find("a:themeElements/a:clrScheme", NS)
+        if scheme is None:
+            return []
+        colors: list[dict[str, Any]] = []
+        for index, wrapper in enumerate(list(scheme)):
+            value = next(iter(wrapper), None)
+            if value is None:
+                colors.append({
+                    "index": index,
+                    "name": THEME_COLOR_NAMES[index] if index < len(THEME_COLOR_NAMES) else f"theme{index}",
+                })
+                continue
+            color_type = value.tag.rsplit("}", 1)[-1]
+            raw = (
+                value.get("lastClr") or value.get("val") or ""
+                if color_type == "sysClr"
+                else value.get("val") or value.get("lastClr") or ""
+            )
+            colors.append({
+                "index": index,
+                "name": THEME_COLOR_NAMES[index] if index < len(THEME_COLOR_NAMES) else f"theme{index}",
+                "type": color_type,
+                "rgb": raw.upper(),
+            })
+        return colors
+
+    def _font(self, element: ET.Element) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "name": element.find("m:name", NS).get("val")
+            if element.find("m:name", NS) is not None
+            else None,
+            "size": float(element.find("m:sz", NS).get("val", "0"))
+            if element.find("m:sz", NS) is not None
+            else None,
+            "bold": _flag(element.find("m:b", NS)),
+            "italic": _flag(element.find("m:i", NS)),
+            "strike": _flag(element.find("m:strike", NS)),
+            "color": _color(element.find("m:color", NS), self.theme_colors),
+        }
+        underline = element.find("m:u", NS)
+        if underline is not None:
+            result["underline"] = underline.get("val", "single")
+        for name in ("family", "charset", "scheme", "vertAlign"):
+            child = element.find(f"m:{name}", NS)
+            if child is not None and child.get("val") is not None:
+                result[name] = child.get("val")
+        return {key: value for key, value in result.items() if value is not None}
+
+    def _fill(self, element: ET.Element) -> dict[str, Any]:
+        pattern = element.find("m:patternFill", NS)
+        if pattern is not None:
+            return {
+                "type": "pattern",
+                "patternType": pattern.get("patternType", "none"),
+                "foregroundColor": _color(pattern.find("m:fgColor", NS), self.theme_colors),
+                "backgroundColor": _color(pattern.find("m:bgColor", NS), self.theme_colors),
+            }
+        gradient = element.find("m:gradientFill", NS)
+        if gradient is not None:
+            stops = []
+            for stop in gradient.findall("m:stop", NS):
+                stops.append({
+                    "position": float(stop.get("position", "0")),
+                    "color": _color(next(iter(stop), None), self.theme_colors),
+                })
+            return {"type": "gradient", "attributes": _typed_attributes(gradient), "stops": stops}
+        return {"type": "none"}
+
+    def _read_styles(self) -> dict[str, Any]:
+        styles_part = "xl/styles.xml"
+        if styles_part not in self.parts:
+            return {
+                "themeColors": self.theme_colors,
+                "fonts": [],
+                "fills": [],
+                "numberFormats": [],
+                "cellFormats": [{"id": 0, "fontId": 0, "fillId": 0, "borderId": 0, "numFmtId": 0}],
+            }
+        root = self._xml(styles_part)
+        fonts_node = root.find("m:fonts", NS)
+        fills_node = root.find("m:fills", NS)
+        formats_node = root.find("m:numFmts", NS)
+        xfs_node = root.find("m:cellXfs", NS)
+        fonts = [
+            self._font(item)
+            for item in (list(fonts_node) if fonts_node is not None else [])
+        ]
+        fills = [
+            self._fill(item)
+            for item in (list(fills_node) if fills_node is not None else [])
+        ]
+        custom_formats = {
+            int(item.get("numFmtId", "0")): item.get("formatCode", "")
+            for item in (list(formats_node) if formats_node is not None else [])
+        }
+        format_ids = set(BUILTIN_NUMBER_FORMATS) | set(custom_formats)
+        number_formats = [
+            {
+                "id": format_id,
+                "code": custom_formats.get(format_id, BUILTIN_NUMBER_FORMATS.get(format_id)),
+                "source": "custom" if format_id in custom_formats else "builtin",
+            }
+            for format_id in sorted(format_ids)
+        ]
+        cell_formats = []
+        for index, item in enumerate(list(xfs_node) if xfs_node is not None else []):
+            cell_format: dict[str, Any] = {
+                "id": index,
+                "fontId": int(item.get("fontId", "0")),
+                "fillId": int(item.get("fillId", "0")),
+                "borderId": int(item.get("borderId", "0")),
+                "numFmtId": int(item.get("numFmtId", "0")),
+                "xfId": int(item.get("xfId", "0")),
+            }
+            alignment = item.find("m:alignment", NS)
+            if alignment is not None:
+                cell_format["alignment"] = _typed_attributes(alignment)
+            protection = item.find("m:protection", NS)
+            if protection is not None:
+                cell_format["protection"] = _typed_attributes(protection)
+            applied = {
+                key: value in {"1", "true"}
+                for key, value in item.attrib.items()
+                if key.startswith("apply")
+            }
+            if applied:
+                cell_format["applied"] = applied
+            cell_formats.append(cell_format)
+        if not cell_formats:
+            cell_formats.append({"id": 0, "fontId": 0, "fillId": 0, "borderId": 0, "numFmtId": 0})
+        return {
+            "themeColors": self.theme_colors,
+            "fonts": fonts,
+            "fills": fills,
+            "numberFormats": number_formats,
+            "cellFormats": cell_formats,
+        }
+
+    def resolved_style(self, style_id: int) -> dict[str, Any]:
+        formats = self.style_catalog["cellFormats"]
+        cell_format = formats[style_id] if 0 <= style_id < len(formats) else formats[0]
+        font_id = cell_format["fontId"]
+        fill_id = cell_format["fillId"]
+        fonts = self.style_catalog["fonts"]
+        fills = self.style_catalog["fills"]
+        number_format = next(
+            (
+                item
+                for item in self.style_catalog["numberFormats"]
+                if item["id"] == cell_format["numFmtId"]
+            ),
+            {"id": cell_format["numFmtId"], "code": None, "source": "unknown"},
+        )
+        return {
+            "styleId": style_id,
+            "font": fonts[font_id] if 0 <= font_id < len(fonts) else {},
+            "fill": fills[fill_id] if 0 <= fill_id < len(fills) else {},
+            "numberFormat": number_format,
+            "alignment": cell_format.get("alignment", {}),
+            "protection": cell_format.get("protection", {}),
+        }
 
     def _read_comments(self, sheet_part: str) -> list[dict[str, str]]:
         relationships = self._relationships(sheet_part)
@@ -325,6 +587,19 @@ class WorkbookPackage:
             if column.get("hidden") in {"1", "true"}
         ]
         comments = self._read_comments(sheet.part)
+        conditional_formatting = []
+        for item in root.findall("m:conditionalFormatting", NS):
+            rules = []
+            for rule in item.findall("m:cfRule", NS):
+                rules.append({
+                    "type": rule.get("type", ""),
+                    "priority": int(rule.get("priority", "0")),
+                    "dxfId": int(rule.get("dxfId")) if rule.get("dxfId") is not None else None,
+                    "operator": rule.get("operator"),
+                    "stopIfTrue": rule.get("stopIfTrue") in {"1", "true"},
+                    "formulas": [formula.text or "" for formula in rule.findall("m:formula", NS)],
+                })
+            conditional_formatting.append({"ranges": item.get("sqref", ""), "rules": rules})
         inventory: dict[str, Any] = {
             "name": sheet.name,
             "state": sheet.state,
@@ -352,15 +627,24 @@ class WorkbookPackage:
             ),
             "relationships": relationships,
             "styleUsage": dict(Counter(str(cell["style"]) for cell in cells).most_common()),
+            "conditionalFormatting": conditional_formatting,
         }
         if cell_mode == "formula":
             inventory["cells"] = [cell for cell in cells if "formula" in cell]
+        elif cell_mode == "style":
+            inventory["cells"] = [
+                {"cell": cell["cell"], "styleId": cell["style"]}
+                for cell in cells
+            ]
         elif cell_mode == "all":
-            inventory["cells"] = cells
+            inventory["cells"] = [
+                {**cell, "resolvedStyle": self.resolved_style(cell["style"])}
+                for cell in cells
+            ]
         return inventory
 
     def inventory(self, cell_mode: str = "none") -> dict[str, Any]:
-        if cell_mode not in {"none", "formula", "all"}:
+        if cell_mode not in {"none", "formula", "style", "all"}:
             raise ValueError(f"Unsupported cell mode: {cell_mode}")
         defined_names = []
         for item in self.workbook_root.findall("m:definedNames/m:definedName", NS):
@@ -410,6 +694,7 @@ class WorkbookPackage:
                 "definedNames": defined_names,
                 "calculation": dict(calculation.attrib) if calculation is not None else {},
                 "calcChainCellCount": calc_chain_count,
+                "styleCatalog": self.style_catalog,
             },
             "sheets": sheet_inventories,
         }

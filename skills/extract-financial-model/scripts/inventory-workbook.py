@@ -19,9 +19,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--out", type=Path, help="Write JSON to this path instead of stdout.")
     parser.add_argument(
         "--cells",
-        choices=("none", "formula", "all"),
+        choices=("none", "formula", "style", "all"),
         default="none",
-        help="Optionally include formula cells or every stored cell in the JSON IR.",
+        help="Optionally include formula cells, compact cell-to-style references, or every stored cell in the JSON IR.",
     )
     return parser.parse_args()
 

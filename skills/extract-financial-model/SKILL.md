@@ -28,6 +28,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
 
 2. Inventory before mapping.
    - For XLSX input, run `python3 skills/extract-financial-model/scripts/inventory-workbook.py workbook.xlsx --out inventory.json`. It reads sparse stored cells directly from OOXML and reports formulas, comments, hidden state, package links, and unsupported binary/media parts without recalculation.
+   - When font/fill conventions carry meaning, add `--cells style`. Resolve cells through the emitted theme, font, fill, number-format, alignment, and cell-format catalog; do not compare screen colors by eye or discard theme/tint metadata.
    - List sheets, tables, named ranges, hidden rows/columns/sheets, formulas, comments, and external references.
    - Identify candidate actual/estimate boundaries and model versions.
    - Record gaps in the input representation before making semantic claims.
@@ -41,6 +42,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - If grouping is ambiguous, omit the presentation metadata and create an open `presentation` unresolved item instead of inventing a polished layout. Never omit both: the validator treats an unacknowledged fallback as an error.
    - Never use a cell, row, column, block, display label, or current view as a stable object ID.
    - For a stable but complex model sheet, prefer `extract-mapped-workbook.py` plus a private explicit map over embedding company-specific branches in the reusable extractor.
+   - Put workbook-specific style meanings in ordered `styleSemantics.rules` in the private map. Treat rule matches as extraction evidence, keep formulas `derived`, and emit an actuality warning when style meaning conflicts with the mapped period.
 
 4. Translate calculations.
    - Preserve every original formula.

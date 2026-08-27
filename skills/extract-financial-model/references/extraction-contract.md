@@ -24,6 +24,8 @@ Inventory the input before producing canonical objects. At minimum capture:
 
 Never open the workbook in a mode that executes macros or refreshes external data. If the available parser drops formulas, styles, comments, or hidden state, describe the loss in the report.
 
+Preserve theme color index and tint as well as raw RGB. A workbook may encode visually similar blue text through multiple theme colors and direct RGB values. Keep cell-to-style references separate from the reusable style catalog so the inventory stays compact.
+
 ## 2. Stable identity
 
 Use lowercase snake-case IDs with a semantic namespace, for example:
@@ -60,6 +62,8 @@ Map input concepts as follows:
 | Explicit worksheet section and metric order | `TablePresentation` | Preserve a lean, non-canonical table grouping with ordered metric IDs and the source range. |
 
 Do not add a `calculated_from` relationship when the same edge is derivable from a transformation's dependencies.
+
+Workbook-specific formatting conventions belong in the private extraction map, not the canonical schema. Apply ordered style rules only as reviewable evidence. Formula presence takes precedence over a style-implied value type: keep the observation `derived` and retain the style role alongside it. If a rule expects actual or estimate status and the mapped period disagrees, create an unresolved item instead of silently overriding actuality.
 
 ### Table presentation metadata
 
