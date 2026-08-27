@@ -234,6 +234,8 @@ export async function reviewPreview(viewerDirectory, extraction) {
       : null;
     let attentionQueue = "not-applicable";
     let attentionQueueScreenshot;
+    let attentionDetail = "not-applicable";
+    let attentionDetailScreenshot;
     if (await warningStatus.count() > 0) {
       await warningStatus.click();
       const attentionCenter = desktop.getByTestId("attention-center");
@@ -245,11 +247,36 @@ export async function reviewPreview(viewerDirectory, extraction) {
       attentionQueueScreenshot = await capture(
         desktop,
         reviewDirectory,
-        "04-attention-queue",
+        "05-attention-queue",
         captures,
       );
-      await attentionCenter.getByLabel("Close review queue").click();
+      const firstAttentionItem = attentionCenter.locator(".attention-item").first();
+      const attentionLevel = await firstAttentionItem.getAttribute("data-attention-level");
+      await firstAttentionItem.click();
       await attentionCenter.waitFor({ state: "hidden" });
+      const detailPanel = desktop.getByTestId("detail-panel");
+      const guidance = detailPanel.getByTestId("attention-guidance");
+      await guidance.waitFor({ state: "visible" });
+      if (await guidance.getAttribute("data-guidance-complete") !== "true") {
+        throw new Error("Current extraction attention detail contains incomplete guidance");
+      }
+      const confirmButton = guidance.getByRole("button", { name: "Confirm interpretation" });
+      if (attentionLevel === "action_required" && await confirmButton.count() > 0) {
+        throw new Error("Action-required attention exposed a confirmation control");
+      }
+      if (attentionLevel === "needs_review" && await confirmButton.count() === 0) {
+        throw new Error("Documented needs-review attention omitted its confirmation control");
+      }
+      attentionDetail = "passed";
+      await desktop.waitForTimeout(250);
+      attentionDetailScreenshot = await capture(
+        desktop,
+        reviewDirectory,
+        "06-attention-detail",
+        captures,
+      );
+      await detailPanel.getByLabel("Clear selection").click();
+      await detailPanel.waitFor({ state: "hidden" });
     }
 
     let unresolvedCue = "not-applicable";
@@ -269,7 +296,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
       unresolvedScreenshot = await capture(
         desktop,
         reviewDirectory,
-        "05-unresolved-review",
+        "07-unresolved-review",
         captures,
       );
     }
@@ -284,7 +311,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
     if (dimensions.scrollWidth > dimensions.clientWidth + 1) {
       throw new Error(`Mobile document overflows horizontally: ${dimensions.scrollWidth}px > ${dimensions.clientWidth}px`);
     }
-    const mobileScreenshot = await capture(mobile, reviewDirectory, "05-table-mobile", captures);
+    const mobileScreenshot = await capture(mobile, reviewDirectory, "08-table-mobile", captures);
     const tableWrap = mobile.locator(".financial-table-wrap");
     const scrollResult = await tableWrap.evaluate((element) => {
       const maximum = element.scrollWidth - element.clientWidth;
@@ -295,7 +322,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
       throw new Error("Mobile table has hidden columns but cannot scroll horizontally");
     }
     const mobileScrolledScreenshot = scrollResult.maximum > 0
-      ? await capture(mobile, reviewDirectory, "06-table-mobile-right-edge", captures)
+      ? await capture(mobile, reviewDirectory, "09-table-mobile-right-edge", captures)
       : undefined;
     await tableWrap.evaluate((element) => { element.scrollLeft = 0; });
     await mobile.locator(".value-button").first().click();
@@ -304,7 +331,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
     const mobileInspectorScreenshot = await capture(
       mobile,
       reviewDirectory,
-      "07-mobile-inspector",
+      "10-mobile-inspector",
       captures,
     );
 
@@ -322,6 +349,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
       result: "automated-checks-passed-visual-judgment-required",
       checks: {
         browserConsole: "passed",
+        attentionDetail,
         attentionQueue,
         cellInspector: "passed",
         dependencyGraph,
@@ -341,6 +369,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
         derivedScreenshot,
         graphScreenshot,
         attentionQueueScreenshot,
+        attentionDetailScreenshot,
         unresolvedScreenshot,
         mobileScreenshot,
         mobileScrolledScreenshot,

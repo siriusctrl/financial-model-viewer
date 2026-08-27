@@ -127,6 +127,7 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
                 className={`attention-item attention-item--${projection.item.attentionLevel}`}
                 onClick={() => onNavigate(projection)}
                 data-attention-id={projection.item.id}
+                data-attention-level={projection.item.attentionLevel}
               >
                 <span className="attention-item-index">
                   {String(index + 1).padStart(2, "0")}

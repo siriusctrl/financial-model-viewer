@@ -220,10 +220,18 @@ class MappedWorkbookExtractor:
 
     def _unresolved(self, item: dict[str, Any]) -> None:
         canonical = deepcopy(item)
-        canonical["nextAction"] = canonical.pop(
-            "analystQuestion",
-            canonical.get("nextAction"),
-        )
+        legacy_next_action = canonical.pop("analystQuestion", None)
+        if (
+            legacy_next_action is not None
+            and canonical.get("nextAction") is not None
+            and canonical["nextAction"] != legacy_next_action
+        ):
+            raise ValueError(
+                f"Attention item {canonical.get('id', '<unknown>')} provides conflicting "
+                "nextAction and legacy analystQuestion values"
+            )
+        if legacy_next_action is not None:
+            canonical.setdefault("nextAction", legacy_next_action)
         for field in ("currentTreatment", "impact", "nextAction"):
             value = canonical.get(field)
             if not isinstance(value, str) or not value.strip():

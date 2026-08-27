@@ -235,18 +235,6 @@ export class ModelDatabaseQueries {
     return this.objects.get(targetId);
   }
 
-  isOpaqueFormulaAction(itemId: string): boolean {
-    const item = this.database.unresolvedItems.find((candidate) => candidate.id === itemId);
-    return Boolean(
-      item?.category === "formula" &&
-      this.database.transformations.some(
-        (transformation) =>
-          transformation.status === "opaque" &&
-          (item.targetId === transformation.id || item.targetId === transformation.outputMetricId),
-      ),
-    );
-  }
-
   getModelOverview(modelId: string): ModelOverviewProjection {
     const model = this.getModel(modelId);
     const entity = this.entities.get(model.primaryEntityId);

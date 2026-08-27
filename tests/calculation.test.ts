@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import sampleJson from "../examples/sample-model-db.json";
 import {
+  confirmReviewItem,
   editObservationValue,
-  setUnresolvedItemStatus,
 } from "../src/model-db/calculation";
 import { ModelDatabaseQueries } from "../src/model-db/queries";
 import type { ModelDatabase } from "../src/model-db/types";
@@ -77,60 +77,41 @@ describe("local model editing", () => {
     )).toThrow("Formula cells are read-only");
   });
 
-  it("resolves an attention item without mutating the input database", () => {
-    const next = setUnresolvedItemStatus(
+  it("confirms a documented review without mutating the input database", () => {
+    const next = confirmReviewItem(
       sample,
       "unresolved_harbor_provision_label",
-      "resolved",
     );
 
     expect(next.unresolvedItems[0].status).toBe("resolved");
     expect(sample.unresolvedItems[0].status).toBe("open");
+    expect(next.provenanceRecords.find(
+      (record) => record.targetId === "unresolved_harbor_provision_label",
+    )?.reviewStatus).toBe("confirmed");
     expect(new ModelDatabaseQueries(next).getAttentionItems()).toHaveLength(0);
     expect(() => assertValidModelDatabase(next as ModelDatabase)).not.toThrow();
   });
 
-  it("does not let the viewer dismiss reviews or clear required actions", () => {
-    expect(() => setUnresolvedItemStatus(
-      sample,
+  it("rejects actions, closed reviews, and undocumented legacy reviews", () => {
+    const action = structuredClone(sample) as ModelDatabase;
+    action.unresolvedItems[0].attentionLevel = "action_required";
+    expect(() => confirmReviewItem(
+      action,
       "unresolved_harbor_provision_label",
-      "dismissed",
-    )).toThrow("cannot be dismissed in the viewer");
+    )).toThrow("Only open needs-review items");
 
-    const database = structuredClone(sample) as ModelDatabase;
-    database.unresolvedItems[0].attentionLevel = "action_required";
-    expect(() => setUnresolvedItemStatus(
-      database,
+    const closed = structuredClone(sample) as ModelDatabase;
+    closed.unresolvedItems[0].status = "resolved";
+    expect(() => confirmReviewItem(
+      closed,
       "unresolved_harbor_provision_label",
-      "resolved",
-    )).toThrow("Action-required items stay open");
-  });
+    )).toThrow("Only open needs-review items");
 
-  it("keeps an opaque formula action open until translation succeeds", () => {
-    const database = structuredClone(sample) as ModelDatabase;
-    const transformation = database.transformations.find(
-      (candidate) => candidate.id === "transformation_northstar_gross_profit",
-    );
-    expect(transformation).toBeDefined();
-    transformation!.status = "opaque";
-    database.unresolvedItems.push({
-      id: "unresolved_northstar_gross_profit_formula",
-      modelId: "model_northstar_cloud",
-      category: "formula",
-      description: "Canonical formula translation is incomplete.",
-      currentTreatment: "The cached value remains preview-only.",
-      impact: "Canonical formula lineage is unavailable.",
-      nextAction: "Translate the formula and rerun extraction.",
-      targetId: transformation!.outputMetricId,
-      sourceArtifactId: "artifact_northstar_workbook",
-      attentionLevel: "action_required",
-      status: "open",
-    });
-
-    expect(() => setUnresolvedItemStatus(
-      database,
-      "unresolved_northstar_gross_profit_formula",
-      "dismissed",
-    )).toThrow("Opaque formula actions stay open");
+    const legacy = structuredClone(sample) as ModelDatabase;
+    delete legacy.unresolvedItems[0].currentTreatment;
+    expect(() => confirmReviewItem(
+      legacy,
+      "unresolved_harbor_provision_label",
+    )).toThrow("need current treatment, impact, and next action");
   });
 });

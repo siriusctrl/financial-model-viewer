@@ -10,9 +10,11 @@ This file is the operating map for agents working in this repository. Keep produ
 - `src/model-db/calculation.ts`: exact observation input/reverse-dependency resolution, local value mutation, and deterministic downstream formula propagation.
 - `src/model-db/validate.ts`: deterministic schema, reference, type, cycle, uniqueness, and provenance checks.
 - `src/model-db/queries.ts`: visualization-neutral query layer. UI code consumes projections from here.
+- `src/model-db/attention.ts`: shared domain guard for complete attention guidance.
 - `tablePresentations` in `src/model-db/schema.ts`: optional non-canonical table sections and metric order captured during extraction.
 - `src/visualizations/`: table-first financial model viewer and optional dependency graph projection.
-- `src/components/ObjectDetailPanel.tsx`: dismissible slide-over for object/property inspection, local value edits, reverse lineage, and attention resolution.
+- `src/components/ObjectDetailPanel.tsx`: dismissible slide-over for object/property inspection, local value edits, and reverse lineage.
+- `src/components/AttentionGuidance.tsx`: action/review explanation and guarded review confirmation.
 - `src/components/AttentionCenter.tsx`: global open-attention queue and model/source navigation.
 - `scripts/generate-schema.ts`: generates `schema/model-db.schema.json` from `schema.ts`.
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
@@ -37,7 +39,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - Derive dependency edges from parsed transformations. Do not store duplicate `calculated_from` relationships.
 - Expand defensible referenced-cell mappings before preserving a formula as `opaque`; retain its original formula and workbook materialized value, and keep an open `action_required` formula item until canonical translation succeeds.
 - Every extracted canonical object requires provenance, confidence, review status, source artifact, and extraction run.
-- Every open attention item in a new extraction package must state `currentTreatment`, `impact`, and `nextAction`. Review items may be confirmed in the viewer; action-required items may not be manually cleared.
+- Every attention item in a new extraction package must state `currentTreatment`, `impact`, and `nextAction`. Only open `needs_review` items with all three fields may be confirmed in the viewer; action-required and incomplete legacy items may not be manually cleared.
 - Treat style and position as extraction signals only. Accepted mappings have no open issue; reversible assumptions use `needs_review`; blocked semantic choices or unusable source values use `action_required`.
 - Visualizations consume `ModelDatabaseQueries`; do not assemble pages directly from JSON arrays.
 - Keep the viewer statically buildable and company-agnostic.

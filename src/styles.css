@@ -1589,6 +1589,16 @@ select:focus-visible,
   font-size: 9px;
 }
 
+.attention-decision-lock--legacy {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.attention-decision-lock--legacy span,
+.attention-decision-lock--legacy strong {
+  color: var(--review-ink);
+}
+
 .attention-confirmation {
   display: grid;
   gap: 8px;

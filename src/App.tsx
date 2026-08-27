@@ -4,8 +4,8 @@ import { Icon } from "./components/Icon";
 import { ObjectDetailPanel } from "./components/ObjectDetailPanel";
 import { defaultDatabase } from "./data/database";
 import {
+  confirmReviewItem,
   editObservationValue,
-  setUnresolvedItemStatus,
   type ObservationEditResult,
 } from "./model-db/calculation";
 import { parseModelDatabaseJson } from "./model-db/import";
@@ -316,8 +316,8 @@ export default function App() {
     return result;
   };
 
-  const confirmAttentionItem = (itemId: string) => {
-    setDatabase(setUnresolvedItemStatus(database, itemId, "resolved"));
+  const confirmReview = (itemId: string) => {
+    setDatabase(confirmReviewItem(database, itemId));
     setDraftTransactions((count) => count + 1);
     if (selectedTargetId === itemId) {
       setSelectedTargetId(null);
@@ -545,7 +545,7 @@ export default function App() {
           onSelectTarget={selectObservation}
           onFocusGraph={focusGraph}
           onUpdateObservation={updateObservationValue}
-          onConfirmAttention={confirmAttentionItem}
+          onConfirmReview={confirmReview}
         />
       </div>
     </div>

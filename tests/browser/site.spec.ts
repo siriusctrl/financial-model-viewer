@@ -234,7 +234,7 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
   await expect(lineage).toContainText("Opaque workbook formula");
   await expect(lineage).toContainText("Not translated (opaque)");
   await expect(lineage).not.toContainText("Derived from 0 inputs");
-  await expect(page.getByTestId("opaque-action-lock")).toContainText(
+  await expect(page.getByTestId("attention-guidance")).toContainText(
     "Translate the workbook formula and rerun extraction",
   );
   const inspector = page.getByTestId("detail-panel");
@@ -264,9 +264,11 @@ test("confirms a review interpretation from the selected cell", async ({ page })
   await page.getByLabel("Active model").selectOption("model_harbor_national");
   await page.getByTitle(/obs_harbor_provision_fy2025/).click();
   const inspector = page.getByTestId("detail-panel");
-  await expect(inspector).toContainText("Current treatment");
-  await expect(inspector).toContainText("Why it matters");
-  await expect(inspector).toContainText("What to check");
+  await expect(inspector).toContainText("The row is currently presented as Provision for credit losses.");
+  await expect(inspector).toContainText(
+    "If LLP means something else, this row's semantic label and relationships are wrong; the source values are unchanged.",
+  );
+  await expect(inspector).toContainText("Confirm that LLP means provision for credit losses at Model!A14.");
   await inspector.getByRole("button", { name: "Confirm interpretation" }).click();
 
   await expect(page.getByTestId("attention-trigger")).toHaveCount(0);
@@ -486,6 +488,12 @@ test("surfaces an explicitly acknowledged presentation fallback", async ({ page 
   await expect(page.getByTestId("import-notice")).toContainText("2 items to review");
   await expect(page.locator(".validation-status")).toHaveText("2 items to review");
   await expect(page.getByText("Source-order fallback")).toBeVisible();
+  await page.getByTestId("attention-trigger").click();
+  await page.locator('[data-attention-id="unresolved_northstar_table_presentation"]').click();
+  const inspector = page.getByTestId("detail-panel");
+  await expect(inspector).toContainText("Confirmation unavailable");
+  await expect(inspector).toContainText("This older dataset does not state how the item is currently treated.");
+  await expect(inspector.getByRole("button", { name: "Confirm interpretation" })).toHaveCount(0);
 });
 
 test("keeps the current preview when an uploaded file is malformed", async ({ page }) => {

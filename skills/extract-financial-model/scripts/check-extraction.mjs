@@ -34,6 +34,10 @@ function fail(message) {
   process.exitCode = 1;
 }
 
+function normalizeWhitespace(value) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function resolveArtifacts(arguments_) {
   if (arguments_.length === 0 || arguments_.includes("--help") || arguments_.includes("-h")) {
     printUsage();
@@ -147,11 +151,11 @@ function checkAttentionGuidance(databasePath) {
 
   try {
     const database = JSON.parse(readFileSync(databasePath, "utf8"));
-    const openItems = Array.isArray(database.unresolvedItems)
-      ? database.unresolvedItems.filter((item) => item?.status === "open")
+    const attentionItems = Array.isArray(database.unresolvedItems)
+      ? database.unresolvedItems
       : [];
     let valid = true;
-    for (const item of openItems) {
+    for (const item of attentionItems) {
       for (const field of ["currentTreatment", "impact", "nextAction"]) {
         if (typeof item?.[field] !== "string" || item[field].trim().length === 0) {
           fail(`${databasePath} attention item ${item?.id ?? "<unknown>"} must provide non-empty ${field}.`);
@@ -161,7 +165,7 @@ function checkAttentionGuidance(databasePath) {
     }
     if (valid) {
       console.log(`VALID ${databasePath} attention guidance`);
-      console.log(`openAttentionItems=${openItems.length}`);
+      console.log(`attentionItems=${attentionItems.length}`);
     }
     return valid;
   } catch (cause) {
@@ -234,7 +238,11 @@ function checkReport(reportPath, databasePath) {
         ? database.unresolvedItems
             .filter((item) => item?.status === "open" && typeof item.id === "string")
         : [];
+      const attentionItems = Array.isArray(database.unresolvedItems)
+        ? database.unresolvedItems.filter((item) => typeof item?.id === "string")
+        : [];
       const reportLines = report.split(/\r?\n/);
+      const normalizedReport = normalizeWhitespace(report);
       for (const item of openUnresolvedItems) {
         const itemLines = reportLines.filter((line) => line.includes(item.id));
         if (itemLines.length === 0) {
@@ -248,6 +256,19 @@ function checkReport(reportPath, databasePath) {
         if (!itemLines.some((line) => line.includes(label))) {
           fail(`${reportPath} must label ${item.id} as ${label}.`);
           valid = false;
+        }
+      }
+      for (const item of attentionItems) {
+        for (const field of ["description", "currentTreatment", "impact", "nextAction"]) {
+          const value = item[field];
+          if (
+            typeof value === "string"
+            && value.trim()
+            && !normalizedReport.includes(normalizeWhitespace(value))
+          ) {
+            fail(`${reportPath} does not preserve ${field} for attention item ${item.id}.`);
+            valid = false;
+          }
         }
       }
     } catch (cause) {

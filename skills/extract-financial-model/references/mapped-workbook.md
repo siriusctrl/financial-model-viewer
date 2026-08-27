@@ -22,7 +22,7 @@ Use `format: financial-model-workbook-map@0.2` for new maps. Version `0.1` remai
 - optional canonical expression/dependencies; use `canonicalExpressions` keyed by period type when annual and quarterly formulas require different lag semantics;
 - the evidence supporting the actual/estimate boundary and any open attention items.
 
-Every mapped open attention item must include `description`, `currentTreatment`, `impact`, and `nextAction`. The extractor preserves these fields in `model-db.json` and fails instead of generating a vague default. `analystQuestion` remains accepted only as a legacy alias for `nextAction`; new maps must use `nextAction`.
+Every mapped attention item must include `description`, `currentTreatment`, `impact`, and `nextAction`. The extractor preserves these fields in `model-db.json` and fails instead of generating a vague default. `analystQuestion` remains accepted only as a legacy alias for `nextAction`; new maps must use `nextAction`. If both fields are present they must match, so migration cannot silently override the canonical instruction.
 
 Grid and explicit-cell metrics may coexist. Every emitted metric still belongs to exactly one ordered presentation section; presentation order does not need to mirror source-cell placement.
 

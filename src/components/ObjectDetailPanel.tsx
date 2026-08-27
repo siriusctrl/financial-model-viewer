@@ -13,6 +13,7 @@ import type {
   SourceLocator,
   UnresolvedItem,
 } from "../model-db/types";
+import { AttentionGuidance } from "./AttentionGuidance";
 
 type Props = {
   targetId: string | null;
@@ -24,7 +25,7 @@ type Props = {
     observationId: string,
     value: ScalarValue,
   ) => ObservationEditResult;
-  onConfirmAttention: (itemId: string) => void;
+  onConfirmReview: (itemId: string) => void;
 };
 
 type InspectorSide = "left" | "right";
@@ -103,7 +104,7 @@ export function ObjectDetailPanel({
   onSelectTarget,
   onFocusGraph,
   onUpdateObservation,
-  onConfirmAttention,
+  onConfirmReview,
 }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const [displayTargetId, setDisplayTargetId] = useState(targetId);
@@ -160,91 +161,21 @@ export function ObjectDetailPanel({
       {observation && displayTargetId ? (
         <CellDetail
           detail={queries.getObservationDetail(observation.id)}
-          queries={queries}
           onClose={onClose}
           onSelectTarget={onSelectTarget}
           onFocusGraph={onFocusGraph}
           onUpdateObservation={onUpdateObservation}
-          onConfirmAttention={onConfirmAttention}
+          onConfirmReview={onConfirmReview}
         />
       ) : displayTargetId ? (
         <ObjectDetail
           targetId={displayTargetId}
           queries={queries}
           onClose={onClose}
-          onConfirmAttention={onConfirmAttention}
+          onConfirmReview={onConfirmReview}
         />
       ) : null}
     </aside>
-  );
-}
-
-function attentionGuidance(item: UnresolvedItem) {
-  const isAction = item.attentionLevel === "action_required";
-  return {
-    currentTreatment: item.currentTreatment ?? (isAction
-      ? "The database keeps this item incomplete instead of inventing a value or interpretation."
-      : "The extracted interpretation remains active while this review stays open."),
-    impact: item.impact ?? "The affected model context may be incorrect until this item is checked.",
-    nextAction: item.nextAction ?? (isAction
-      ? "Fix the source or extraction, then re-import the validated database."
-      : "Compare the interpretation with the source and confirm it only if it is correct."),
-  };
-}
-
-function AttentionGuidance({
-  item,
-  locked,
-  onConfirmAttention,
-}: {
-  item: UnresolvedItem;
-  locked: boolean;
-  onConfirmAttention: Props["onConfirmAttention"];
-}) {
-  const guidance = attentionGuidance(item);
-  const isAction = item.attentionLevel === "action_required";
-  return (
-    <div
-      className={`attention-guidance attention-guidance--${item.attentionLevel}`}
-      data-testid={locked ? "opaque-action-lock" : "attention-guidance"}
-    >
-      <dl>
-        <div>
-          <dt>Current treatment</dt>
-          <dd>{guidance.currentTreatment}</dd>
-        </div>
-        <div>
-          <dt>Why it matters</dt>
-          <dd>{guidance.impact}</dd>
-        </div>
-        <div>
-          <dt>{isAction ? "Required next step" : "What to check"}</dt>
-          <dd>{guidance.nextAction}</dd>
-        </div>
-      </dl>
-      {isAction ? (
-        <div className="attention-decision-lock">
-          <Icon name="lock" size={13} />
-          <span>
-            <strong>Cannot be cleared in the viewer</strong>
-            Complete the step above and re-import the extraction.
-          </span>
-        </div>
-      ) : (
-        <div className="attention-confirmation">
-          <p>
-            Confirm only if the current treatment matches your understanding of the source.
-            Otherwise leave this item open.
-          </p>
-          <button
-            className="confirm-interpretation-button"
-            onClick={() => onConfirmAttention(item.id)}
-          >
-            <Icon name="check" size={13} /> Confirm interpretation
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -376,20 +307,18 @@ function ReverseLineage({
 
 function CellDetail({
   detail,
-  queries,
   onClose,
   onSelectTarget,
   onFocusGraph,
   onUpdateObservation,
-  onConfirmAttention,
+  onConfirmReview,
 }: {
   detail: ObservationDetailProjection;
-  queries: ModelDatabaseQueries;
   onClose: () => void;
   onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
   onUpdateObservation: Props["onUpdateObservation"];
-  onConfirmAttention: Props["onConfirmAttention"];
+  onConfirmReview: Props["onConfirmReview"];
 }) {
   const attentionGroups = [
     {
@@ -458,8 +387,7 @@ function CellDetail({
                       </div>
                       <AttentionGuidance
                         item={item}
-                        locked={queries.isOpaqueFormulaAction(item.id)}
-                        onConfirmAttention={onConfirmAttention}
+                        onConfirmReview={onConfirmReview}
                       />
                     </div>
                   ))}
@@ -576,12 +504,12 @@ function ObjectDetail({
   targetId,
   queries,
   onClose,
-  onConfirmAttention,
+  onConfirmReview,
 }: {
   targetId: string;
   queries: ModelDatabaseQueries;
   onClose: () => void;
-  onConfirmAttention: Props["onConfirmAttention"];
+  onConfirmReview: Props["onConfirmReview"];
 }) {
   const object = queries.getObject(targetId);
   const record = objectRecord(object);
@@ -590,7 +518,6 @@ function ObjectDetail({
     : record.attentionLevel === "needs_review"
       ? "needs_review"
       : null;
-  const opaqueFormulaAction = queries.isOpaqueFormulaAction(targetId);
   const attentionItem = attentionLevel ? (object as UnresolvedItem) : undefined;
   const fields = Object.entries(record).filter(
     ([key, value]) => ![
@@ -630,8 +557,7 @@ function ObjectDetail({
           <section className="attention-resolution">
             <AttentionGuidance
               item={attentionItem}
-              locked={opaqueFormulaAction}
-              onConfirmAttention={onConfirmAttention}
+              onConfirmReview={onConfirmReview}
             />
           </section>
         )}

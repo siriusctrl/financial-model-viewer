@@ -8,6 +8,7 @@ import {
   ProvenanceRecordSchema,
   UnresolvedItemSchema,
 } from "./schema";
+import { hasCompleteAttentionGuidance } from "./attention";
 import type {
   Metric,
   ModelDatabase,
@@ -410,38 +411,26 @@ export function editObservationValue(
   };
 }
 
-export function setUnresolvedItemStatus(
+export function confirmReviewItem(
   database: ModelDatabase,
   itemId: string,
-  status: "resolved" | "dismissed",
 ): ModelDatabase {
+  const current = database.unresolvedItems.find((candidate) => candidate.id === itemId);
+  if (!current) throw new Error(`Unknown unresolved item ${itemId}`);
+  if (current.status !== "open" || current.attentionLevel !== "needs_review") {
+    throw new Error("Only open needs-review items can be confirmed in the viewer");
+  }
+  if (!hasCompleteAttentionGuidance(current)) {
+    throw new Error("Review items need current treatment, impact, and next action before confirmation");
+  }
+
   const next = structuredClone(database) as ModelDatabase;
   const item = next.unresolvedItems.find((candidate) => candidate.id === itemId);
   if (!item) throw new Error(`Unknown unresolved item ${itemId}`);
-  const blocksOpaqueFormula = item.category === "formula" && next.transformations.some(
-    (transformation) =>
-      transformation.status === "opaque" &&
-      (item.targetId === transformation.id || item.targetId === transformation.outputMetricId),
-  );
-  if (blocksOpaqueFormula) {
-    throw new Error(
-      "Opaque formula actions stay open until a replay-checked canonical translation succeeds",
-    );
-  }
-  if (status === "dismissed") {
-    throw new Error(
-      "Attention items cannot be dismissed in the viewer. Confirm a review interpretation or fix an action and re-import.",
-    );
-  }
-  if (item.attentionLevel === "action_required") {
-    throw new Error(
-      "Action-required items stay open until the stated source or extraction change is completed",
-    );
-  }
-  item.status = status;
+  item.status = "resolved";
   for (const provenance of next.provenanceRecords) {
     if (provenance.targetId === itemId) {
-      provenance.reviewStatus = status === "resolved" ? "confirmed" : "rejected";
+      provenance.reviewStatus = "confirmed";
     }
   }
   const parsedItem = UnresolvedItemSchema.safeParse(item);

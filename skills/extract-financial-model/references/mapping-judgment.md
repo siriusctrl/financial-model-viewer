@@ -127,6 +127,6 @@ An extraction iteration is ready for preview when:
 - every blocked decision is `action_required` and no disputed value was invented;
 - the extraction run uses `completed_with_issues` while any attention item remains open;
 - the report labels every open item as `NEEDS REVIEW` or `ACTION REQUIRED`.
-- every open item carries non-empty `currentTreatment`, `impact`, and `nextAction` fields in the database.
+- every attention item carries non-empty `currentTreatment`, `impact`, and `nextAction` fields in the database.
 
 Previewing a dataset with action-required items is allowed so the issue can be inspected visually. Do not describe the extraction as complete until those items are resolved or dismissed with evidence.

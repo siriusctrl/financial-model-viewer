@@ -551,6 +551,22 @@ class WorkbookToolTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "non-empty currentTreatment"):
                 MappedWorkbookExtractor(workbook, incomplete_attention_mapping).extract()
 
+            conflicting_attention_mapping = deepcopy(mapping())
+            conflicting_attention_mapping["unresolvedItems"] = [{
+                "id": "unresolved_conflicting_next_action",
+                "modelId": "model_test",
+                "category": "other",
+                "description": "A review item with conflicting migration fields.",
+                "currentTreatment": "The mapped value remains visible.",
+                "impact": "The interpretation may be wrong.",
+                "nextAction": "Use the canonical instruction.",
+                "analystQuestion": "Use the legacy instruction.",
+                "status": "open",
+                "attentionLevel": "needs_review",
+            }]
+            with self.assertRaisesRegex(ValueError, "conflicting nextAction"):
+                MappedWorkbookExtractor(workbook, conflicting_attention_mapping).extract()
+
             invalid_mapping = deepcopy(mapping())
             invalid_mapping["styleConvention"] = "configurable-colors@0.1"
             with self.assertRaisesRegex(ValueError, "Unsupported styleConvention"):

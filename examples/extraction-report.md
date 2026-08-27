@@ -61,7 +61,7 @@ All supported formulas preserve a representative original Excel formula and a pa
 
 ## Unresolved mappings
 
-NEEDS REVIEW — `unresolved_harbor_provision_label`: the source-style label `LLP` is mapped to “Provision for credit losses,” but the representative source contains no explicit definition. The object remains unreviewed with 64% confidence.
+NEEDS REVIEW — `unresolved_harbor_provision_label`: The workbook label 'LLP' was mapped to provision for credit losses, but the source contains no explicit definition. Current treatment: The row is currently presented as Provision for credit losses. Impact: If LLP means something else, this row's semantic label and relationships are wrong; the source values are unchanged. The object remains unreviewed with 64% confidence.
 
 ## Missing lineage
 
@@ -78,6 +78,6 @@ NEEDS REVIEW — `unresolved_harbor_provision_label` remains open and requires a
 
 ## Questions and next actions
 
-1. Does `LLP` in the bank model mean provision expense, allowance balance, or another credit metric?
+1. Confirm that LLP means provision for credit losses at Model!A14.
 2. For a real workbook, which source establishes the actual/estimate boundary when columns are not explicitly labeled?
 3. Which forecast changes have source-backed rationale outside the workbook and should become assumptions or decisions?
