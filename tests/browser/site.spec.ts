@@ -42,6 +42,47 @@ test("opens on the extracted model table and inspects a sourced cell", async ({ 
   await expect(inspector).not.toBeVisible();
 });
 
+test("sizes table columns from the active model content", async ({ page }) => {
+  await page.goto("./");
+  const table = page.locator(".financial-table");
+  const metricColumn = table.locator(".metric-column").first();
+  const periodColumn = table.locator("thead th").nth(1);
+  const initial = {
+    table: await table.evaluate((element) => element.getBoundingClientRect().width),
+    metric: await metricColumn.evaluate((element) => element.getBoundingClientRect().width),
+    period: await periodColumn.evaluate((element) => element.getBoundingClientRect().width),
+  };
+
+  expect(initial.table).toBeLessThan(650);
+  expect(initial.metric).toBeGreaterThanOrEqual(160);
+  expect(initial.period).toBeLessThanOrEqual(80);
+
+  const imported = structuredClone(sample) as ModelDatabase;
+  const metric = imported.metrics.find(
+    (candidate) => candidate.id === "metric_northstar_subscription_revenue",
+  );
+  const observation = imported.observations.find(
+    (candidate) => candidate.id === "obs_northstar_subscription_revenue_fy2022",
+  );
+  expect(metric).toBeDefined();
+  expect(observation).toBeDefined();
+  metric!.name = "Enterprise subscription revenue retention bridge";
+  observation!.value = -123_456_789;
+  await uploadJson(page, "long-metric.json", imported);
+  await expect(page.getByText(metric!.name, { exact: true })).toBeVisible();
+
+  const expandedMetric = await metricColumn.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  const expandedPeriod = await periodColumn.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  expect(expandedMetric).toBeGreaterThan(initial.metric + 50);
+  expect(expandedMetric).toBeLessThanOrEqual(300);
+  expect(expandedPeriod).toBeGreaterThan(initial.period + 20);
+  expect(expandedPeriod).toBeLessThanOrEqual(144);
+});
+
 test("edits an input, propagates formulas, and exports the local draft", async ({ page }) => {
   await page.goto("./");
   await page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/).click();

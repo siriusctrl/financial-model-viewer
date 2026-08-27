@@ -65,8 +65,10 @@
   --drawer-shadow: -24px 0 70px rgba(30, 39, 34, 0.16);
   --table-row-height: 32px;
   --table-section-height: 24px;
-  --table-metric-width: 220px;
-  --table-period-width: 96px;
+  --table-metric-min-width: 160px;
+  --table-metric-max-width: 300px;
+  --table-period-min-width: 72px;
+  --table-period-max-width: 144px;
   --mono: "DM Mono", ui-monospace, monospace;
 }
 
@@ -934,11 +936,11 @@ select:focus-visible,
 }
 
 .financial-table {
-  width: auto;
+  width: max-content;
   min-width: 0;
   border-collapse: separate;
   border-spacing: 0;
-  table-layout: fixed;
+  table-layout: auto;
   font-variant-numeric: tabular-nums;
 }
 
@@ -959,7 +961,9 @@ select:focus-visible,
   position: sticky;
   top: 0;
   z-index: 4;
-  width: var(--table-period-width);
+  width: auto;
+  min-width: var(--table-period-min-width);
+  max-width: var(--table-period-max-width);
   padding: 4px 7px;
   color: var(--muted);
   text-align: right;
@@ -989,8 +993,9 @@ select:focus-visible,
   position: sticky;
   left: 0;
   z-index: 2;
-  width: var(--table-metric-width);
-  min-width: var(--table-metric-width);
+  width: auto;
+  min-width: var(--table-metric-min-width);
+  max-width: var(--table-metric-max-width);
   text-align: left;
   background: var(--table-bg);
   box-shadow: 1px 0 0 var(--line);
@@ -1010,6 +1015,8 @@ select:focus-visible,
 }
 
 .financial-table td {
+  min-width: var(--table-period-min-width);
+  max-width: var(--table-period-max-width);
   text-align: right;
   background: var(--table-bg);
 }
@@ -1189,6 +1196,12 @@ select:focus-visible,
   color: var(--blue);
   font-size: 7px;
   font-style: normal;
+}
+
+.value-button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .value-button:hover {
@@ -2223,11 +2236,6 @@ select:focus-visible,
 
   .table-context span + span {
     padding-left: 7px;
-  }
-
-  .financial-table .metric-column {
-    width: 220px;
-    min-width: 220px;
   }
 
   .view-heading {
