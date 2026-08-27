@@ -58,6 +58,7 @@ try {
   await desktop.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
+  await desktop.waitForTimeout(200);
   await capture(desktop, "03-derived-lineage-desktop");
 
   await desktop.getByRole("button", { name: "Lineage map" }).click();
