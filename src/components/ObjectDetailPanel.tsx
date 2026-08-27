@@ -307,13 +307,27 @@ function ObjectDetail({
 }) {
   const object = queries.getObject(targetId);
   const record = objectRecord(object);
+  const attentionLevel = record.attentionLevel === "action_required"
+    ? "action_required"
+    : record.attentionLevel === "needs_review"
+      ? "needs_review"
+      : null;
   const fields = Object.entries(record).filter(
-    ([key, value]) => !["id", "name", "title", "description"].includes(key) && value !== undefined,
+    ([key, value]) => !["id", "name", "title", "description", "attentionLevel"].includes(key) && value !== undefined,
   );
   return (
     <>
-      <header className="inspector-header">
-        <div><span>Model object</span><h2>{objectLabel(object, targetId)}</h2></div>
+      <header className={`inspector-header ${attentionLevel ? `inspector-header--${attentionLevel}` : ""}`}>
+        <div>
+          <span>{attentionLevel ? "Extraction attention" : "Model object"}</span>
+          <h2>
+            {attentionLevel === "action_required"
+              ? "Action required"
+              : attentionLevel === "needs_review"
+                ? "Needs review"
+                : objectLabel(object, targetId)}
+          </h2>
+        </div>
         <button className="icon-button" onClick={onClose} aria-label="Clear selection">
           <Icon name="close" size={17} />
         </button>

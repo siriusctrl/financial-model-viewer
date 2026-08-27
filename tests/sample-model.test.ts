@@ -53,6 +53,31 @@ describe("query projections", () => {
     ).toEqual(["unresolved_harbor_provision_label"]);
   });
 
+  it("projects open attention into a navigable cross-model review queue", () => {
+    const attention = queries.getAttentionItems();
+
+    expect(attention).toHaveLength(1);
+    expect(attention[0]).toEqual(
+      expect.objectContaining({
+        targetLabel: "Provision for credit losses",
+        model: expect.objectContaining({ id: "model_harbor_national" }),
+        metric: expect.objectContaining({ id: "metric_harbor_provision" }),
+        locator: { sheet: "Model", cell: "A14" },
+      }),
+    );
+  });
+
+  it("infers an attention period from a workbook source column when possible", () => {
+    const periodSpecific = structuredClone(sample) as ModelDatabase;
+    periodSpecific.unresolvedItems[0].locator = { sheet: "Model", cell: "E14" };
+
+    const attention = new ModelDatabaseQueries(
+      assertValidModelDatabase(periodSpecific),
+    ).getAttentionItems();
+
+    expect(attention[0]?.period?.id).toBe("period_fy2025");
+  });
+
   it("derives graph edges from transformation dependencies", () => {
     const graph = queries.getDependencies({
       metricId: "metric_northstar_gross_profit",

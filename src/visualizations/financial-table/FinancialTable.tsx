@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Icon } from "../../components/Icon";
 import type { FinancialTableProjection } from "../../model-db/queries";
 import type { Metric, Observation, SourceLocator } from "../../model-db/types";
@@ -7,6 +7,11 @@ type Props = {
   projection: FinancialTableProjection;
   selectedTargetId: string | null;
   lineageInputIds: ReadonlySet<string>;
+  attentionFocus: {
+    metricId: string;
+    periodId?: string;
+    attentionLevel: "needs_review" | "action_required";
+  } | null;
   onSelectMetric: (metricId: string) => void;
   onSelectObservation: (observationId: string) => void;
 };
@@ -50,6 +55,7 @@ export function FinancialTable({
   projection,
   selectedTargetId,
   lineageInputIds,
+  attentionFocus,
   onSelectMetric,
   onSelectObservation,
 }: Props) {
@@ -91,6 +97,21 @@ export function FinancialTable({
       .find(Boolean);
     return observation?.actuality ?? "estimate";
   });
+
+  useEffect(() => {
+    if (attentionFocus) setSearch("");
+  }, [attentionFocus]);
+
+  useEffect(() => {
+    if (!attentionFocus) return;
+    const cell = document.querySelector<HTMLElement>("[data-attention-cell-focus='true']");
+    if (cell) {
+      cell.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+      return;
+    }
+    const row = document.getElementById(`metric-row-${attentionFocus.metricId}`);
+    row?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+  }, [attentionFocus, normalizedSearch, projection.model.id, projection.periods]);
 
   return (
     <section className="table-view" data-testid="financial-table-view">
@@ -153,6 +174,7 @@ export function FinancialTable({
                 periodModes={periodModes}
                 selectedTargetId={selectedTargetId}
                 lineageInputIds={lineageInputIds}
+                attentionFocus={attentionFocus}
                 onSelectMetric={onSelectMetric}
                 onSelectObservation={onSelectObservation}
               />
@@ -184,6 +206,7 @@ type TableSectionProps = {
   periodModes: string[];
   selectedTargetId: string | null;
   lineageInputIds: ReadonlySet<string>;
+  attentionFocus: Props["attentionFocus"];
   onSelectMetric: (metricId: string) => void;
   onSelectObservation: (observationId: string) => void;
 };
@@ -194,6 +217,7 @@ function TableSection({
   periodModes,
   selectedTargetId,
   lineageInputIds,
+  attentionFocus,
   onSelectMetric,
   onSelectObservation,
 }: TableSectionProps) {
@@ -218,8 +242,14 @@ function TableSection({
           : row.unresolvedItems.length > 0
             ? "needs_review"
             : null;
+        const isAttentionFocus = attentionFocus?.metricId === row.metric.id;
         return (
-          <tr key={row.metric.id} className={row.depth === 0 ? "root-metric-row" : "child-metric-row"}>
+          <tr
+            key={row.metric.id}
+            id={`metric-row-${row.metric.id}`}
+            className={`${row.depth === 0 ? "root-metric-row" : "child-metric-row"} ${isAttentionFocus ? `attention-row-focus attention-row-focus--${attentionFocus.attentionLevel}` : ""}`}
+            data-attention-focus={isAttentionFocus ? attentionFocus.attentionLevel : undefined}
+          >
             <th scope="row" className="metric-column">
               <button
                 className={`metric-label-button ${selectedTargetId === row.metric.id ? "selected" : ""}`}
@@ -262,10 +292,13 @@ function TableSection({
               const isLineageInput = observation
                 ? lineageInputIds.has(observation.id)
                 : false;
+              const isAttentionCell = isAttentionFocus
+                && attentionFocus.periodId === period.id;
               return (
                 <td
                   key={period.id}
-                  className={`${periodModes[index]} ${boundary ? "forecast-boundary" : ""}`}
+                  className={`${periodModes[index]} ${boundary ? "forecast-boundary" : ""} ${isAttentionCell ? `attention-cell-focus attention-cell-focus--${attentionFocus.attentionLevel}` : ""}`}
+                  data-attention-cell-focus={isAttentionCell ? "true" : undefined}
                 >
                   {observation ? (
                     <button

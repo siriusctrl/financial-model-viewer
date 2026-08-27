@@ -108,15 +108,48 @@ test("renders required extraction actions separately from neutral review", async
   await page.goto("./");
   const imported = structuredClone(sample) as ModelDatabase;
   imported.unresolvedItems[0].attentionLevel = "action_required";
+  imported.unresolvedItems[0].locator = { sheet: "Model", cell: "E14" };
+  imported.unresolvedItems[0].description =
+    "The FY25 provision value needs a source-backed decision before extraction can proceed.";
+  imported.provenanceRecords.find(
+    (item) => item.targetId === "unresolved_harbor_provision_label",
+  )!.locator = { sheet: "Model", cell: "E14" };
 
   await uploadJson(page, "action-required.json", imported);
-  await page.getByLabel("Active model").selectOption("model_harbor_national");
-
   await expect(page.locator(".validation-status")).toHaveText("1 action required");
+  await page.getByLabel("Search metrics").fill("revenue");
+  await page.getByTestId("attention-trigger").click();
+  const attentionCenter = page.getByTestId("attention-center");
+  await expect(attentionCenter).toContainText("Review queue");
+  await expect(attentionCenter.locator(".attention-overview-action")).toContainText("1");
+  await expect(attentionCenter).toContainText("Provision for credit losses");
+  await expect(attentionCenter).toContainText("Model!E14");
+  await attentionCenter.locator(
+    '[data-attention-id="unresolved_harbor_provision_label"]',
+  ).click();
+
+  await expect(page.getByLabel("Active model")).toHaveValue("model_harbor_national");
+  await expect(page.getByLabel("Search metrics")).toHaveValue("");
   const rowAction = page.locator(".row-warning--action_required");
   await expect(rowAction).toContainText("action");
-  await page.getByTitle(/obs_harbor_provision_fy2025/).click();
-  await expect(page.getByTestId("cell-review-warning")).toContainText("Action required");
+  await expect(page.locator('[data-attention-focus="action_required"]')).toContainText(
+    "Provision for credit losses",
+  );
+  await expect(page.locator(".attention-cell-focus--action_required")).toContainText("235.0");
+  await expect(page.getByTestId("detail-panel")).toContainText("Action required");
+  await expect(page.getByTestId("detail-panel")).toContainText("Model!E14");
+});
+
+test("persists the selected dark appearance", async ({ page }) => {
+  await page.goto("./");
+  const root = page.locator("html");
+  const initialTheme = await root.getAttribute("data-theme");
+  const nextTheme = initialTheme === "dark" ? "light" : "dark";
+
+  await page.getByLabel(`Switch to ${nextTheme} mode`).click();
+  await expect(root).toHaveAttribute("data-theme", nextTheme);
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme", nextTheme);
 });
 
 test("renders formula-derived dependency edges in the optional lineage map", async ({ page }) => {

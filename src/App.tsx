@@ -1,15 +1,20 @@
-import { type ChangeEvent, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AttentionCenter } from "./components/AttentionCenter";
 import { Icon } from "./components/Icon";
 import { ObjectDetailPanel } from "./components/ObjectDetailPanel";
-import { defaultDatabase, defaultDatabaseWarnings } from "./data/database";
+import { defaultDatabase } from "./data/database";
 import { parseModelDatabaseJson } from "./model-db/import";
-import { ModelDatabaseQueries } from "./model-db/queries";
+import {
+  ModelDatabaseQueries,
+  type AttentionItemProjection,
+} from "./model-db/queries";
 import type { ModelDatabase, Period } from "./model-db/types";
-import type { ValidationError, ValidationWarning } from "./model-db/validate";
+import type { ValidationError } from "./model-db/validate";
 import { DependencyGraph } from "./visualizations/dependency-graph/DependencyGraph";
 import { FinancialTable } from "./visualizations/financial-table/FinancialTable";
 
 type View = "table" | "graph";
+type Theme = "light" | "dark";
 
 const views: Array<{ id: View; label: string }> = [
   { id: "table", label: "Model table" },
@@ -58,11 +63,21 @@ function periodTypeLabel(type: Period["type"]): string {
   return type.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function attentionSummary(warnings: ValidationWarning[]): string {
-  const actionRequired = warnings.filter(
+function initialTheme(): Theme {
+  try {
+    const saved = window.localStorage.getItem("financial-model-viewer-theme");
+    if (saved === "light" || saved === "dark") return saved;
+  } catch {
+    // Storage can be unavailable in hardened browser contexts; system preference still works.
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function attentionSummary(items: Array<{ attentionLevel: "needs_review" | "action_required" }>): string {
+  const actionRequired = items.filter(
     (item) => item.attentionLevel === "action_required",
   ).length;
-  const needsReview = warnings.length - actionRequired;
+  const needsReview = items.length - actionRequired;
   return [
     actionRequired > 0
       ? `${actionRequired} action${actionRequired === 1 ? "" : "s"} required`
@@ -75,11 +90,9 @@ function attentionSummary(warnings: ValidationWarning[]): string {
 
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   const [database, setDatabase] = useState(defaultDatabase);
   const [datasetSource, setDatasetSource] = useState<DatasetSource>({ kind: "bundled" });
-  const [databaseWarnings, setDatabaseWarnings] = useState<ValidationWarning[]>(
-    defaultDatabaseWarnings,
-  );
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const [selectedModelId, setSelectedModelId] = useState(() => defaultModelId(defaultDatabase));
   const [selectedPeriodType, setSelectedPeriodType] = useState<Period["type"] | undefined>(() =>
@@ -87,12 +100,19 @@ export default function App() {
   );
   const [view, setView] = useState<View>("table");
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  const [attentionOpen, setAttentionOpen] = useState(false);
+  const [attentionFocus, setAttentionFocus] = useState<{
+    metricId: string;
+    periodId?: string;
+    attentionLevel: "needs_review" | "action_required";
+  } | null>(null);
   const [graphMetricId, setGraphMetricId] = useState<string | null>(() =>
     initialGraphMetric(defaultDatabase, defaultModelId(defaultDatabase)),
   );
 
   const queries = useMemo(() => new ModelDatabaseQueries(database), [database]);
   const models = queries.getModels();
+  const attentionItems = useMemo(() => queries.getAttentionItems(), [queries]);
   const periodTypes = queries.getPeriodTypes(selectedModelId);
   const table = useMemo(
     () =>
@@ -113,8 +133,8 @@ export default function App() {
       : null,
     [graphMetricId, queries],
   );
-  const actionRequiredCount = databaseWarnings.filter(
-    (item) => item.attentionLevel === "action_required",
+  const actionRequiredCount = attentionItems.filter(
+    (item) => item.item.attentionLevel === "action_required",
   ).length;
   const selectedLineageInputIds = useMemo(() => {
     if (!selectedTargetId) return new Set<string>();
@@ -129,11 +149,22 @@ export default function App() {
     );
   }, [database.observations, queries, selectedTargetId]);
 
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    try {
+      window.localStorage.setItem("financial-model-viewer-theme", theme);
+    } catch {
+      // The active theme remains valid for this tab when storage is unavailable.
+    }
+  }, [theme]);
+
   const changeModel = (modelId: string) => {
     setSelectedModelId(modelId);
     setSelectedPeriodType(initialPeriodType(database, modelId));
     setGraphMetricId(initialGraphMetric(database, modelId));
     setSelectedTargetId(null);
+    setAttentionFocus(null);
     setView("table");
   };
 
@@ -152,22 +183,48 @@ export default function App() {
     if (period && period.type !== selectedPeriodType) {
       setSelectedPeriodType(period.type);
     }
+    setAttentionFocus(null);
     setSelectedTargetId(observationId);
+  };
+
+  const selectMetric = (metricId: string) => {
+    setAttentionFocus(null);
+    setSelectedTargetId(metricId);
+  };
+
+  const navigateToAttention = (projection: AttentionItemProjection) => {
+    if (projection.model) {
+      const modelChanged = projection.model.id !== selectedModelId;
+      setSelectedModelId(projection.model.id);
+      setSelectedPeriodType(
+        projection.period?.type
+          ?? (modelChanged ? initialPeriodType(database, projection.model.id) : selectedPeriodType),
+      );
+      setGraphMetricId(initialGraphMetric(database, projection.model.id));
+    }
+    setView("table");
+    setSelectedTargetId(projection.item.id);
+    setAttentionFocus(projection.metric ? {
+      metricId: projection.metric.id,
+      periodId: projection.period?.id,
+      attentionLevel: projection.item.attentionLevel,
+    } : null);
+    setAttentionOpen(false);
   };
 
   const activateDatabase = (
     nextDatabase: ModelDatabase,
     source: DatasetSource,
-    warnings: ValidationWarning[] = [],
   ) => {
     const nextModelId = defaultModelId(nextDatabase);
     setDatabase(nextDatabase);
     setDatasetSource(source);
-    setDatabaseWarnings(warnings);
     setSelectedModelId(nextModelId);
     setSelectedPeriodType(initialPeriodType(nextDatabase, nextModelId));
     setGraphMetricId(initialGraphMetric(nextDatabase, nextModelId));
     setSelectedTargetId(null);
+    setAttentionFocus(null);
+    setAttentionOpen(false);
     setView("table");
   };
 
@@ -201,7 +258,6 @@ export default function App() {
       activateDatabase(
         result.data,
         { kind: "file", filename: file.name },
-        result.warnings,
       );
       setImportNotice({
         kind: result.stats.actionRequired > 0
@@ -227,7 +283,7 @@ export default function App() {
   };
 
   const restoreBundledDatabase = () => {
-    activateDatabase(defaultDatabase, { kind: "bundled" }, defaultDatabaseWarnings);
+    activateDatabase(defaultDatabase, { kind: "bundled" });
     setImportNotice({
       kind: "success",
       title: "Bundled dataset restored",
@@ -260,12 +316,32 @@ export default function App() {
         </label>
 
         <div className="header-actions">
-          <span className={`validation-status ${databaseWarnings.length > 0 ? "has-warning" : ""} ${actionRequiredCount > 0 ? "has-action" : databaseWarnings.length > 0 ? "has-review" : ""}`}>
-            <Icon name={databaseWarnings.length > 0 ? "warning" : "check"} size={14} />
-            {databaseWarnings.length > 0
-              ? attentionSummary(databaseWarnings)
-              : "Accepted · validated locally"}
-          </span>
+          {attentionItems.length > 0 ? (
+            <button
+              className={`validation-status attention-trigger has-warning ${actionRequiredCount > 0 ? "has-action" : "has-review"}`}
+              onClick={() => setAttentionOpen(true)}
+              aria-expanded={attentionOpen}
+              aria-controls="attention-center-title"
+              data-testid="attention-trigger"
+            >
+              <Icon name="warning" size={14} />
+              {attentionSummary(attentionItems.map((item) => item.item))}
+              <Icon name="arrow" size={12} />
+            </button>
+          ) : (
+            <span className="validation-status">
+              <Icon name="check" size={14} /> Accepted · validated locally
+            </span>
+          )}
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme((current) => current === "light" ? "dark" : "light")}
+            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+            title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          >
+            <Icon name="theme" size={15} />
+            <span>{theme === "light" ? "Dark" : "Light"}</span>
+          </button>
           <input
             ref={fileInputRef}
             className="json-file-input"
@@ -286,6 +362,13 @@ export default function App() {
           )}
         </div>
       </header>
+
+      <AttentionCenter
+        items={attentionItems}
+        open={attentionOpen}
+        onClose={() => setAttentionOpen(false)}
+        onNavigate={navigateToAttention}
+      />
 
       {importNotice && (
         <section
@@ -332,6 +415,7 @@ export default function App() {
                 onChange={(event) => {
                   setSelectedPeriodType(event.target.value as Period["type"]);
                   setSelectedTargetId(null);
+                  setAttentionFocus(null);
                 }}
               >
                 {periodTypes.map((type) => (
@@ -362,7 +446,8 @@ export default function App() {
               projection={table}
               selectedTargetId={selectedTargetId}
               lineageInputIds={selectedLineageInputIds}
-              onSelectMetric={setSelectedTargetId}
+              attentionFocus={attentionFocus}
+              onSelectMetric={selectMetric}
               onSelectObservation={selectObservation}
             />
           )}
@@ -371,8 +456,11 @@ export default function App() {
               projection={graph}
               availableMetrics={availableMetrics}
               onFocusMetric={setGraphMetricId}
-              onSelectMetric={setSelectedTargetId}
-              onSelectTransformation={setSelectedTargetId}
+              onSelectMetric={selectMetric}
+              onSelectTransformation={(targetId) => {
+                setAttentionFocus(null);
+                setSelectedTargetId(targetId);
+              }}
             />
           )}
           {view === "graph" && !graph && (

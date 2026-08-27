@@ -46,7 +46,11 @@ async function capture(page, name) {
 try {
   await waitForServer();
   const browser = await chromium.launch();
-  const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
+  const desktop = await browser.newPage({
+    viewport: { width: 1440, height: 1000 },
+    deviceScaleFactor: 1,
+    colorScheme: "light",
+  });
   await desktop.goto(baseUrl, { waitUntil: "networkidle" });
   await capture(desktop, "01-table-desktop");
 
@@ -68,9 +72,25 @@ try {
   await desktop.getByLabel("Active model").selectOption("model_harbor_national");
   await capture(desktop, "05-bank-table-desktop");
 
-  const mobile = await browser.newPage({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 1 });
+  await desktop.getByTestId("attention-trigger").click();
+  await capture(desktop, "06-review-queue-desktop");
+  await desktop.getByTestId("attention-center").getByLabel("Close review queue").click();
+
+  await desktop.getByLabel("Active model").selectOption("model_northstar_cloud");
+  await desktop.getByLabel("Switch to dark mode").click();
+  await desktop.waitForTimeout(250);
+  await capture(desktop, "07-dark-table-desktop");
+  await desktop.getByTestId("attention-trigger").click();
+  await capture(desktop, "08-dark-review-queue-desktop");
+
+  const mobile = await browser.newPage({
+    viewport: { width: 393, height: 852 },
+    deviceScaleFactor: 1,
+    colorScheme: "dark",
+  });
   await mobile.goto(baseUrl, { waitUntil: "networkidle" });
-  await capture(mobile, "06-table-mobile");
+  await mobile.waitForTimeout(250);
+  await capture(mobile, "09-dark-table-mobile");
   await browser.close();
 
   const thumbWidth = 680;

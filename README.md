@@ -21,7 +21,7 @@ This project tests a product direction. It does not replace Excel, execute workb
 - TypeScript types and portable JSON Schema come from one runtime contract.
 - A restricted expression interpreter can evaluate supported formulas without `eval` or arbitrary JavaScript.
 - A deterministic validator can report broken references, value-type mismatches, dependency cycles, duplicate points, unsupported syntax, and missing provenance with object-level repair guidance.
-- Extraction outcomes are explicit: accepted mappings proceed without an open issue, reversible assumptions appear as neutral-blue `needs_review` items, and blocked decisions or unusable source values appear as red `action_required` items. Affected metrics and source cells stay visible in the table and inspector.
+- Extraction outcomes are explicit: accepted mappings proceed without an open issue, reversible assumptions appear as neutral-blue `needs_review` items, and blocked decisions or unusable source values appear as red `action_required` items. The global review queue groups both levels, names the model and workbook locator, and jumps to the affected metric row or period cell.
 - Mixed-frequency models expose explicit annual/quarterly period views, and lagged lineage resolves within the selected period type.
 - The same query layer and frontend render a SaaS model and a structurally different bank model without company-specific UI branches.
 - A user can move from a forecast number to its metric, formula, source workbook cell, confidence, review status, and extraction run. Selecting a derived value highlights its visible direct inputs; inputs in another period view remain explicit in the inspector and can be selected to jump there.
@@ -73,6 +73,8 @@ The public and local viewers include an **Open JSON** action. Choose a `model-db
 - Files are limited to 20 MB to keep the static browser preview responsive.
 
 Reload the page or use **Restore bundled** to return to the dataset compiled into the viewer.
+
+When open attention exists, select the status in the header to open the **Review queue**. Filter Action or Review, inspect the source worksheet/cell, and select an item to switch models and reveal its issue detail. Metric-backed items scroll to and highlight the affected table row; when period provenance can be inferred, the exact period cell is outlined. The appearance control switches between the restrained light and dark palettes and persists the choice in local browser storage; model data itself is still not persisted.
 
 ## Deterministic data workflow
 
@@ -174,7 +176,7 @@ Implemented:
 - extraction skill and contract;
 - sparse read-only XLSX inventory and explicit mapped-workbook extraction;
 - validated cross-sector fixture and extraction report;
-- table-first model viewer, dependency graph, and persistent cell/property inspector;
+- table-first model viewer, dependency graph, persistent cell/property inspector, dark appearance, and navigable review queue;
 - unit, cross-sector generality, browser, responsive, and visual-proof checks;
 - static GitHub Pages deployment.
 

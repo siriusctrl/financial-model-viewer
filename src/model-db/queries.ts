@@ -118,6 +118,15 @@ export type ModelOverviewProjection = {
   unreviewedCount: number;
 };
 
+export type AttentionItemProjection = {
+  item: UnresolvedItem;
+  model?: Model;
+  metric?: Metric;
+  period?: Period;
+  locator?: SourceLocator;
+  targetLabel: string;
+};
+
 function comparePeriods(left: Period, right: Period): number {
   const leftKey = left.startDate ?? left.endDate ?? left.label;
   const rightKey = right.startDate ?? right.endDate ?? right.label;
@@ -128,6 +137,18 @@ function locatorRow(locator: SourceLocator | undefined): number | undefined {
   const address = locator?.cell ?? locator?.range?.split(":")[0];
   const match = address?.match(/\$?[A-Z]+\$?(\d+)/i);
   return match ? Number(match[1]) : undefined;
+}
+
+function locatorColumn(locator: SourceLocator | undefined): string | undefined {
+  const address = locator?.cell ?? locator?.range?.split(":")[0];
+  return address?.match(/^\$?([A-Z]+)/i)?.[1]?.toUpperCase();
+}
+
+function labelForObject(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const label = record.name ?? record.title ?? record.statement;
+  return typeof label === "string" ? label : undefined;
 }
 
 function observationMatchesScenario(
@@ -252,6 +273,97 @@ export class ModelDatabaseQueries {
         (item) => targetIds.has(item.targetId) && item.reviewStatus === "unreviewed",
       ).length,
     };
+  }
+
+  getAttentionItems(): AttentionItemProjection[] {
+    const observationPeriodsBySheetCell = new Map<string, Set<string>>();
+    const observationPeriodsBySheetColumn = new Map<string, Set<string>>();
+    for (const provenance of this.database.provenanceRecords) {
+      const observation = this.observations.get(provenance.targetId);
+      const sheet = provenance.locator?.sheet;
+      const column = locatorColumn(provenance.locator);
+      if (!observation || !sheet || !column) continue;
+      const cell = provenance.locator?.cell?.replaceAll("$", "").toUpperCase();
+      if (cell) {
+        const cellKey = `${observation.modelId}\u0000${sheet}\u0000${cell}`;
+        const cellPeriodIds = observationPeriodsBySheetCell.get(cellKey) ?? new Set<string>();
+        cellPeriodIds.add(observation.periodId);
+        observationPeriodsBySheetCell.set(cellKey, cellPeriodIds);
+      }
+      const key = `${observation.modelId}\u0000${sheet}\u0000${column}`;
+      const periodIds = observationPeriodsBySheetColumn.get(key) ?? new Set<string>();
+      periodIds.add(observation.periodId);
+      observationPeriodsBySheetColumn.set(key, periodIds);
+    }
+
+    return this.database.unresolvedItems
+      .filter((item) => item.status === "open")
+      .map((item): AttentionItemProjection => {
+        const targetObservation = item.targetId
+          ? this.observations.get(item.targetId)
+          : undefined;
+        const targetTransformation = item.targetId
+          ? this.transformations.get(item.targetId)
+          : undefined;
+        const metric = targetObservation
+          ? this.metrics.get(targetObservation.metricId)
+          : item.targetId && this.metrics.has(item.targetId)
+            ? this.metrics.get(item.targetId)
+            : targetTransformation
+              ? this.metrics.get(targetTransformation.outputMetricId)
+              : undefined;
+        const inferredModelId = item.modelId
+          ?? targetObservation?.modelId
+          ?? (item.targetId && this.models.has(item.targetId) ? item.targetId : undefined)
+          ?? (metric
+            ? this.database.observations.find(
+                (observation) => observation.metricId === metric.id,
+              )?.modelId
+            : undefined);
+        const model = inferredModelId ? this.models.get(inferredModelId) : undefined;
+        const locator = item.locator
+          ?? this.primarySourceLocator(item.id)
+          ?? (item.targetId ? this.primarySourceLocator(item.targetId) : undefined);
+        let period = targetObservation
+          ? this.periods.get(targetObservation.periodId)
+          : undefined;
+        const sourceColumn = locatorColumn(locator);
+        const sourceCell = locator?.cell?.replaceAll("$", "").toUpperCase();
+        if (!period && model && locator?.sheet && sourceCell) {
+          const candidatePeriodIds = observationPeriodsBySheetCell.get(
+            `${model.id}\u0000${locator.sheet}\u0000${sourceCell}`,
+          );
+          if (candidatePeriodIds?.size === 1) {
+            period = this.periods.get([...candidatePeriodIds][0]);
+          }
+        }
+        if (!period && model && locator?.sheet && sourceColumn) {
+          const candidatePeriodIds = observationPeriodsBySheetColumn.get(
+            `${model.id}\u0000${locator.sheet}\u0000${sourceColumn}`,
+          );
+          if (candidatePeriodIds?.size === 1) {
+            period = this.periods.get([...candidatePeriodIds][0]);
+          }
+        }
+
+        const targetLabel = targetObservation && metric && period
+          ? `${metric.name} · ${period.label}`
+          : metric?.name
+            ?? (item.targetId ? labelForObject(this.objects.get(item.targetId)) : undefined)
+            ?? (model ? `${model.name} model` : "Workbook-level issue");
+        return { item, model, metric, period, locator, targetLabel };
+      })
+      .sort((left, right) => {
+        const levelOrder = left.item.attentionLevel === right.item.attentionLevel
+          ? 0
+          : left.item.attentionLevel === "action_required" ? -1 : 1;
+        return levelOrder
+          || (left.model?.name ?? "").localeCompare(right.model?.name ?? "")
+          || (left.locator?.sheet ?? "").localeCompare(right.locator?.sheet ?? "")
+          || (locatorRow(left.locator) ?? Number.MAX_SAFE_INTEGER)
+            - (locatorRow(right.locator) ?? Number.MAX_SAFE_INTEGER)
+          || left.item.id.localeCompare(right.item.id);
+      });
   }
 
   getMetricSeries(query: MetricSeriesQuery): MetricSeriesPoint[] {

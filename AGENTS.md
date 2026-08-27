@@ -12,6 +12,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `tablePresentations` in `src/model-db/schema.ts`: optional non-canonical table sections and metric order captured during extraction.
 - `src/visualizations/`: table-first financial model viewer and optional dependency graph projection.
 - `src/components/ObjectDetailPanel.tsx`: canonical object, formula, relationship, and provenance inspection.
+- `src/components/AttentionCenter.tsx`: global open-attention queue and model/source navigation.
 - `scripts/generate-schema.ts`: generates `schema/model-db.schema.json` from `schema.ts`.
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
 - `skills/extract-financial-model/`: reusable workbook/model extraction workflow and contract.

@@ -12,6 +12,7 @@ export type IconName =
   | "formula"
   | "check"
   | "warning"
+  | "theme"
   | "upload"
   | "external";
 
@@ -75,6 +76,12 @@ export function Icon({
       <>
         <path d="M12 3 2.8 20h18.4z" />
         <path d="M12 9v5M12 17.5v.1" />
+      </>
+    ),
+    theme: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 3.5v17M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none" />
       </>
     ),
     upload: (
