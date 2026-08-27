@@ -63,6 +63,10 @@
   --graph-focus-muted: #aab5af;
   --overlay: rgba(20, 25, 22, 0.34);
   --drawer-shadow: -24px 0 70px rgba(30, 39, 34, 0.16);
+  --table-row-height: 32px;
+  --table-section-height: 24px;
+  --table-metric-width: 220px;
+  --table-period-width: 96px;
   --mono: "DM Mono", ui-monospace, monospace;
 }
 
@@ -940,7 +944,7 @@ select:focus-visible,
 
 .financial-table th,
 .financial-table td {
-  height: 39px;
+  height: var(--table-row-height);
   padding: 0;
   border-right: 1px solid var(--cell-line);
   border-bottom: 1px solid var(--cell-line);
@@ -955,8 +959,8 @@ select:focus-visible,
   position: sticky;
   top: 0;
   z-index: 4;
-  width: 108px;
-  padding: 6px 9px;
+  width: var(--table-period-width);
+  padding: 4px 7px;
   color: var(--muted);
   text-align: right;
   background: var(--table-head);
@@ -971,13 +975,13 @@ select:focus-visible,
 .financial-table thead th > span {
   color: var(--ink);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
 }
 
 .financial-table thead th > small {
-  margin-top: 3px;
-  font-size: 9px;
+  margin-top: 1px;
+  font-size: 8px;
   font-weight: 600;
 }
 
@@ -985,8 +989,8 @@ select:focus-visible,
   position: sticky;
   left: 0;
   z-index: 2;
-  width: 246px;
-  min-width: 246px;
+  width: var(--table-metric-width);
+  min-width: var(--table-metric-width);
   text-align: left;
   background: var(--table-bg);
   box-shadow: 1px 0 0 var(--line);
@@ -999,10 +1003,10 @@ select:focus-visible,
 }
 
 .financial-table thead .metric-column small {
-  margin-top: 3px;
+  margin-top: 1px;
   color: var(--soft-muted);
   font-family: inherit;
-  font-size: 9px;
+  font-size: 8px;
 }
 
 .financial-table td {
@@ -1023,8 +1027,8 @@ select:focus-visible,
   position: relative;
   left: auto;
   z-index: 1;
-  height: 29px;
-  padding: 0 11px;
+  height: var(--table-section-height);
+  padding: 0 8px;
   color: var(--section-ink);
   text-align: left;
   background: var(--section-bg);
@@ -1034,15 +1038,15 @@ select:focus-visible,
 }
 
 .table-section-row span {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 750;
 }
 
 .table-section-row small {
-  margin-left: 10px;
+  margin-left: 8px;
   color: var(--soft-muted);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 400;
 }
 
@@ -1058,10 +1062,10 @@ select:focus-visible,
 .metric-label-button {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   width: 100%;
-  height: 38px;
-  padding: 0 9px 0 calc(10px + var(--metric-depth) * 16px);
+  height: calc(var(--table-row-height) - 1px);
+  padding: 0 7px 0 calc(8px + var(--metric-depth) * 13px);
   text-align: left;
   background: transparent;
   border: 0;
@@ -1082,7 +1086,7 @@ select:focus-visible,
 
 .root-metric-row .hierarchy-guide {
   width: 3px;
-  height: 15px;
+  height: 12px;
   background: var(--green);
 }
 
@@ -1094,7 +1098,7 @@ select:focus-visible,
 
 .metric-label-copy strong {
   overflow: hidden;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1103,12 +1107,12 @@ select:focus-visible,
 .metric-label-copy small {
   color: var(--soft-muted);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
 }
 
 .metric-row-signals {
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   margin-left: auto;
 }
@@ -1116,7 +1120,7 @@ select:focus-visible,
 .formula-badge {
   color: var(--blue);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
 }
 
 .row-warning {
@@ -1170,12 +1174,12 @@ select:focus-visible,
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 5px;
   width: 100%;
-  height: 38px;
-  padding: 0 9px;
+  height: calc(var(--table-row-height) - 1px);
+  padding: 0 7px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   background: transparent;
   border: 0;
   transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
@@ -1183,7 +1187,7 @@ select:focus-visible,
 
 .value-button i {
   color: var(--blue);
-  font-size: 8px;
+  font-size: 7px;
   font-style: normal;
 }
 
@@ -1217,10 +1221,10 @@ select:focus-visible,
 
 .empty-value {
   display: block;
-  padding-right: 14px;
+  padding-right: 10px;
   color: var(--soft-muted);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .empty-search {
