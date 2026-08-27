@@ -204,7 +204,10 @@ function TableSection({
                   {row.unresolvedItems.length > 0 && (
                     <span
                       className="row-warning"
-                      title={row.unresolvedItems.map((item) => item.description).join("; ")}
+                      title={row.unresolvedItems.map((item) => {
+                        const location = sourceLocation(item.locator);
+                        return location ? `${item.description} · ${location}` : item.description;
+                      }).join("; ")}
                       aria-label={`${row.unresolvedItems.length} open extraction issue${row.unresolvedItems.length === 1 ? "" : "s"}`}
                     >
                       <Icon name="warning" size={12} /> review

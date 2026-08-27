@@ -266,7 +266,7 @@ class WorkbookToolTests(unittest.TestCase):
             )
             self.assertEqual(
                 translator.blocker("='Reported'!B1"),
-                "cross-sheet reference without an explicit semantic map for that source sheet",
+                "cross-sheet reference to worksheet `Reported` without an explicit semantic map for that source sheet",
             )
 
     def test_sparse_inventory_and_mapped_extraction(self) -> None:
@@ -334,6 +334,7 @@ class WorkbookToolTests(unittest.TestCase):
                 conflicting.database["unresolvedItems"][0]["id"],
                 "unresolved_style_actuality_alice_hardcode",
             )
+            self.assertIn("Source: `Model!C1`.", conflicting.report)
 
             invalid_mapping = deepcopy(mapping())
             invalid_mapping["styleConvention"] = "configurable-colors@0.1"

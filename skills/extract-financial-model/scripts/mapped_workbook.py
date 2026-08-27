@@ -78,6 +78,22 @@ def _locator(sheet: str, *, cell: str | None = None, range_: str | None = None) 
     return result
 
 
+def _format_locator(locator: dict[str, Any] | None) -> str:
+    if not locator:
+        return "workbook-level"
+    sheet = locator.get("sheet")
+    coordinate = locator.get("cell") or locator.get("range")
+    if sheet and coordinate:
+        return f"{sheet}!{coordinate}"
+    if sheet:
+        return f"worksheet {sheet}"
+    if locator.get("page"):
+        return f"page {locator['page']}"
+    if locator.get("timecode"):
+        return f"timecode {locator['timecode']}"
+    return "source-level"
+
+
 def _metric_value_is_valid(value: Any, data_type: str) -> bool:
     numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
     if value is None:
@@ -380,7 +396,8 @@ class MappedWorkbookExtractor:
                 "modelId": model["id"],
                 "category": "formula",
                 "description": (
-                    f"{len(coordinates)} materialized workbook formulas are preserved as opaque because "
+                    f"On worksheet `{self.sheet_name}`, {len(coordinates)} materialized workbook formulas "
+                    "are preserved as opaque because "
                     f"they were not safely translated to model-expression@0.1. Translation blockers: {blockers}."
                 ),
                 "targetId": metric_id,
@@ -799,7 +816,11 @@ class MappedWorkbookExtractor:
             "", "## Unresolved mappings", "",
         ])
         lines.extend(
-            [f"- WARNING — `{item['id']}`: {item['description']}" for item in self.database["unresolvedItems"]]
+            [
+                f"- WARNING — `{item['id']}` at `{_format_locator(item.get('locator'))}`: "
+                f"{item['description']}"
+                for item in self.database["unresolvedItems"]
+            ]
             or ["- None."]
         )
         lines.extend(["", "## Missing lineage", ""])
@@ -815,7 +836,8 @@ class MappedWorkbookExtractor:
             "", "## Analyst questions", "",
         ])
         lines.extend(
-            f"- `{item['id']}` — {self._analyst_questions[item['id']]}"
+            f"- `{item['id']}` — Source: `{_format_locator(item.get('locator'))}`. "
+            f"{self._analyst_questions[item['id']]}"
             for item in self.database["unresolvedItems"]
         )
         if not self.database["unresolvedItems"]:

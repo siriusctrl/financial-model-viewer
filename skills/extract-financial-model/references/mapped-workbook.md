@@ -30,6 +30,8 @@ For every mapped formula, the extractor first attempts a deterministic translati
 
 Formulas that reference an unmapped row/period, use an unmapped source sheet, contain unsupported syntax, or fail cached-value replay preserve their exact source formula and materialized value as `opaque`. The extractor creates a visible metric-level warning that names the blocking reason. A formula with no cached value emits no fabricated observation and creates an explicit unresolved item. Comments attached to selected observation cells become evidence linked to those observations.
 
+Human-facing warnings and analyst questions must print the mapped worksheet plus the narrowest cell or range. Cross-sheet blockers must also name the referenced worksheet; retaining that information only in a machine-readable locator is insufficient.
+
 The extraction CLI immediately runs the repository's strict runtime-schema, semantic, provenance, presentation, and report checks. It exits nonzero instead of printing `EXTRACTED` when the package is invalid. Comments that were inventoried but did not attach to selected observations, plus style/actuality conflicts, remain explicit unresolved warnings rather than disappearing silently.
 
 Keep model-specific maps beside private extraction output, not in this repository. The reusable extractor must remain company-agnostic.

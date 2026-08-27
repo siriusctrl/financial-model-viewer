@@ -24,6 +24,11 @@ PERCENT_LITERAL = re.compile(
     re.IGNORECASE,
 )
 COORDINATE = re.compile(r"(?P<column>[A-Z]{1,3})(?P<row>[1-9][0-9]*)", re.IGNORECASE)
+CROSS_SHEET_REFERENCE = re.compile(
+    r"(?:'(?P<quoted>[^']+)'|(?P<plain>[A-Za-z_][A-Za-z0-9_. ]*))!"
+    r"\$?[A-Z]{1,3}\$?[1-9][0-9]*",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -305,7 +310,20 @@ class FormulaTranslator:
     def blocker(self, original_formula: str) -> str:
         formula_body = original_formula[1:].strip() if original_formula.startswith("=") else original_formula
         if "!" in formula_body:
-            return "cross-sheet reference without an explicit semantic map for that source sheet"
+            source_sheets = sorted({
+                match.group("quoted") or match.group("plain")
+                for match in CROSS_SHEET_REFERENCE.finditer(formula_body)
+            })
+            source_description = (
+                f"worksheet{'s' if len(source_sheets) != 1 else ''} "
+                + ", ".join(f"`{sheet}`" for sheet in source_sheets)
+                if source_sheets
+                else "another worksheet"
+            )
+            return (
+                f"cross-sheet reference to {source_description} without an explicit semantic map "
+                "for that source sheet"
+            )
 
         referenced_coordinates = {
             match.group("cell").replace("$", "").upper()

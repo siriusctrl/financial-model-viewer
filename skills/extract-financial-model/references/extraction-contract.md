@@ -178,3 +178,5 @@ Write `extraction-report.md` with these sections:
 ```
 
 The table-presentation section must list every model, its ordered sections, metric coverage, source range, and any fallback warning. Formula coverage must count supported, opaque, and unresolved transformations. Object counts must include entities, metrics, observations, transformations, relationships, table presentation sections, assumptions, decisions, and unresolved items. The validator section must record both the fast validator and the final strict checker invocation (`npm run extraction:check` or the repository's `check-extraction.mjs` path), their result, every remaining error, and every warning; do not summarize a failed validator as successful.
+
+Every workbook warning and analyst question must name its worksheet and narrowest available cell or range. For a cross-sheet formula, name both the worksheet containing the formula and every referenced worksheet that blocks translation. For a genuinely workbook-level issue, say that no single worksheet owns it and list the affected worksheets when known.
