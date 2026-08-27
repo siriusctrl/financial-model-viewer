@@ -37,6 +37,13 @@ class FormulaTranslation:
     dependency_metric_ids: list[str]
 
 
+@dataclass(frozen=True)
+class FormulaBlocker:
+    kind: str
+    reason: str
+    coordinates: tuple[str, ...] = ()
+
+
 def _column_number(label: str) -> int:
     value = 0
     for character in label.upper():
@@ -98,6 +105,12 @@ class FormulaTranslator:
     ):
         self.cells = cells
         self.coordinate_semantics = coordinate_semantics
+        semantic_parts = [
+            _coordinate_parts(coordinate)
+            for coordinate in coordinate_semantics
+        ]
+        self.mapped_columns = {column for column, _row in semantic_parts}
+        self.mapped_rows = {row for _column, row in semantic_parts}
 
     def _canonical_cell_reference(
         self,
@@ -307,7 +320,7 @@ class FormulaTranslator:
             cached,
         )
 
-    def blocker(self, original_formula: str) -> str:
+    def blocker_details(self, original_formula: str) -> FormulaBlocker:
         formula_body = original_formula[1:].strip() if original_formula.startswith("=") else original_formula
         if "!" in formula_body:
             source_sheets = sorted({
@@ -320,9 +333,10 @@ class FormulaTranslator:
                 if source_sheets
                 else "another worksheet"
             )
-            return (
+            return FormulaBlocker(
+                "cross_sheet",
                 f"cross-sheet reference to {source_description} without an explicit semantic map "
-                "for that source sheet"
+                "for that source sheet",
             )
 
         referenced_coordinates = {
@@ -331,9 +345,48 @@ class FormulaTranslator:
         }
         for match in SUM_RANGE.finditer(formula_body):
             referenced_coordinates.update(_expand_range(match.group("start"), match.group("end")))
-        if any(
-            coordinate not in self.coordinate_semantics
+        missing_coordinates = sorted(
+            coordinate
             for coordinate in referenced_coordinates
-        ):
-            return "referenced cells outside the selected semantic map"
-        return "restricted-syntax or cached-value replay failure"
+            if coordinate not in self.coordinate_semantics
+        )
+        if missing_coordinates:
+            missing_parts = {
+                coordinate: _coordinate_parts(coordinate)
+                for coordinate in missing_coordinates
+            }
+            period_gaps = [
+                coordinate
+                for coordinate, (column, row) in missing_parts.items()
+                if row in self.mapped_rows and column not in self.mapped_columns
+            ]
+            metric_gaps = [
+                coordinate
+                for coordinate, (column, row) in missing_parts.items()
+                if column in self.mapped_columns and row not in self.mapped_rows
+            ]
+            coordinates = tuple(missing_coordinates)
+            if len(period_gaps) == len(missing_coordinates):
+                return FormulaBlocker(
+                    "unmapped_period",
+                    "referenced period columns outside the selected semantic map",
+                    coordinates,
+                )
+            if len(metric_gaps) == len(missing_coordinates):
+                return FormulaBlocker(
+                    "unmapped_metric",
+                    "referenced metric rows outside the selected semantic map",
+                    coordinates,
+                )
+            return FormulaBlocker(
+                "unmapped_cells",
+                "referenced cells outside the selected semantic map",
+                coordinates,
+            )
+        return FormulaBlocker(
+            "syntax_or_replay",
+            "restricted-syntax or cached-value replay failure",
+        )
+
+    def blocker(self, original_formula: str) -> str:
+        return self.blocker_details(original_formula).reason

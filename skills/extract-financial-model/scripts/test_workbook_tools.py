@@ -81,11 +81,11 @@ COMMENTS_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </comments>"""
 
 
-def write_fixture(path: Path) -> None:
+def write_fixture(path: Path, sheet_xml: str = SHEET_XML) -> None:
     with ZipFile(path, "w") as archive:
         archive.writestr("xl/workbook.xml", WORKBOOK_XML)
         archive.writestr("xl/_rels/workbook.xml.rels", WORKBOOK_RELS)
-        archive.writestr("xl/worksheets/sheet1.xml", SHEET_XML)
+        archive.writestr("xl/worksheets/sheet1.xml", sheet_xml)
         archive.writestr("xl/worksheets/_rels/sheet1.xml.rels", SHEET_RELS)
         archive.writestr("xl/comments1.xml", COMMENTS_XML)
         archive.writestr("xl/styles.xml", STYLES_XML)
@@ -262,12 +262,32 @@ class WorkbookToolTests(unittest.TestCase):
             )
             self.assertEqual(
                 translator.blocker("=D1"),
-                "referenced cells outside the selected semantic map",
+                "referenced period columns outside the selected semantic map",
             )
             self.assertEqual(
                 translator.blocker("='Reported'!B1"),
                 "cross-sheet reference to worksheet `Reported` without an explicit semantic map for that source sheet",
             )
+            period_blocker = translator.blocker_details("=D1")
+            self.assertEqual(period_blocker.kind, "unmapped_period")
+            self.assertEqual(period_blocker.coordinates, ("D1",))
+
+    def test_mapped_extraction_rejects_formula_period_gaps(self) -> None:
+        with TemporaryDirectory() as directory:
+            workbook = Path(directory) / "fixture.xlsx"
+            gap_sheet = SHEET_XML.replace(
+                '<f t="shared" si="0" ref="B2:B3">B1*2</f><v>4</v>',
+                '<f>C1*2</f><v>6</v>',
+            )
+            write_fixture(workbook, gap_sheet)
+            gap_mapping = mapping()
+            gap_mapping["periods"] = gap_mapping["periods"][:1]
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"period mapping is incomplete.*Model!B2 references C1",
+            ):
+                MappedWorkbookExtractor(workbook, gap_mapping).extract()
 
     def test_sparse_inventory_and_mapped_extraction(self) -> None:
         with TemporaryDirectory() as directory:

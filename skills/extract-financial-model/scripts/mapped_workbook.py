@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 import json
 
-from formula_translation import FormulaTranslator
+from formula_translation import FormulaTranslation, FormulaTranslator
 from ooxml import WorkbookPackage
 
 
@@ -275,6 +275,7 @@ class MappedWorkbookExtractor:
 
         comments_used: set[str] = set()
         opaque_cells: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        period_mapping_gaps: list[tuple[str, tuple[str, ...]]] = []
         sections = []
         metric_ids: set[str] = set()
         for section in self.mapping["sections"]:
@@ -317,14 +318,28 @@ class MappedWorkbookExtractor:
                     )
                     observation["value"] = value
                     if "formula" in cell:
+                        if self._formula_translator is None:
+                            raise RuntimeError("Formula translator is unavailable before workbook extraction")
+                        automatic = self._formula_translator.translate(
+                            cell["formula"],
+                            coordinate,
+                            period_id,
+                            value,
+                        )
+                        blocker = (
+                            None
+                            if automatic
+                            else self._formula_translator.blocker_details(cell["formula"])
+                        )
+                        if blocker and blocker.kind == "unmapped_period":
+                            period_mapping_gaps.append((coordinate, blocker.coordinates))
                         transformation = self._transformation(
                             metric,
                             mapped_metric,
                             mapped_period,
                             period_id,
-                            coordinate,
-                            value,
                             cell["formula"],
+                            automatic,
                         )
                         self.database["transformations"].append(transformation)
                         observation["valueType"] = "derived"
@@ -335,9 +350,11 @@ class MappedWorkbookExtractor:
                             0.94 if transformation["status"] == "supported" else 0.78,
                         )
                         if transformation["status"] == "opaque":
+                            if blocker is None:
+                                raise RuntimeError("Opaque formula is missing translation blocker details")
                             opaque_cells[metric["id"]].append((
                                 coordinate,
-                                self._formula_translator.blocker(cell["formula"]),
+                                blocker.reason,
                             ))
                     elif (
                         style_record.get("semantic", {}).get("valueType")
@@ -382,6 +399,17 @@ class MappedWorkbookExtractor:
             "sourceArtifactId": source["id"],
             "sections": sections,
         }]
+
+        if period_mapping_gaps:
+            examples = "; ".join(
+                f"{self.sheet_name}!{target} references {', '.join(inputs[:8])}"
+                for target, inputs in period_mapping_gaps[:8]
+            )
+            raise ValueError(
+                "Explicit period mapping is incomplete for selected formulas. "
+                f"{examples}. Add the source periods to the private workbook map and rerun extraction; "
+                "do not leave a supported same-row formula opaque or ask an analyst to resolve it."
+            )
 
         for metric_id, blocked_formulas in opaque_cells.items():
             suffix = _without_prefix(metric_id, "metric_")
@@ -639,9 +667,8 @@ class MappedWorkbookExtractor:
         mapped_metric: dict[str, Any],
         mapped_period: dict[str, Any],
         period_id: str,
-        coordinate: str,
-        target_value: Any,
         original_formula: str,
+        automatic: FormulaTranslation | None,
     ) -> dict[str, Any]:
         period_expression = mapped_metric.get("canonicalExpressions", {}).get(mapped_period["type"])
         mapped_expression = (
@@ -653,14 +680,6 @@ class MappedWorkbookExtractor:
             period_expression.get("dependencyMetricIds", [])
             if period_expression
             else mapped_metric.get("dependencyMetricIds", [])
-        )
-        if self._formula_translator is None:
-            raise RuntimeError("Formula translator is unavailable before workbook extraction")
-        automatic = self._formula_translator.translate(
-            original_formula,
-            coordinate,
-            period_id,
-            target_value,
         )
         if automatic:
             expression = automatic.expression
