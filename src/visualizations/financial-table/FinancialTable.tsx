@@ -256,6 +256,7 @@ function TableSection({
                 onClick={() => onSelectMetric(row.metric.id)}
                 style={{ "--metric-depth": row.depth } as CSSProperties}
                 aria-pressed={selectedTargetId === row.metric.id}
+                data-inspector-target={row.metric.id}
               >
                 <span className="hierarchy-guide" />
                 <span className="metric-label-copy">
@@ -306,6 +307,7 @@ function TableSection({
                       onClick={() => onSelectObservation(observation.id)}
                       title={`${valueTypeLabel(observation.valueType)} · ${observation.id}${isLineageInput ? " · Direct input to selected formula" : ""}`}
                       aria-pressed={selectedTargetId === observation.id}
+                      data-inspector-target={observation.id}
                       data-lineage-role={isLineageInput ? "input" : undefined}
                     >
                       <span>{formatValue(observation.value, row.metric)}</span>

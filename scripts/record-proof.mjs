@@ -103,6 +103,16 @@ try {
   await mobile.getByTitle(/obs_northstar_subscription_revenue_fy2022/).click();
   await mobile.waitForTimeout(250);
   await capture(mobile, "11-dark-inspector-mobile");
+
+  const adaptiveInspector = await browser.newPage({
+    viewport: { width: 900, height: 800 },
+    deviceScaleFactor: 1,
+    colorScheme: "light",
+  });
+  await adaptiveInspector.goto(baseUrl, { waitUntil: "networkidle" });
+  await adaptiveInspector.getByTitle(/Derived · obs_northstar_revenue_fy2026/).click();
+  await adaptiveInspector.waitForTimeout(250);
+  await capture(adaptiveInspector, "12-adaptive-inspector-desktop");
   await browser.close();
 
   const thumbWidth = 680;

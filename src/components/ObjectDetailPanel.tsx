@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Icon } from "./Icon";
 import type { ObservationEditResult } from "../model-db/calculation";
 import type {
@@ -28,6 +28,31 @@ type Props = {
     status: "resolved" | "dismissed",
   ) => void;
 };
+
+type InspectorSide = "left" | "right";
+
+function horizontalOverlap(
+  target: Pick<DOMRect, "left" | "right">,
+  panelLeft: number,
+  panelRight: number,
+): number {
+  return Math.max(0, Math.min(target.right, panelRight) - Math.max(target.left, panelLeft));
+}
+
+function sideThatAvoids(
+  target: Pick<DOMRect, "left" | "right">,
+  panelWidth: number,
+  viewportWidth: number,
+  edge: number,
+): InspectorSide {
+  const rightOverlap = horizontalOverlap(
+    target,
+    viewportWidth - edge - panelWidth,
+    viewportWidth - edge,
+  );
+  const leftOverlap = horizontalOverlap(target, edge, edge + panelWidth);
+  return rightOverlap > leftOverlap ? "left" : "right";
+}
 
 function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -82,9 +107,32 @@ export function ObjectDetailPanel({
   onUpdateObservation,
   onResolveAttention,
 }: Props) {
+  const panelRef = useRef<HTMLElement>(null);
   const [displayTargetId, setDisplayTargetId] = useState(targetId);
+  const [side, setSide] = useState<InspectorSide>("right");
   useEffect(() => {
     if (targetId) setDisplayTargetId(targetId);
+  }, [targetId]);
+  useLayoutEffect(() => {
+    if (!targetId || !panelRef.current) return;
+    if (window.matchMedia("(max-width: 820px)").matches) {
+      setSide("right");
+      return;
+    }
+
+    const selectedTarget = document.querySelector<HTMLElement>(
+      `[data-inspector-target="${CSS.escape(targetId)}"]`,
+    ) ?? document.querySelector<HTMLElement>("[data-attention-cell-focus='true']");
+    const panelStyle = getComputedStyle(panelRef.current);
+    const edge = Number.parseFloat(panelStyle.getPropertyValue("--inspector-edge"));
+    setSide(selectedTarget
+      ? sideThatAvoids(
+          selectedTarget.getBoundingClientRect(),
+          panelRef.current.getBoundingClientRect().width,
+          window.innerWidth,
+          edge,
+        )
+      : "right");
   }, [targetId]);
   useEffect(() => {
     if (!targetId) return;
@@ -101,9 +149,11 @@ export function ObjectDetailPanel({
 
   return (
     <aside
-      className={`inspector-panel ${targetId ? "is-open" : ""}`}
+      ref={panelRef}
+      className={`inspector-panel inspector-panel--${side} ${targetId ? "is-open" : ""}`}
       aria-label="Cell inspector"
       aria-hidden={!targetId}
+      data-side={side}
       data-testid="detail-panel"
       onTransitionEnd={(event) => {
         if (!targetId && event.propertyName === "transform") setDisplayTargetId(null);

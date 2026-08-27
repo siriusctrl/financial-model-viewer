@@ -63,6 +63,7 @@
   --graph-focus-muted: #aab5af;
   --overlay: rgba(20, 25, 22, 0.34);
   --drawer-shadow: -24px 0 70px rgba(30, 39, 34, 0.16);
+  --drawer-shadow-left: 24px 0 70px rgba(30, 39, 34, 0.16);
   --table-row-height: 32px;
   --table-section-height: 24px;
   --table-metric-min-width: 160px;
@@ -133,6 +134,7 @@
   --graph-focus-muted: #5f655f;
   --overlay: rgba(12, 13, 12, 0.68);
   --drawer-shadow: -30px 0 80px rgba(0, 0, 0, 0.34);
+  --drawer-shadow-left: 30px 0 80px rgba(0, 0, 0, 0.34);
 }
 
 * {
@@ -1260,12 +1262,14 @@ select:focus-visible,
 /* Inspector */
 
 .inspector-panel {
+  --inspector-edge: 12px;
+
   position: fixed;
   top: 70px;
-  right: 12px;
+  right: var(--inspector-edge);
   bottom: auto;
   z-index: 35;
-  width: min(390px, calc(100vw - 24px));
+  width: min(390px, calc(100vw - var(--inspector-edge) - var(--inspector-edge)));
   max-height: calc(100dvh - 82px);
   overflow-y: auto;
   background: var(--inspector-bg);
@@ -1281,11 +1285,34 @@ select:focus-visible,
 }
 
 .inspector-panel.is-open {
+  animation: inspector-enter-right 220ms cubic-bezier(0.22, 0.72, 0.2, 1) both;
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
   visibility: visible;
   transition-delay: 0s;
+}
+
+.inspector-panel--left {
+  right: auto;
+  left: var(--inspector-edge);
+  box-shadow: var(--drawer-shadow-left), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transform: translateX(calc(-100% - 28px));
+}
+
+.inspector-panel--left.is-open {
+  animation-name: inspector-enter-left;
+  transform: translateX(0);
+}
+
+@keyframes inspector-enter-right {
+  from { transform: translateX(calc(100% + 28px)); }
+  to { transform: translateX(0); }
+}
+
+@keyframes inspector-enter-left {
+  from { transform: translateX(calc(-100% - 28px)); }
+  to { transform: translateX(0); }
 }
 
 .inspector-header,

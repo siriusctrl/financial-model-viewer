@@ -42,6 +42,46 @@ test("opens on the extracted model table and inspects a sourced cell", async ({ 
   await expect(inspector).not.toBeVisible();
 });
 
+test("docks the inspector away from the selected cell", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === "mobile", "mobile inspector intentionally fills the viewport");
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto("./");
+  const imported = structuredClone(sample) as ModelDatabase;
+  const longMetric = imported.metrics.find(
+    (candidate) => candidate.id === "metric_northstar_subscription_revenue",
+  );
+  expect(longMetric).toBeDefined();
+  longMetric!.name = "Enterprise subscription revenue retention bridge";
+  await uploadJson(page, "wide-model.json", imported);
+  await expect(page.getByText(longMetric!.name, { exact: true })).toBeVisible();
+
+  const inspector = page.getByTestId("detail-panel");
+  const rightCell = page.getByTitle(/Derived · obs_northstar_revenue_fy2026/);
+  await rightCell.click();
+
+  await expect(inspector).toHaveAttribute("data-side", "left");
+  const [rightCellBox, leftInspectorBox] = await Promise.all([
+    rightCell.boundingBox(),
+    inspector.boundingBox(),
+  ]);
+  expect(rightCellBox).not.toBeNull();
+  expect(leftInspectorBox).not.toBeNull();
+  expect(leftInspectorBox!.x + leftInspectorBox!.width).toBeLessThanOrEqual(rightCellBox!.x);
+
+  await inspector.getByLabel("Clear selection").click();
+  await expect(inspector).not.toBeVisible();
+  const leftCell = page.getByTitle(/Derived · obs_northstar_revenue_fy2022/);
+  await leftCell.click();
+  await expect(inspector).toHaveAttribute("data-side", "right");
+  const [leftCellBox, rightInspectorBox] = await Promise.all([
+    leftCell.boundingBox(),
+    inspector.boundingBox(),
+  ]);
+  expect(leftCellBox).not.toBeNull();
+  expect(rightInspectorBox).not.toBeNull();
+  expect(leftCellBox!.x + leftCellBox!.width).toBeLessThanOrEqual(rightInspectorBox!.x);
+});
+
 test("sizes table columns from the active model content", async ({ page }) => {
   await page.goto("./");
   const table = page.locator(".financial-table");
