@@ -13,10 +13,43 @@ from ooxml import WorkbookPackage
 
 
 MAP_FORMAT = "financial-model-workbook-map@0.1"
-STYLE_CELL_KINDS = {"formula", "literal"}
-STYLE_COLOR_FIELDS = {"type", "rgb", "theme", "indexed", "auto", "tint"}
-STYLE_VALUE_TYPES = {"reported", "assumption", "external_estimate"}
-ACTUALITIES = {"actual", "estimate"}
+STYLE_CONVENTION = "alice-blue-yellow@0.1"
+BLUE_FONT_SOURCE_COLORS = (
+    {"type": "theme", "theme": 4},
+    {"type": "theme", "theme": 4, "tint": -0.499984740745262},
+    {"type": "theme", "theme": 8},
+    {"type": "rgb", "rgb": "FF0070C0"},
+)
+YELLOW_FILL_SOURCE_COLOR = {"type": "rgb", "rgb": "FFFFFF00"}
+STYLE_SEMANTICS = {
+    "alice_hardcode": {
+        "id": "alice_hardcode",
+        "role": "alice_hardcode",
+        "description": "Blue font on pure yellow fill marks an Alice-controlled hardcode or assumption input.",
+        "valueType": "assumption",
+        "adjustable": True,
+        "expectedActuality": "estimate",
+        "conflictQuestion": (
+            "Should any yellow-fill blue-font cells remain in an actual period, "
+            "or does that indicate a period-boundary error?"
+        ),
+    },
+    "reported_source": {
+        "id": "reported_source",
+        "role": "reported_source",
+        "description": (
+            "Blue-font literals without pure yellow fill are sourced from reported financial results "
+            "and are not adjustable by Alice."
+        ),
+        "valueType": "reported",
+        "adjustable": False,
+        "expectedActuality": "actual",
+        "conflictQuestion": (
+            "Are the blue-font literals in estimate periods reported or guided values, "
+            "or should their style/value classification be corrected?"
+        ),
+    },
+}
 
 
 def _without_prefix(value: str, prefix: str) -> str:
@@ -59,136 +92,26 @@ def _metric_value_is_valid(value: Any, data_type: str) -> bool:
     return isinstance(value, str)
 
 
-def _color_matches(color: dict[str, Any] | None, pattern: dict[str, Any]) -> bool:
-    if color is None:
-        return False
-    for key, expected in pattern.items():
-        actual = color.get(key)
-        if key == "rgb" and isinstance(actual, str) and isinstance(expected, str):
-            normalized_actual = actual.upper()
-            normalized_expected = expected.upper()
-            if len(normalized_actual) == 6:
-                normalized_actual = f"FF{normalized_actual}"
-            if len(normalized_expected) == 6:
-                normalized_expected = f"FF{normalized_expected}"
-            if normalized_actual != normalized_expected:
-                return False
-        elif actual != expected:
-            return False
-    return True
+def _source_color(color: dict[str, Any] | None) -> dict[str, Any]:
+    if not color:
+        return {}
+    return {
+        key: color[key]
+        for key in ("type", "theme", "rgb", "tint")
+        if key in color
+    }
 
 
-def _matches_any_color(
-    color: dict[str, Any] | None,
-    patterns: list[dict[str, Any]],
-) -> bool:
-    return any(_color_matches(color, pattern) for pattern in patterns)
+def _is_specific_blue_font(color: dict[str, Any] | None) -> bool:
+    return _source_color(color) in BLUE_FONT_SOURCE_COLORS
 
 
-def _validate_style_rules(rules: Any) -> list[dict[str, Any]]:
-    if not isinstance(rules, list):
-        raise ValueError("styleSemantics.rules must be an array")
-    validated: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    for index, rule in enumerate(rules):
-        if not isinstance(rule, dict):
-            raise ValueError(f"styleSemantics.rules[{index}] must be an object")
-        rule_id = rule.get("id")
-        if not isinstance(rule_id, str) or not rule_id:
-            raise ValueError(f"styleSemantics.rules[{index}].id must be a non-empty string")
-        if rule_id in seen_ids:
-            raise ValueError(f"Duplicate style semantic rule ID: {rule_id}")
-        seen_ids.add(rule_id)
-        unsupported_rule_fields = set(rule) - {
-            "id", "role", "description", "match", "expectedActuality",
-            "conflictQuestion", "valueType", "adjustable",
-        }
-        if unsupported_rule_fields:
-            raise ValueError(
-                f"Style semantic rule {rule_id} has unsupported fields: "
-                f"{', '.join(sorted(unsupported_rule_fields))}"
-            )
-        role = rule.get("role")
-        if not isinstance(role, str) or not role:
-            raise ValueError(f"Style semantic rule {rule_id} must declare a non-empty role")
-        match = rule.get("match")
-        if not isinstance(match, dict) or not match:
-            raise ValueError(f"Style semantic rule {rule_id} must declare a non-empty match object")
-        unsupported = set(match) - {
-            "cellKinds", "fontColors", "fillColors", "excludeFillColors",
-        }
-        if unsupported:
-            raise ValueError(
-                f"Style semantic rule {rule_id} has unsupported match fields: {', '.join(sorted(unsupported))}"
-            )
-        if not match.get("fontColors") and not match.get("fillColors"):
-            raise ValueError(
-                f"Style semantic rule {rule_id} must positively match fontColors or fillColors"
-            )
-        cell_kinds = match.get("cellKinds")
-        if cell_kinds is not None and (
-            not isinstance(cell_kinds, list)
-            or not cell_kinds
-            or any(item not in STYLE_CELL_KINDS for item in cell_kinds)
-        ):
-            raise ValueError(
-                f"Style semantic rule {rule_id} cellKinds must contain only formula or literal"
-            )
-        for field in ("fontColors", "fillColors", "excludeFillColors"):
-            patterns = match.get(field)
-            if patterns is None:
-                continue
-            if (
-                not isinstance(patterns, list)
-                or not patterns
-                or any(not isinstance(pattern, dict) or not pattern for pattern in patterns)
-            ):
-                raise ValueError(
-                    f"Style semantic rule {rule_id} {field} must be a non-empty array of color objects"
-                )
-            for pattern in patterns:
-                unsupported_colors = set(pattern) - STYLE_COLOR_FIELDS
-                if unsupported_colors:
-                    raise ValueError(
-                        f"Style semantic rule {rule_id} {field} has unsupported color fields: "
-                        f"{', '.join(sorted(unsupported_colors))}"
-                    )
-                rgb = pattern.get("rgb")
-                if rgb is not None and (
-                    not isinstance(rgb, str)
-                    or len(rgb) not in {6, 8}
-                    or any(character not in "0123456789abcdefABCDEF" for character in rgb)
-                ):
-                    raise ValueError(
-                        f"Style semantic rule {rule_id} {field} rgb must be 6 or 8 hexadecimal characters"
-                    )
-                if "theme" in pattern and not isinstance(pattern["theme"], int):
-                    raise ValueError(f"Style semantic rule {rule_id} {field} theme must be an integer")
-                if "indexed" in pattern and not isinstance(pattern["indexed"], int):
-                    raise ValueError(f"Style semantic rule {rule_id} {field} indexed must be an integer")
-                if "auto" in pattern and not isinstance(pattern["auto"], bool):
-                    raise ValueError(f"Style semantic rule {rule_id} {field} auto must be boolean")
-                tint = pattern.get("tint")
-                if tint is not None and (
-                    isinstance(tint, bool)
-                    or not isinstance(tint, (int, float))
-                    or not -1 <= tint <= 1
-                ):
-                    raise ValueError(f"Style semantic rule {rule_id} {field} tint must be between -1 and 1")
-        expected_actuality = rule.get("expectedActuality")
-        if expected_actuality is not None and expected_actuality not in ACTUALITIES:
-            raise ValueError(
-                f"Style semantic rule {rule_id} expectedActuality must be actual or estimate"
-            )
-        value_type = rule.get("valueType")
-        if value_type is not None and value_type not in STYLE_VALUE_TYPES:
-            raise ValueError(
-                f"Style semantic rule {rule_id} valueType must be reported, assumption, or external_estimate"
-            )
-        if "adjustable" in rule and not isinstance(rule["adjustable"], bool):
-            raise ValueError(f"Style semantic rule {rule_id} adjustable must be boolean")
-        validated.append(deepcopy(rule))
-    return validated
+def _is_specific_yellow_fill(style: dict[str, Any]) -> bool:
+    fill = style.get("fill", {})
+    return (
+        fill.get("patternType") == "solid"
+        and _source_color(fill.get("foregroundColor")) == YELLOW_FILL_SOURCE_COLOR
+    )
 
 
 @dataclass
@@ -235,10 +158,13 @@ class MappedWorkbookExtractor:
         self._evidence_styles: dict[int, dict[str, Any]] = {}
         self._style_records: list[dict[str, Any]] = []
         self._style_conflicts: list[dict[str, Any]] = []
-        style_semantics = mapping.get("styleSemantics", {})
-        if not isinstance(style_semantics, dict):
-            raise ValueError("styleSemantics must be an object")
-        self._style_rules = _validate_style_rules(style_semantics.get("rules", []))
+        if "styleSemantics" in mapping:
+            raise ValueError(
+                f"Configurable styleSemantics rules are not supported; use styleConvention={STYLE_CONVENTION!r}"
+            )
+        self.style_convention = mapping.get("styleConvention")
+        if self.style_convention not in {None, STYLE_CONVENTION}:
+            raise ValueError(f"Unsupported styleConvention: {self.style_convention!r}")
 
     def _provenance(self, target_id: str, locator: dict[str, str], confidence: float) -> None:
         if target_id in self._provenance_targets:
@@ -455,20 +381,21 @@ class MappedWorkbookExtractor:
                 "status": "open",
                 "analystQuestion": "Which unmapped workbook comments contain material model rationale that should be promoted to canonical evidence?",
             })
-        conflicts_by_rule: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        conflicts_by_role: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for conflict in self._style_conflicts:
-            conflicts_by_rule[conflict["ruleId"]].append(conflict)
-        for rule_id, conflicts in conflicts_by_rule.items():
-            rule = next(item for item in self._style_rules if item["id"] == rule_id)
+            conflicts_by_role[conflict["semanticId"]].append(conflict)
+        for semantic_id, conflicts in conflicts_by_role.items():
+            semantic = STYLE_SEMANTICS[semantic_id]
             examples = ", ".join(item["cell"] for item in conflicts[:8])
-            expected = rule.get("expectedActuality")
+            expected = semantic["expectedActuality"]
             actualities = sorted({item["actuality"] for item in conflicts})
             self._unresolved({
-                "id": f"unresolved_style_actuality_{rule_id}",
+                "id": f"unresolved_style_actuality_{semantic_id}",
                 "modelId": model["id"],
                 "category": "actuality_boundary",
                 "description": (
-                    f"Style rule `{rule_id}` expects actuality `{expected}`, but {len(conflicts)} selected cells "
+                    f"Style convention `{STYLE_CONVENTION}` role `{semantic_id}` expects actuality "
+                    f"`{expected}`, but {len(conflicts)} selected cells "
                     f"are mapped as {', '.join(actualities)}; examples: {examples}."
                 ),
                 "targetId": model["id"],
@@ -476,10 +403,7 @@ class MappedWorkbookExtractor:
                 "locator": _locator(self.sheet_name, cell=conflicts[0]["cell"]),
                 "confidence": 0.55,
                 "status": "open",
-                "analystQuestion": rule.get(
-                    "conflictQuestion",
-                    f"Should cells matched by `{rule_id}` change actuality, or is the style convention broader than documented?",
-                ),
+                "analystQuestion": semantic["conflictQuestion"],
             })
         for item in self.mapping.get("unresolvedItems", []):
             self._unresolved(deepcopy(item))
@@ -492,24 +416,19 @@ class MappedWorkbookExtractor:
             style_evidence,
         )
 
-    def _matching_style_rule(self, style: dict[str, Any], cell_kind: str) -> dict[str, Any] | None:
-        font_color = style.get("font", {}).get("color")
-        fill_color = style.get("fill", {}).get("foregroundColor")
-        for rule in self._style_rules:
-            match = rule.get("match", {})
-            cell_kinds = match.get("cellKinds")
-            if cell_kinds and cell_kind not in cell_kinds:
-                continue
-            font_colors = match.get("fontColors")
-            if font_colors and not _matches_any_color(font_color, font_colors):
-                continue
-            fill_colors = match.get("fillColors")
-            if fill_colors and not _matches_any_color(fill_color, fill_colors):
-                continue
-            excluded_fills = match.get("excludeFillColors", [])
-            if excluded_fills and _matches_any_color(fill_color, excluded_fills):
-                continue
-            return rule
+    def _matching_style_semantic(
+        self,
+        style: dict[str, Any],
+        cell_kind: str,
+    ) -> dict[str, Any] | None:
+        if self.style_convention != STYLE_CONVENTION:
+            return None
+        if not _is_specific_blue_font(style.get("font", {}).get("color")):
+            return None
+        if _is_specific_yellow_fill(style):
+            return STYLE_SEMANTICS["alice_hardcode"]
+        if cell_kind == "literal":
+            return STYLE_SEMANTICS["reported_source"]
         return None
 
     def _record_style(
@@ -544,7 +463,7 @@ class MappedWorkbookExtractor:
         }
         self._evidence_styles[style["styleId"]] = style
         cell_kind = "formula" if "formula" in cell else "literal"
-        rule = self._matching_style_rule(style, cell_kind)
+        semantic_definition = self._matching_style_semantic(style, cell_kind)
         record: dict[str, Any] = {
             "cell": coordinate,
             "metricId": metric_id,
@@ -553,14 +472,14 @@ class MappedWorkbookExtractor:
             "cellKind": cell_kind,
             "styleId": style["styleId"],
         }
-        if rule:
+        if semantic_definition:
             semantic = {
                 key: deepcopy(value)
-                for key, value in rule.items()
-                if key not in {"match", "expectedActuality", "conflictQuestion"}
+                for key, value in semantic_definition.items()
+                if key not in {"expectedActuality", "conflictQuestion"}
             }
             record["semantic"] = semantic
-            expected_actuality = rule.get("expectedActuality")
+            expected_actuality = semantic_definition["expectedActuality"]
             if expected_actuality and expected_actuality != actuality:
                 record["actualityConflict"] = True
                 self._style_conflicts.append({
@@ -569,7 +488,7 @@ class MappedWorkbookExtractor:
                     "periodId": period_id,
                     "actuality": actuality,
                     "expectedActuality": expected_actuality,
-                    "ruleId": rule["id"],
+                    "semanticId": semantic_definition["id"],
                 })
         self._style_records.append(record)
         return record
@@ -587,13 +506,32 @@ class MappedWorkbookExtractor:
             for item in self._style_records
         )
         return {
-            "format": "financial-workbook-style-evidence@0.1",
+            "format": "financial-workbook-style-evidence@0.2",
             "source": {
                 "filename": inventory["input"]["filename"],
                 "sha256": inventory["input"]["sha256"],
                 "sheet": self.sheet_name,
             },
-            "semanticRules": deepcopy(self._style_rules),
+            "styleConvention": (
+                {
+                    "id": STYLE_CONVENTION,
+                    "blueFontSourceColors": deepcopy(BLUE_FONT_SOURCE_COLORS),
+                    "yellowFill": {
+                        "patternType": "solid",
+                        "foregroundColor": deepcopy(YELLOW_FILL_SOURCE_COLOR),
+                    },
+                    "roles": [
+                        {
+                            key: deepcopy(value)
+                            for key, value in semantic.items()
+                            if key != "conflictQuestion"
+                        }
+                        for semantic in STYLE_SEMANTICS.values()
+                    ],
+                }
+                if self.style_convention == STYLE_CONVENTION
+                else None
+            ),
             "styles": [
                 deepcopy(self._evidence_styles[style_id])
                 for style_id in sorted(self._evidence_styles)
@@ -777,10 +715,15 @@ class MappedWorkbookExtractor:
         )
         lines.extend(f"- WARNING — {warning}" for warning in inventory["package"]["warnings"])
         style_summary = style_evidence["summary"]
+        semantic_result = (
+            f"{style_summary['matchedCells']} matched the fixed `{self.style_convention}` convention"
+            if self.style_convention
+            else "style semantics disabled"
+        )
         lines.append(
             "- Style evidence: "
             f"{style_summary['selectedCells']} selected cells inspected, "
-            f"{style_summary['matchedCells']} matched semantic rules, "
+            f"{semantic_result}, "
             f"{style_summary['actualityConflicts']} actuality conflicts; "
             "see `workbook-style-evidence.json`."
         )

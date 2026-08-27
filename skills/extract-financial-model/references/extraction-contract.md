@@ -63,7 +63,7 @@ Map input concepts as follows:
 
 Do not add a `calculated_from` relationship when the same edge is derivable from a transformation's dependencies.
 
-Workbook-specific formatting conventions belong in the private extraction map, not the canonical schema. Apply ordered style rules only as reviewable evidence. Formula presence takes precedence over a style-implied value type: keep the observation `derived` and retain the style role alongside it. If a rule expects actual or estimate status and the mapped period disagrees, create an unresolved item instead of silently overriding actuality.
+Workbook-specific formatting conventions belong outside the canonical schema. The mapped extractor supports one explicit opt-in convention, `alice-blue-yellow@0.1`; it does not expose a generic color-rule language. Treat its matches only as reviewable evidence. Formula presence takes precedence over a style-implied value type: keep the observation `derived` and retain the style role alongside it. If the convention expects actual or estimate status and the mapped period disagrees, create an unresolved item instead of silently overriding actuality.
 
 ### Table presentation metadata
 

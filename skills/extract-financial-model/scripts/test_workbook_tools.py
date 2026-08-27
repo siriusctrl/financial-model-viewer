@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 import unittest
 
-from mapped_workbook import MappedWorkbookExtractor
+from mapped_workbook import MappedWorkbookExtractor, _is_specific_blue_font
 from ooxml import WorkbookPackage, translate_shared_formula
 
 
@@ -147,34 +147,7 @@ def mapping() -> dict:
                 "actuality": "estimate",
             },
         ],
-        "styleSemantics": {
-            "rules": [
-                {
-                    "id": "analyst_hardcode",
-                    "role": "analyst_hardcode",
-                    "description": "Blue font on yellow fill is an analyst-controlled assumption.",
-                    "match": {
-                        "fontColors": [{"theme": 8}],
-                        "fillColors": [{"rgb": "FFFFFF00"}],
-                    },
-                    "expectedActuality": "estimate",
-                    "valueType": "assumption",
-                    "adjustable": True,
-                },
-                {
-                    "id": "reported_source",
-                    "role": "reported_source",
-                    "description": "Blue font without yellow fill is sourced from reported results.",
-                    "match": {
-                        "fontColors": [{"theme": 8}],
-                        "excludeFillColors": [{"rgb": "FFFFFF00"}],
-                    },
-                    "expectedActuality": "actual",
-                    "valueType": "reported",
-                    "adjustable": False,
-                },
-            ]
-        },
+        "styleConvention": "alice-blue-yellow@0.1",
         "sections": [{
             "id": "section_test",
             "title": "Test",
@@ -202,6 +175,18 @@ def mapping() -> dict:
 
 
 class WorkbookToolTests(unittest.TestCase):
+    def test_fixed_style_convention_only_accepts_observed_blue_sources(self) -> None:
+        self.assertTrue(_is_specific_blue_font({"type": "theme", "theme": 4}))
+        self.assertTrue(_is_specific_blue_font({
+            "type": "theme",
+            "theme": 4,
+            "tint": -0.499984740745262,
+        }))
+        self.assertTrue(_is_specific_blue_font({"type": "theme", "theme": 8}))
+        self.assertTrue(_is_specific_blue_font({"type": "rgb", "rgb": "FF0070C0"}))
+        self.assertFalse(_is_specific_blue_font({"type": "rgb", "rgb": "FF0000FF"}))
+        self.assertFalse(_is_specific_blue_font({"type": "theme", "theme": 4, "tint": 0.25}))
+
     def test_shared_formula_translation_respects_absolute_references_and_strings(self) -> None:
         self.assertEqual(
             translate_shared_formula('A1+$A1+A$1+$A$1+Sheet2!B2+"A1"+LOG10(B1)', "B2", "C3"),
@@ -232,10 +217,14 @@ class WorkbookToolTests(unittest.TestCase):
             self.assertEqual(result.database["evidence"][0]["excerpt"], "Reviewed output")
             self.assertEqual(result.database["unresolvedItems"], [])
             self.assertEqual(result.style_evidence["summary"]["byRole"], {
-                "analyst_hardcode": 1,
+                "alice_hardcode": 1,
                 "reported_source": 1,
                 "unmatched": 2,
             })
+            self.assertEqual(
+                result.style_evidence["styleConvention"]["id"],
+                "alice-blue-yellow@0.1",
+            )
             self.assertEqual(result.style_evidence["summary"]["actualityConflicts"], 0)
             self.assertEqual(
                 result.style_evidence["cells"][0]["styleId"],
@@ -252,13 +241,18 @@ class WorkbookToolTests(unittest.TestCase):
             self.assertEqual(conflicting.style_evidence["summary"]["actualityConflicts"], 1)
             self.assertEqual(
                 conflicting.database["unresolvedItems"][0]["id"],
-                "unresolved_style_actuality_analyst_hardcode",
+                "unresolved_style_actuality_alice_hardcode",
             )
 
             invalid_mapping = deepcopy(mapping())
-            invalid_mapping["styleSemantics"]["rules"][0]["match"] = {}
-            with self.assertRaisesRegex(ValueError, "non-empty match object"):
+            invalid_mapping["styleConvention"] = "configurable-colors@0.1"
+            with self.assertRaisesRegex(ValueError, "Unsupported styleConvention"):
                 MappedWorkbookExtractor(workbook, invalid_mapping)
+
+            legacy_mapping = deepcopy(mapping())
+            legacy_mapping["styleSemantics"] = {"rules": []}
+            with self.assertRaisesRegex(ValueError, "Configurable styleSemantics rules are not supported"):
+                MappedWorkbookExtractor(workbook, legacy_mapping)
 
 
 if __name__ == "__main__":

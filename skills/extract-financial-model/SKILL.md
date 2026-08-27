@@ -42,7 +42,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - If grouping is ambiguous, omit the presentation metadata and create an open `presentation` unresolved item instead of inventing a polished layout. Never omit both: the validator treats an unacknowledged fallback as an error.
    - Never use a cell, row, column, block, display label, or current view as a stable object ID.
    - For a stable but complex model sheet, prefer `extract-mapped-workbook.py` plus a private explicit map over embedding company-specific branches in the reusable extractor.
-   - Put workbook-specific style meanings in ordered `styleSemantics.rules` in the private map. Treat rule matches as extraction evidence, keep formulas `derived`, and emit an actuality warning when style meaning conflicts with the mapped period.
+   - For the confirmed Alice workbook convention only, set `styleConvention: alice-blue-yellow@0.1` in the private map. Do not add configurable color rules: the extractor matches only the exact source color encodings documented in `references/mapped-workbook.md`. Treat matches as extraction evidence, keep formulas `derived`, and emit an actuality warning when the convention conflicts with the mapped period.
 
 4. Translate calculations.
    - Preserve every original formula.
