@@ -24,7 +24,7 @@ This project tests a product direction. It does not replace Excel, execute workb
 - Every open unresolved item remains a visible review warning, with affected metric/cell cues when a target is known.
 - Mixed-frequency models expose explicit annual/quarterly period views, and lagged lineage resolves within the selected period type.
 - The same query layer and frontend render a SaaS model and a structurally different bank model without company-specific UI branches.
-- A user can move from a forecast number to its metric, formula, source workbook cell, confidence, review status, and extraction run.
+- A user can move from a forecast number to its metric, formula, source workbook cell, confidence, review status, and extraction run. Selecting a derived value highlights its visible direct inputs; inputs in another period view remain explicit in the inspector and can be selected to jump there.
 
 ## Repository map
 

@@ -48,6 +48,16 @@ test("shows actual workbook inputs for a derived cell", async ({ page }) => {
     "title",
     /obs_northstar_gross_profit_fy2025/,
   );
+  const highlightedInputs = page.locator('[data-lineage-role="input"]');
+  await expect(highlightedInputs).toHaveCount(2);
+  await expect(highlightedInputs.nth(0)).toHaveAttribute(
+    "title",
+    /Direct input to selected formula/,
+  );
+  await expect(page.getByText("2 direct inputs highlighted", { exact: true })).toBeVisible();
+  await expect(page.locator(".table-footnote")).toContainText(
+    "Blue cells mark the direct inputs",
+  );
 
   const lineage = page.getByTestId("formula-lineage");
   await expect(lineage).toContainText("Derived from 2 inputs");
@@ -154,6 +164,14 @@ test("separates annual and quarterly periods in a mixed-frequency model", async 
     periodId: "period_q4_2024",
     value: 360,
   });
+  const transformation = imported.transformations.find(
+    (item) => item.id === "transformation_northstar_gross_profit",
+  );
+  if (!transformation) throw new Error("Missing representative transformation");
+  transformation.expression =
+    'period_ref("metric_northstar_revenue", "period_q4_2024")';
+  transformation.dependencyMetricIds = ["metric_northstar_revenue"];
+  transformation.originalExpression = "=D10";
   imported.provenanceRecords.push(
     {
       id: "provenance_period_q4_2024",
@@ -180,8 +198,25 @@ test("separates annual and quarterly periods in a mixed-frequency model", async 
   await expect(periodView).toBeVisible();
   await expect(page.getByText("FY22A", { exact: true })).toBeVisible();
   await expect(page.getByText("Q4'24A", { exact: true })).toHaveCount(0);
+
+  await page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/).click();
+  await expect(page.getByText("1 direct input outside this table", { exact: true })).toBeVisible();
+  await page.locator(".lineage-input").click();
+  await expect(periodView).toHaveValue("fiscal_quarter");
+  await expect(page.locator(".value-button.selected")).toHaveAttribute(
+    "title",
+    /obs_northstar_revenue_q4_2024/,
+  );
+  await expect(
+    page.getByTestId("financial-table-view").getByText("Q4'24A", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("FY22A", { exact: true })).toHaveCount(0);
+
+  await periodView.selectOption("fiscal_year");
   await periodView.selectOption("fiscal_quarter");
-  await expect(page.getByText("Q4'24A", { exact: true })).toBeVisible();
+  await expect(
+    page.getByTestId("financial-table-view").getByText("Q4'24A", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("FY22A", { exact: true })).toHaveCount(0);
 });
 

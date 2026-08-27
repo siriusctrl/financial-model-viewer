@@ -6,6 +6,7 @@ import type { Metric, Observation, SourceLocator } from "../../model-db/types";
 type Props = {
   projection: FinancialTableProjection;
   selectedTargetId: string | null;
+  lineageInputIds: ReadonlySet<string>;
   onSelectMetric: (metricId: string) => void;
   onSelectObservation: (observationId: string) => void;
 };
@@ -48,6 +49,7 @@ function sourceLocation(locator: SourceLocator | undefined): string | null {
 export function FinancialTable({
   projection,
   selectedTargetId,
+  lineageInputIds,
   onSelectMetric,
   onSelectObservation,
 }: Props) {
@@ -71,6 +73,17 @@ export function FinancialTable({
     [normalizedSearch, projection.sections],
   );
   const shownRows = sections.flatMap((section) => section.rows);
+  const visibleLineageInputCount = shownRows.reduce(
+    (count, row) => count + Object.values(row.observations).filter(
+      (observation) => observation && lineageInputIds.has(observation.id),
+    ).length,
+    0,
+  );
+  const lineageSummary = visibleLineageInputCount === lineageInputIds.size
+    ? `${visibleLineageInputCount} direct input${visibleLineageInputCount === 1 ? "" : "s"} highlighted`
+    : visibleLineageInputCount > 0
+      ? `${visibleLineageInputCount} of ${lineageInputIds.size} direct inputs highlighted`
+      : `${lineageInputIds.size} direct input${lineageInputIds.size === 1 ? "" : "s"} outside this table`;
 
   const periodModes = projection.periods.map((period) => {
     const observation = projection.rows
@@ -100,6 +113,11 @@ export function FinancialTable({
           <span>{shownRows.length} metrics</span>
           <span>{projection.periods.length} periods</span>
           <span>{projection.presentation ? "Extracted layout" : "Source-order fallback"}</span>
+          {lineageInputIds.size > 0 && (
+            <span className="lineage-highlight-key">
+              <i /> {lineageSummary}
+            </span>
+          )}
         </div>
       </div>
 
@@ -134,6 +152,7 @@ export function FinancialTable({
                 periods={projection.periods}
                 periodModes={periodModes}
                 selectedTargetId={selectedTargetId}
+                lineageInputIds={lineageInputIds}
                 onSelectMetric={onSelectMetric}
                 onSelectObservation={onSelectObservation}
               />
@@ -149,7 +168,11 @@ export function FinancialTable({
       </div>
 
       <footer className="table-footnote">
-        Select a value to inspect its properties, workbook source, and formula inputs.
+        {visibleLineageInputCount > 0
+          ? "Blue cells mark the direct inputs to the selected formula."
+          : lineageInputIds.size > 0
+            ? "The direct inputs are outside this table. Select one in the inspector to jump to it."
+            : "Select a value to inspect its properties, workbook source, and formula inputs."}
       </footer>
     </section>
   );
@@ -160,6 +183,7 @@ type TableSectionProps = {
   periods: FinancialTableProjection["periods"];
   periodModes: string[];
   selectedTargetId: string | null;
+  lineageInputIds: ReadonlySet<string>;
   onSelectMetric: (metricId: string) => void;
   onSelectObservation: (observationId: string) => void;
 };
@@ -169,6 +193,7 @@ function TableSection({
   periods,
   periodModes,
   selectedTargetId,
+  lineageInputIds,
   onSelectMetric,
   onSelectObservation,
 }: TableSectionProps) {
@@ -219,6 +244,9 @@ function TableSection({
             {periods.map((period, index) => {
               const observation = row.observations[period.id];
               const boundary = index > 0 && periodModes[index - 1] !== periodModes[index];
+              const isLineageInput = observation
+                ? lineageInputIds.has(observation.id)
+                : false;
               return (
                 <td
                   key={period.id}
@@ -226,10 +254,11 @@ function TableSection({
                 >
                   {observation ? (
                     <button
-                      className={`value-button ${observation.valueType} ${selectedTargetId === observation.id ? "selected" : ""}`}
+                      className={`value-button ${observation.valueType} ${isLineageInput ? "formula-input" : ""} ${selectedTargetId === observation.id ? "selected" : ""}`}
                       onClick={() => onSelectObservation(observation.id)}
-                      title={`${valueTypeLabel(observation.valueType)} · ${observation.id}`}
+                      title={`${valueTypeLabel(observation.valueType)} · ${observation.id}${isLineageInput ? " · Direct input to selected formula" : ""}`}
                       aria-pressed={selectedTargetId === observation.id}
+                      data-lineage-role={isLineageInput ? "input" : undefined}
                     >
                       <span>{formatValue(observation.value, row.metric)}</span>
                       {observation.valueType === "derived" && <i>fx</i>}

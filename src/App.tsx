@@ -98,6 +98,18 @@ export default function App() {
       : null,
     [graphMetricId, queries],
   );
+  const selectedLineageInputIds = useMemo(() => {
+    if (!selectedTargetId) return new Set<string>();
+    const observation = database.observations.find(
+      (candidate) => candidate.id === selectedTargetId,
+    );
+    if (!observation) return new Set<string>();
+    return new Set(
+      queries.getObservationDetail(observation.id).inputs.flatMap(
+        (input) => input.observation ? [input.observation.id] : [],
+      ),
+    );
+  }, [database.observations, queries, selectedTargetId]);
 
   const changeModel = (modelId: string) => {
     setSelectedModelId(modelId);
@@ -110,6 +122,19 @@ export default function App() {
   const focusGraph = (metricId: string) => {
     setGraphMetricId(metricId);
     setView("graph");
+  };
+
+  const selectObservation = (observationId: string) => {
+    const observation = database.observations.find(
+      (candidate) => candidate.id === observationId,
+    );
+    const period = observation
+      ? database.periods.find((candidate) => candidate.id === observation.periodId)
+      : undefined;
+    if (period && period.type !== selectedPeriodType) {
+      setSelectedPeriodType(period.type);
+    }
+    setSelectedTargetId(observationId);
   };
 
   const activateDatabase = (
@@ -314,8 +339,9 @@ export default function App() {
             <FinancialTable
               projection={table}
               selectedTargetId={selectedTargetId}
+              lineageInputIds={selectedLineageInputIds}
               onSelectMetric={setSelectedTargetId}
-              onSelectObservation={setSelectedTargetId}
+              onSelectObservation={selectObservation}
             />
           )}
           {view === "graph" && graph && (
@@ -341,7 +367,7 @@ export default function App() {
           modelId={selectedModelId}
           queries={queries}
           onClose={() => setSelectedTargetId(null)}
-          onSelectTarget={setSelectedTargetId}
+          onSelectTarget={selectObservation}
           onFocusGraph={focusGraph}
         />
       </div>
