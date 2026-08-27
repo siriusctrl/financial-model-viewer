@@ -17,12 +17,12 @@ const result = validateModelDatabase(input);
 if (result.success) {
   console.log(`VALID ${inputPath}`);
   console.log(
-    `models=${result.stats.models} metrics=${result.stats.metrics} observations=${result.stats.observations} transformations=${result.stats.transformations} unresolved=${result.stats.unresolved} unreviewed=${result.stats.unreviewed}`,
+    `models=${result.stats.models} metrics=${result.stats.metrics} observations=${result.stats.observations} transformations=${result.stats.transformations} needs_review=${result.stats.needsReview} action_required=${result.stats.actionRequired} unreviewed=${result.stats.unreviewed}`,
   );
   if (result.warnings.length > 0) {
     console.warn(`WARNINGS ${result.warnings.length}`);
     for (const item of result.warnings) {
-      console.warn(`\n[${item.code}] ${item.objectId} · ${item.field}`);
+      console.warn(`\n[${item.attentionLevel}:${item.code}] ${item.objectId} · ${item.field}`);
       console.warn(`  Reason: ${item.reason}`);
       console.warn(`  Resolve: ${item.suggestion}`);
     }

@@ -210,6 +210,14 @@ function TableSection({
         const isDerived = Object.values(row.observations).some(
           (observation) => observation?.valueType === "derived",
         );
+        const actionRequiredCount = row.unresolvedItems.filter(
+          (item) => item.attentionLevel === "action_required",
+        ).length;
+        const rowAttention = actionRequiredCount > 0
+          ? "action_required"
+          : row.unresolvedItems.length > 0
+            ? "needs_review"
+            : null;
         return (
           <tr key={row.metric.id} className={row.depth === 0 ? "root-metric-row" : "child-metric-row"}>
             <th scope="row" className="metric-column">
@@ -228,14 +236,21 @@ function TableSection({
                   {isDerived && <span className="formula-badge">fx</span>}
                   {row.unresolvedItems.length > 0 && (
                     <span
-                      className="row-warning"
+                      className={`row-warning row-warning--${rowAttention}`}
                       title={row.unresolvedItems.map((item) => {
                         const location = sourceLocation(item.locator);
-                        return location ? `${item.description} · ${location}` : item.description;
+                        const label = item.attentionLevel === "action_required"
+                          ? "Action required"
+                          : "Needs review";
+                        const description = `${label}: ${item.description}`;
+                        return location ? `${description} · ${location}` : description;
                       }).join("; ")}
-                      aria-label={`${row.unresolvedItems.length} open extraction issue${row.unresolvedItems.length === 1 ? "" : "s"}`}
+                      aria-label={actionRequiredCount > 0
+                        ? `${actionRequiredCount} extraction action${actionRequiredCount === 1 ? "" : "s"} required`
+                        : `${row.unresolvedItems.length} extraction item${row.unresolvedItems.length === 1 ? "" : "s"} to review`}
                     >
-                      <Icon name="warning" size={12} /> review
+                      <Icon name="warning" size={12} />
+                      {rowAttention === "action_required" ? "action" : "review"}
                     </span>
                   )}
                 </span>

@@ -21,7 +21,7 @@ This project tests a product direction. It does not replace Excel, execute workb
 - TypeScript types and portable JSON Schema come from one runtime contract.
 - A restricted expression interpreter can evaluate supported formulas without `eval` or arbitrary JavaScript.
 - A deterministic validator can report broken references, value-type mismatches, dependency cycles, duplicate points, unsupported syntax, and missing provenance with object-level repair guidance.
-- Every open unresolved item remains a visible review warning, with affected metric/cell cues when a target is known.
+- Extraction outcomes are explicit: accepted mappings proceed without an open issue, reversible assumptions appear as neutral-blue `needs_review` items, and blocked decisions or unusable source values appear as red `action_required` items. Affected metrics and source cells stay visible in the table and inspector.
 - Mixed-frequency models expose explicit annual/quarterly period views, and lagged lineage resolves within the selected period type.
 - The same query layer and frontend render a SaaS model and a structurally different bank model without company-specific UI branches.
 - A user can move from a forecast number to its metric, formula, source workbook cell, confidence, review status, and extraction run. Selecting a derived value highlights its visible direct inputs; inputs in another period view remain explicit in the inspector and can be selected to jump there.
@@ -97,7 +97,7 @@ Check a complete extraction package against the viewer contract and required rep
 npm run extraction:check -- path/to/output-directory
 ```
 
-The output directory must contain both `model-db.json` and `extraction-report.md`. The checker uses the same runtime schema and semantic validator as the viewer, then verifies that every required report section exists, is non-empty, appears in contract order, and names every open unresolved warning.
+The output directory must contain both `model-db.json` and `extraction-report.md`. The checker uses the same runtime schema and semantic validator as the viewer, then verifies that every required report section exists, is non-empty, appears in contract order, and names every open item with its exact `NEEDS REVIEW` or `ACTION REQUIRED` level.
 
 Inventory a complex XLSX package without opening Excel, recalculating formulas, refreshing links, or scanning inflated rectangular used ranges:
 
@@ -112,9 +112,11 @@ For a stable but complex model sheet, create an explicit private semantic map an
 npm run workbook:extract -- model.xlsx extraction-map.json output-directory
 ```
 
-The style inventory keeps compact cell-to-style references plus reusable theme, font, fill, number-format, alignment, and cell-format catalogs. The confirmed Alice workbook convention is enabled explicitly with `styleConvention: alice-blue-yellow@0.1`; there is no configurable color-rule language. The mapped extractor writes a deduplicated selected-style catalog and per-cell audit trail to `workbook-style-evidence.json`; formulas remain derived and style/actuality conflicts become explicit warnings.
+The style inventory keeps compact cell-to-style references plus reusable theme, font, fill, number-format, alignment, and cell-format catalogs. The confirmed Alice workbook convention is enabled explicitly with `styleConvention: alice-blue-yellow@0.1`; there is no configurable color-rule language. The mapped extractor writes a deduplicated selected-style catalog and per-cell audit trail to `workbook-style-evidence.json`. Formulas remain derived, and the blue-font/yellow-fill roles describe source and adjustability only; they never infer actual/estimate status.
 
-The mapped extractor also preserves exact formulas and selected comments. Numeric/percentage literals, basic arithmetic, and `SUM(range)` are translated automatically when every input cell has explicit metric/period metadata and replaying cached values reproduces the XLSX result; exact cross-period references remain inspectable in the viewer. An otherwise supported same-row formula that is blocked only by omitted period columns now fails extraction with the worksheet and missing cells, forcing the private map to be completed instead of silently downgrading lineage or asking an analyst. Missing values, incompatible source types, formulas blocked by unmapped metric rows or unsupported syntax, unmapped comments, and style conflicts become explicit unresolved items. The extractor automatically runs the strict package checker and exits nonzero on failure; it does not infer company-specific semantics from layout alone.
+New private maps use `financial-model-workbook-map@0.2`. A metric can use a conventional row plus period columns (on the default or another named worksheet) or an explicit list of `{sheet, cell, periodId}` assignments, and both modes can coexist. This makes vertical chains, top-of-sheet drivers, sparse helper blocks, and cross-sheet inputs first-class map data without adding company-specific extractor branches. The extraction agent follows referenced cells transitively: a formula blocked by a defensible but unmapped input means “expand the map and rerun,” not “ask an analyst” and not “accept opaque.” Legacy `0.1` grid maps remain supported.
+
+The mapped extractor also preserves exact formulas and selected comments. Numeric/percentage literals, basic arithmetic, and restricted `SUM`/`AVERAGE` calls are translated automatically when every input cell has explicit metric/period metadata and replaying cached values reproduces the XLSX result; mapped blank references follow Excel's numeric coercion rules. Exact cross-period and cross-sheet references remain inspectable in the viewer. Unsupported syntax or replay disagreement can remain `opaque` with its cached value and a `needs_review` item. A formula without a cached value, or a source value that cannot safely become the declared metric type, becomes `action_required` and no disputed observation is fabricated. Comments outside the selected semantic graph remain visible in the workbook inventory rather than becoming blanket analyst questions. The extractor automatically runs the strict package checker, changes a falsely supplied `completed` run to `completed_with_issues` while open attention remains, and exits nonzero on invalid packages.
 
 Compile the checked extraction into a local static viewer and run its Playwright review loop:
 
@@ -158,7 +160,7 @@ The proof commands write local review evidence under `artifacts/`, which is inte
 `examples/sample-model-db.json` contains two synthetic, representative fixtures:
 
 - Northstar Cloud, a SaaS operating model;
-- Harbor National, a bank model with different metrics and an explicit unresolved mapping.
+- Harbor National, a bank model with different metrics and an explicit `needs_review` mapping.
 
 They exist to prove schema, validator, query, and frontend generality. They are not real companies, not investment research, and do not satisfy the final real-workbook extraction milestone. Replace or supplement them with an authorized model using the extraction skill.
 
@@ -178,7 +180,7 @@ Implemented:
 
 Deferred:
 
-- generic company-semantic inference across arbitrary `.xlsx` layouts;
+- fully automatic company-semantic inference across arbitrary `.xlsx` layouts without a reviewable semantic map;
 - complete canonicalization of every secondary sheet in a real analyst workbook;
 - revision timeline and point-in-time reconstruction UI;
 - bull/base/bear comparison;

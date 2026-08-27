@@ -94,14 +94,29 @@ test("uses extracted sections for a structurally different bank model", async ({
   await expect(page.getByText("Operating income", { exact: true })).toBeVisible();
   await expect(page.getByText("Credit and costs", { exact: true })).toBeVisible();
   await expect(page.getByText("Provision for credit losses", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 review warning")).toBeVisible();
-  await expect(page.getByLabel("1 open extraction issue")).toBeVisible();
+  await expect(page.getByText("1 item to review")).toBeVisible();
+  await expect(page.getByLabel("1 extraction item to review")).toBeVisible();
   await page.getByTitle(/obs_harbor_provision_fy2025/).click();
   await expect(page.getByTestId("cell-review-warning")).toContainText(
     "The workbook label 'LLP' was mapped to provision for credit losses",
   );
   await expect(page.getByTestId("cell-review-warning")).toContainText("Model!A14");
   await expect(page.getByText("Subscription revenue", { exact: true })).toHaveCount(0);
+});
+
+test("renders required extraction actions separately from neutral review", async ({ page }) => {
+  await page.goto("./");
+  const imported = structuredClone(sample) as ModelDatabase;
+  imported.unresolvedItems[0].attentionLevel = "action_required";
+
+  await uploadJson(page, "action-required.json", imported);
+  await page.getByLabel("Active model").selectOption("model_harbor_national");
+
+  await expect(page.locator(".validation-status")).toHaveText("1 action required");
+  const rowAction = page.locator(".row-warning--action_required");
+  await expect(rowAction).toContainText("action");
+  await page.getByTitle(/obs_harbor_provision_fy2025/).click();
+  await expect(page.getByTestId("cell-review-warning")).toContainText("Action required");
 });
 
 test("renders formula-derived dependency edges in the optional lineage map", async ({ page }) => {
@@ -232,8 +247,12 @@ test("surfaces an explicitly acknowledged presentation fallback", async ({ page 
     category: "presentation",
     description: "The workbook does not expose defensible table sections.",
     sourceArtifactId: "artifact_northstar_workbook",
+    attentionLevel: "needs_review",
     status: "open",
   });
+  imported.extractionRuns.find(
+    (run) => run.id === "run_northstar_2025_03_15",
+  )!.status = "completed_with_issues";
   imported.provenanceRecords.push({
     id: "provenance_unresolved_northstar_table_presentation",
     targetId: "unresolved_northstar_table_presentation",
@@ -246,8 +265,8 @@ test("surfaces an explicitly acknowledged presentation fallback", async ({ page 
 
   await uploadJson(page, "fallback-model.json", imported);
 
-  await expect(page.getByTestId("import-notice")).toContainText("with 2 warnings");
-  await expect(page.getByText("2 review warnings")).toBeVisible();
+  await expect(page.getByTestId("import-notice")).toContainText("2 items to review");
+  await expect(page.locator(".validation-status")).toHaveText("2 items to review");
   await expect(page.getByText("Source-order fallback")).toBeVisible();
 });
 

@@ -23,7 +23,7 @@ type DatasetSource =
   | { kind: "file"; filename: string };
 
 type ImportNotice = {
-  kind: "success" | "warning" | "error";
+  kind: "success" | "review" | "action" | "error";
   title: string;
   message: string;
   errors?: ValidationError[];
@@ -56,6 +56,21 @@ function initialPeriodType(database: ModelDatabase, modelId: string): Period["ty
 
 function periodTypeLabel(type: Period["type"]): string {
   return type.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function attentionSummary(warnings: ValidationWarning[]): string {
+  const actionRequired = warnings.filter(
+    (item) => item.attentionLevel === "action_required",
+  ).length;
+  const needsReview = warnings.length - actionRequired;
+  return [
+    actionRequired > 0
+      ? `${actionRequired} action${actionRequired === 1 ? "" : "s"} required`
+      : null,
+    needsReview > 0
+      ? `${needsReview} item${needsReview === 1 ? "" : "s"} to review`
+      : null,
+  ].filter(Boolean).join(" · ");
 }
 
 export default function App() {
@@ -98,6 +113,9 @@ export default function App() {
       : null,
     [graphMetricId, queries],
   );
+  const actionRequiredCount = databaseWarnings.filter(
+    (item) => item.attentionLevel === "action_required",
+  ).length;
   const selectedLineageInputIds = useMemo(() => {
     if (!selectedTargetId) return new Set<string>();
     const observation = database.observations.find(
@@ -186,9 +204,13 @@ export default function App() {
         result.warnings,
       );
       setImportNotice({
-        kind: result.warnings.length > 0 ? "warning" : "success",
+        kind: result.stats.actionRequired > 0
+          ? "action"
+          : result.warnings.length > 0
+            ? "review"
+            : "success",
         title: result.warnings.length > 0
-          ? `Previewing ${file.name} with ${result.warnings.length} warning${result.warnings.length === 1 ? "" : "s"}`
+          ? `Previewing ${file.name} · ${attentionSummary(result.warnings)}`
           : `Previewing ${file.name}`,
         message: `${result.stats.models} model${result.stats.models === 1 ? "" : "s"}, ${result.stats.metrics} metrics, and ${result.stats.observations} observations validated locally. The file stays in this browser tab.`,
         errors: result.warnings,
@@ -238,11 +260,11 @@ export default function App() {
         </label>
 
         <div className="header-actions">
-          <span className={`validation-status ${databaseWarnings.length > 0 ? "has-warning" : ""}`}>
+          <span className={`validation-status ${databaseWarnings.length > 0 ? "has-warning" : ""} ${actionRequiredCount > 0 ? "has-action" : databaseWarnings.length > 0 ? "has-review" : ""}`}>
             <Icon name={databaseWarnings.length > 0 ? "warning" : "check"} size={14} />
             {databaseWarnings.length > 0
-              ? `${databaseWarnings.length} review warning${databaseWarnings.length === 1 ? "" : "s"}`
-              : "Validated locally"}
+              ? attentionSummary(databaseWarnings)
+              : "Accepted · validated locally"}
           </span>
           <input
             ref={fileInputRef}
@@ -271,7 +293,7 @@ export default function App() {
           data-testid="import-notice"
           role={importNotice.kind === "error" ? "alert" : "status"}
         >
-          <Icon name={importNotice.kind === "error" ? "warning" : "check"} size={17} />
+          <Icon name={importNotice.kind === "success" ? "check" : "warning"} size={17} />
           <div>
             <strong>{importNotice.title}</strong>
             <p>{importNotice.message}</p>

@@ -13,7 +13,11 @@ from formula_translation import FormulaTranslation, FormulaTranslator
 from ooxml import WorkbookPackage
 
 
-MAP_FORMAT = "financial-model-workbook-map@0.1"
+MAP_FORMAT = "financial-model-workbook-map@0.2"
+SUPPORTED_MAP_FORMATS = {
+    "financial-model-workbook-map@0.1",
+    MAP_FORMAT,
+}
 STYLE_CONVENTION = "alice-blue-yellow@0.1"
 BLUE_FONT_SOURCE_COLORS = (
     {"type": "theme", "theme": 4},
@@ -29,11 +33,6 @@ STYLE_SEMANTICS = {
         "description": "Blue font on pure yellow fill marks an Alice-controlled hardcode or assumption input.",
         "valueType": "assumption",
         "adjustable": True,
-        "expectedActuality": "estimate",
-        "conflictQuestion": (
-            "Should any yellow-fill blue-font cells remain in an actual period, "
-            "or does that indicate a period-boundary error?"
-        ),
     },
     "reported_source": {
         "id": "reported_source",
@@ -44,11 +43,6 @@ STYLE_SEMANTICS = {
         ),
         "valueType": "reported",
         "adjustable": False,
-        "expectedActuality": "actual",
-        "conflictQuestion": (
-            "Are the blue-font literals in estimate periods reported or guided values, "
-            "or should their style/value classification be corrected?"
-        ),
     },
 }
 def _without_prefix(value: str, prefix: str) -> str:
@@ -92,6 +86,30 @@ def _format_locator(locator: dict[str, Any] | None) -> str:
     if locator.get("timecode"):
         return f"timecode {locator['timecode']}"
     return "source-level"
+
+
+def _cell_key(sheet: str, coordinate: str) -> str:
+    return f"{sheet}!{coordinate.replace('$', '').upper()}"
+
+
+def _locator_from_key(key: str) -> dict[str, str]:
+    sheet, coordinate = key.rsplit("!", 1)
+    return _locator(sheet, cell=coordinate)
+
+
+def _mapped_locator(
+    value: str | dict[str, Any],
+    default_sheet: str,
+    *,
+    kind: str,
+) -> dict[str, Any]:
+    if isinstance(value, str):
+        return _locator(default_sheet, **({"cell": value} if kind == "cell" else {"range_": value}))
+    locator = deepcopy(value)
+    locator.setdefault("sheet", default_sheet)
+    if kind not in locator:
+        raise ValueError(f"Mapped locator must include {kind}: {value!r}")
+    return locator
 
 
 def _metric_value_is_valid(value: Any, data_type: str) -> bool:
@@ -141,11 +159,14 @@ class MappedWorkbookExtractor:
     """Extract only concepts explicitly declared in a semantic mapping file."""
 
     def __init__(self, workbook: Path, mapping: dict[str, Any]):
-        if mapping.get("format") != MAP_FORMAT:
-            raise ValueError(f"Mapping must declare format {MAP_FORMAT}")
+        if mapping.get("format") not in SUPPORTED_MAP_FORMATS:
+            raise ValueError(
+                f"Mapping must declare one of {', '.join(sorted(SUPPORTED_MAP_FORMATS))}"
+            )
         self.workbook = workbook.resolve()
         self.mapping = mapping
         self.sheet_name = mapping["sheet"]
+        self.map_format = mapping["format"]
         self.database: dict[str, Any] = {
             "schemaVersion": "0.1.0",
             "dataset": {},
@@ -168,12 +189,12 @@ class MappedWorkbookExtractor:
             "tablePresentations": [],
         }
         self._provenance_targets: set[str] = set()
-        self._analyst_questions: dict[str, str] = {}
+        self._next_actions: dict[str, str] = {}
         self._resolved_styles: dict[int, dict[str, Any]] = {}
         self._evidence_styles: dict[int, dict[str, Any]] = {}
         self._style_records: list[dict[str, Any]] = []
-        self._style_conflicts: list[dict[str, Any]] = []
         self._formula_translator: FormulaTranslator | None = None
+        self._assignments_by_metric: dict[str, list[dict[str, Any]]] = {}
         self._auto_translated_count = 0
         if "styleSemantics" in mapping:
             raise ValueError(
@@ -198,11 +219,19 @@ class MappedWorkbookExtractor:
         })
 
     def _unresolved(self, item: dict[str, Any]) -> None:
-        canonical = {key: deepcopy(value) for key, value in item.items() if key != "analystQuestion"}
+        canonical = {
+            key: deepcopy(value)
+            for key, value in item.items()
+            if key not in {"nextAction", "analystQuestion"}
+        }
+        canonical.setdefault("attentionLevel", "needs_review")
         self.database["unresolvedItems"].append(canonical)
-        self._analyst_questions[canonical["id"]] = item.get(
-            "analystQuestion",
-            f"What source evidence should resolve `{canonical['id']}`?",
+        self._next_actions[canonical["id"]] = item.get(
+            "nextAction",
+            item.get(
+                "analystQuestion",
+                f"Inspect source evidence and resolve `{canonical['id']}`.",
+            ),
         )
         self._provenance(
             canonical["id"],
@@ -210,11 +239,112 @@ class MappedWorkbookExtractor:
             canonical.get("confidence", 0.5),
         )
 
+    def _build_assignments(
+        self,
+        periods_by_id: dict[str, dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        assignments_by_metric: dict[str, list[dict[str, Any]]] = {}
+        seen_metrics: set[str] = set()
+        seen_cells: dict[str, str] = {}
+        seen_points: dict[tuple[str, str], str] = {}
+        for section in self.mapping["sections"]:
+            for metric in section["metrics"]:
+                metric_id = metric["id"]
+                if metric_id in seen_metrics:
+                    raise ValueError(f"Duplicate mapped metric ID: {metric_id}")
+                seen_metrics.add(metric_id)
+                assignments: list[dict[str, Any]] = []
+                if "cells" in metric:
+                    if "row" in metric:
+                        raise ValueError(
+                            f"Mapped metric {metric_id} must use either row or cells, not both"
+                        )
+                    for mapped_cell in metric["cells"]:
+                        period_id = mapped_cell["periodId"]
+                        mapped_period = periods_by_id.get(period_id)
+                        if mapped_period is None:
+                            raise ValueError(
+                                f"Mapped metric {metric_id} cell references unknown period {period_id}"
+                            )
+                        assignments.append({
+                            "sheet": mapped_cell.get("sheet", self.sheet_name),
+                            "cell": mapped_cell["cell"].replace("$", "").upper(),
+                            "periodId": period_id,
+                            "period": mapped_period,
+                            "confidence": mapped_cell.get("confidence"),
+                        })
+                elif "row" in metric:
+                    for period_id, mapped_period in periods_by_id.items():
+                        column = mapped_period.get("column")
+                        if not column:
+                            raise ValueError(
+                                f"Mapped metric {metric_id} uses row layout, but period {period_id} has no column"
+                            )
+                        assignments.append({
+                            "sheet": metric.get("sheet", self.sheet_name),
+                            "cell": f"{column}{metric['row']}".upper(),
+                            "periodId": period_id,
+                            "period": mapped_period,
+                            "confidence": None,
+                        })
+                else:
+                    raise ValueError(
+                        f"Mapped metric {metric_id} must declare a legacy row or explicit cells"
+                    )
+
+                for assignment in assignments:
+                    key = _cell_key(assignment["sheet"], assignment["cell"])
+                    previous_metric = seen_cells.get(key)
+                    if previous_metric:
+                        raise ValueError(
+                            f"Source cell {key} is mapped to both {previous_metric} and {metric_id}"
+                        )
+                    point = (metric_id, assignment["periodId"])
+                    previous_cell = seen_points.get(point)
+                    if previous_cell:
+                        raise ValueError(
+                            f"Metric-period point {metric_id}/{assignment['periodId']} is mapped by both "
+                            f"{previous_cell} and {key}"
+                        )
+                    seen_cells[key] = metric_id
+                    seen_points[point] = key
+                assignments_by_metric[metric_id] = assignments
+        return assignments_by_metric
+
     def extract(self) -> ExtractionResult:
+        periods_by_id = {
+            mapped_period["id"]: mapped_period
+            for mapped_period in self.mapping["periods"]
+        }
+        self._assignments_by_metric = self._build_assignments(periods_by_id)
+        selected_sheets = {
+            assignment["sheet"]
+            for assignments in self._assignments_by_metric.values()
+            for assignment in assignments
+        }
         with WorkbookPackage(self.workbook) as package:
-            cells = package.cells(self.sheet_name)
-            comments = {item["cell"]: item for item in package.comments(self.sheet_name)}
             inventory = package.inventory("none")
+            available_sheets = {sheet["name"] for sheet in inventory["sheets"]}
+            missing_sheets = sorted(selected_sheets - available_sheets)
+            if missing_sheets:
+                raise ValueError(
+                    "Explicit cell mappings reference missing worksheets: "
+                    + ", ".join(missing_sheets)
+                )
+            cells_by_sheet = {
+                sheet: package.cells(sheet)
+                for sheet in selected_sheets
+            }
+            cells = {
+                _cell_key(sheet, coordinate): cell
+                for sheet, sheet_cells in cells_by_sheet.items()
+                for coordinate, cell in sheet_cells.items()
+            }
+            comments = {
+                _cell_key(sheet, item["cell"]): {**item, "sheet": sheet}
+                for sheet in selected_sheets
+                for item in package.comments(sheet)
+            }
             self._resolved_styles = {
                 style_id: package.resolved_style(style_id)
                 for style_id in {cell["style"] for cell in cells.values()}
@@ -236,17 +366,20 @@ class MappedWorkbookExtractor:
 
         model = self.database["models"][0]
         entity = self.database["entities"][0]
-        model_locator = _locator(self.sheet_name, range_=self.mapping["modelRange"])
+        model_locator = _mapped_locator(
+            self.mapping["modelRange"], self.sheet_name, kind="range"
+        )
         self._provenance(model["id"], model_locator, 0.98)
         self._provenance(entity["id"], model_locator, 0.98)
         for scenario in self.database["scenarios"]:
             self._provenance(
                 scenario["id"],
-                _locator(self.sheet_name, range_=self.mapping["periodHeaderRange"]),
+                _mapped_locator(
+                    self.mapping["periodHeaderRange"], self.sheet_name, kind="range"
+                ),
                 0.95,
             )
 
-        periods_by_id: dict[str, dict[str, Any]] = {}
         for mapped_period in self.mapping["periods"]:
             period = {
                 key: deepcopy(value)
@@ -254,45 +387,63 @@ class MappedWorkbookExtractor:
                 if key not in {"column", "actuality", "headerCell"}
             }
             self.database["periods"].append(period)
-            periods_by_id[period["id"]] = mapped_period
             self._provenance(
                 period["id"],
-                _locator(self.sheet_name, cell=mapped_period["headerCell"]),
+                _mapped_locator(
+                    mapped_period["headerCell"], self.sheet_name, kind="cell"
+                ),
                 0.99,
             )
 
-        coordinate_semantics = {
-            f"{mapped_period['column']}{mapped_metric['row']}": {
-                "metricId": mapped_metric["id"],
-                "periodId": period_id,
-                "dataType": mapped_metric["dataType"],
-            }
+        metrics_by_id = {
+            metric["id"]: metric
             for section in self.mapping["sections"]
-            for mapped_metric in section["metrics"]
-            for period_id, mapped_period in periods_by_id.items()
+            for metric in section["metrics"]
         }
-        self._formula_translator = FormulaTranslator(cells, coordinate_semantics)
+        coordinate_semantics = {
+            _cell_key(assignment["sheet"], assignment["cell"]): {
+                "metricId": metric_id,
+                "periodId": assignment["periodId"],
+                "dataType": metrics_by_id[metric_id]["dataType"],
+            }
+            for metric_id, assignments in self._assignments_by_metric.items()
+            for assignment in assignments
+        }
+        strict_grid = self.map_format.endswith("@0.1") and all(
+            "cells" not in metric
+            for metric in metrics_by_id.values()
+        )
+        self._formula_translator = FormulaTranslator(
+            cells,
+            coordinate_semantics,
+            default_sheet=self.sheet_name,
+            strict_grid=strict_grid,
+        )
 
         comments_used: set[str] = set()
-        opaque_cells: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        opaque_cells: dict[
+            str,
+            list[tuple[str, str, tuple[str, ...]]],
+        ] = defaultdict(list)
         period_mapping_gaps: list[tuple[str, tuple[str, ...]]] = []
         sections = []
-        metric_ids: set[str] = set()
         for section in self.mapping["sections"]:
             section_metric_ids = []
             for mapped_metric in section["metrics"]:
                 metric = self._canonical_metric(mapped_metric)
-                if metric["id"] in metric_ids:
-                    raise ValueError(f"Duplicate mapped metric ID: {metric['id']}")
-                metric_ids.add(metric["id"])
                 observations_before = len(self.database["observations"])
-                for period_id, mapped_period in periods_by_id.items():
-                    coordinate = f"{mapped_period['column']}{mapped_metric['row']}"
-                    cell = cells.get(coordinate)
+                for assignment in self._assignments_by_metric[metric["id"]]:
+                    period_id = assignment["periodId"]
+                    mapped_period = assignment["period"]
+                    sheet = assignment["sheet"]
+                    coordinate = assignment["cell"]
+                    source_key = _cell_key(sheet, coordinate)
+                    cell = cells.get(source_key)
                     if not cell or (cell.get("value") is None and "formula" not in cell):
                         continue
                     style_record = self._record_style(
                         cell,
+                        sheet,
                         coordinate,
                         metric["id"],
                         period_id,
@@ -300,13 +451,15 @@ class MappedWorkbookExtractor:
                     )
                     if cell.get("value") is None and "formula" in cell:
                         style_record["canonicalTargetEmitted"] = False
-                        self._missing_cached_value(metric["id"], period_id, coordinate, model["id"], source["id"])
+                        self._missing_cached_value(
+                            metric["id"], period_id, sheet, coordinate, model["id"], source["id"]
+                        )
                         continue
                     value = cell.get("value")
                     if not _metric_value_is_valid(value, metric["dataType"]):
                         style_record["canonicalTargetEmitted"] = False
                         self._incompatible_value(
-                            metric["id"], period_id, coordinate, value, model["id"], source["id"],
+                            metric["id"], period_id, sheet, coordinate, value, model["id"], source["id"],
                         )
                         continue
                     observation = self._observation(
@@ -325,14 +478,15 @@ class MappedWorkbookExtractor:
                             coordinate,
                             period_id,
                             value,
+                            sheet,
                         )
                         blocker = (
                             None
                             if automatic
-                            else self._formula_translator.blocker_details(cell["formula"])
+                            else self._formula_translator.blocker_details(cell["formula"], sheet)
                         )
                         if blocker and blocker.kind == "unmapped_period":
-                            period_mapping_gaps.append((coordinate, blocker.coordinates))
+                            period_mapping_gaps.append((source_key, blocker.coordinates))
                         transformation = self._transformation(
                             metric,
                             mapped_metric,
@@ -346,20 +500,18 @@ class MappedWorkbookExtractor:
                         observation["transformationId"] = transformation["id"]
                         self._provenance(
                             transformation["id"],
-                            _locator(self.sheet_name, cell=coordinate),
+                            _locator(sheet, cell=coordinate),
                             0.94 if transformation["status"] == "supported" else 0.78,
                         )
                         if transformation["status"] == "opaque":
                             if blocker is None:
                                 raise RuntimeError("Opaque formula is missing translation blocker details")
                             opaque_cells[metric["id"]].append((
-                                coordinate,
+                                source_key,
                                 blocker.reason,
+                                blocker.coordinates,
                             ))
-                    elif (
-                        style_record.get("semantic", {}).get("valueType")
-                        and not style_record.get("actualityConflict")
-                    ):
+                    elif style_record.get("semantic", {}).get("valueType"):
                         observation["valueType"] = style_record["semantic"]["valueType"]
                     self.database["observations"].append(observation)
                     style_record["canonicalTargetEmitted"] = True
@@ -372,12 +524,16 @@ class MappedWorkbookExtractor:
                             )
                     self._provenance(
                         observation["id"],
-                        _locator(self.sheet_name, cell=coordinate),
-                        0.98 if mapped_period["actuality"] == "actual" else 0.86,
+                        _locator(sheet, cell=coordinate),
+                        assignment["confidence"]
+                        if assignment["confidence"] is not None
+                        else (0.98 if mapped_period["actuality"] == "actual" else 0.86),
                     )
-                    if coordinate in comments:
-                        self._add_comment_evidence(comments[coordinate], observation["id"], metric["id"], period_id)
-                        comments_used.add(coordinate)
+                    if source_key in comments:
+                        self._add_comment_evidence(
+                            comments[source_key], observation["id"], metric["id"], period_id
+                        )
+                        comments_used.add(source_key)
 
                 if len(self.database["observations"]) == observations_before:
                     raise ValueError(f"Mapped metric {metric['id']} has no observations in the selected periods")
@@ -385,14 +541,25 @@ class MappedWorkbookExtractor:
                 section_metric_ids.append(metric["id"])
                 self._provenance(
                     metric["id"],
-                    _locator(self.sheet_name, cell=mapped_metric["labelCell"]),
+                    _mapped_locator(
+                        mapped_metric["labelCell"],
+                        mapped_metric.get("sheet", self.sheet_name),
+                        kind="cell",
+                    ),
                     mapped_metric.get("confidence", 0.95),
                 )
+            section_locator = _mapped_locator(
+                section["sourceLocator"]
+                if "sourceLocator" in section
+                else section["sourceRange"],
+                self.sheet_name,
+                kind="range",
+            )
             sections.append({
                 "id": section["id"],
                 "title": section["title"],
                 "metricIds": section_metric_ids,
-                "sourceLocator": _locator(self.sheet_name, range_=section["sourceRange"]),
+                "sourceLocator": section_locator,
             })
         self.database["tablePresentations"] = [{
             "modelId": model["id"],
@@ -402,7 +569,7 @@ class MappedWorkbookExtractor:
 
         if period_mapping_gaps:
             examples = "; ".join(
-                f"{self.sheet_name}!{target} references {', '.join(inputs[:8])}"
+                f"{target} references {', '.join(inputs[:8])}"
                 for target, inputs in period_mapping_gaps[:8]
             )
             raise ValueError(
@@ -413,8 +580,15 @@ class MappedWorkbookExtractor:
 
         for metric_id, blocked_formulas in opaque_cells.items():
             suffix = _without_prefix(metric_id, "metric_")
-            coordinates = [coordinate for coordinate, _reason in blocked_formulas]
-            blocker_counts = Counter(reason for _coordinate, reason in blocked_formulas)
+            coordinates = [coordinate for coordinate, _reason, _inputs in blocked_formulas]
+            blocker_counts = Counter(
+                reason for _coordinate, reason, _inputs in blocked_formulas
+            )
+            blocked_inputs = sorted({
+                input_coordinate
+                for _coordinate, _reason, inputs in blocked_formulas
+                for input_coordinate in inputs
+            })
             blockers = "; ".join(
                 f"{count} formula{'s' if count != 1 else ''}: {reason}"
                 for reason, count in sorted(blocker_counts.items())
@@ -424,66 +598,45 @@ class MappedWorkbookExtractor:
                 "modelId": model["id"],
                 "category": "formula",
                 "description": (
-                    f"On worksheet `{self.sheet_name}`, {len(coordinates)} materialized workbook formulas "
+                    f"At {len(coordinates)} explicitly mapped workbook cells, materialized formulas "
                     "are preserved as opaque because "
                     f"they were not safely translated to model-expression@0.1. Translation blockers: {blockers}."
+                    + (
+                        f" Explicit cells to map or classify include: {', '.join(blocked_inputs[:12])}."
+                        if blocked_inputs
+                        else ""
+                    )
                 ),
                 "targetId": metric_id,
                 "sourceArtifactId": source["id"],
-                "locator": _locator(self.sheet_name, range_=f"{coordinates[0]}:{coordinates[-1]}"),
+                "locator": _locator_from_key(coordinates[0]),
                 "confidence": 0.72,
+                "attentionLevel": "needs_review",
                 "status": "open",
-                "analystQuestion": f"Should `{metric_id}` be translated into canonical lineage, or remain opaque workbook logic?",
+                "nextAction": (
+                    "No analyst decision is required for this translator-coverage item. "
+                    "Engineering follow-up: extend the restricted translator for the named function(s), "
+                    "then rerun cached-value replay."
+                ),
             })
         unmapped_comments = sorted(set(comments) - comments_used)
-        if unmapped_comments:
-            examples = ", ".join(unmapped_comments[:5])
-            self._unresolved({
-                "id": "unresolved_unmapped_comments",
-                "modelId": model["id"],
-                "category": "lineage",
-                "description": (
-                    f"{len(unmapped_comments)} comments on {self.sheet_name} were inventoried but do not attach "
-                    f"to selected observation cells; examples: {examples}."
-                ),
-                "targetId": model["id"],
-                "sourceArtifactId": source["id"],
-                "locator": _locator(self.sheet_name, cell=unmapped_comments[0]),
-                "confidence": 0.65,
-                "status": "open",
-                "analystQuestion": "Which unmapped workbook comments contain material model rationale that should be promoted to canonical evidence?",
-            })
-        conflicts_by_role: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for conflict in self._style_conflicts:
-            conflicts_by_role[conflict["semanticId"]].append(conflict)
-        for semantic_id, conflicts in conflicts_by_role.items():
-            semantic = STYLE_SEMANTICS[semantic_id]
-            examples = ", ".join(item["cell"] for item in conflicts[:8])
-            expected = semantic["expectedActuality"]
-            actualities = sorted({item["actuality"] for item in conflicts})
-            self._unresolved({
-                "id": f"unresolved_style_actuality_{semantic_id}",
-                "modelId": model["id"],
-                "category": "actuality_boundary",
-                "description": (
-                    f"Style convention `{STYLE_CONVENTION}` role `{semantic_id}` expects actuality "
-                    f"`{expected}`, but {len(conflicts)} selected cells "
-                    f"are mapped as {', '.join(actualities)}; examples: {examples}."
-                ),
-                "targetId": model["id"],
-                "sourceArtifactId": source["id"],
-                "locator": _locator(self.sheet_name, cell=conflicts[0]["cell"]),
-                "confidence": 0.55,
-                "status": "open",
-                "analystQuestion": semantic["conflictQuestion"],
-            })
         for item in self.mapping.get("unresolvedItems", []):
             self._unresolved(deepcopy(item))
+
+        if any(item["status"] == "open" for item in self.database["unresolvedItems"]):
+            if run["status"] == "completed":
+                run["status"] = "completed_with_issues"
 
         style_evidence = self._style_evidence(inventory)
         return ExtractionResult(
             self.database,
-            self._report(inventory, opaque_cells, comments_used, style_evidence),
+            self._report(
+                inventory,
+                opaque_cells,
+                comments_used,
+                unmapped_comments,
+                style_evidence,
+            ),
             inventory,
             style_evidence,
         )
@@ -506,6 +659,7 @@ class MappedWorkbookExtractor:
     def _record_style(
         self,
         cell: dict[str, Any],
+        sheet: str,
         coordinate: str,
         metric_id: str,
         period_id: str,
@@ -536,8 +690,10 @@ class MappedWorkbookExtractor:
         self._evidence_styles[style["styleId"]] = style
         cell_kind = "formula" if "formula" in cell else "literal"
         semantic_definition = self._matching_style_semantic(style, cell_kind)
+        source_key = _cell_key(sheet, coordinate)
         record: dict[str, Any] = {
-            "cell": coordinate,
+            "sheet": sheet,
+            "cell": source_key,
             "metricId": metric_id,
             "periodId": period_id,
             "actuality": actuality,
@@ -545,23 +701,7 @@ class MappedWorkbookExtractor:
             "styleId": style["styleId"],
         }
         if semantic_definition:
-            semantic = {
-                key: deepcopy(value)
-                for key, value in semantic_definition.items()
-                if key not in {"expectedActuality", "conflictQuestion"}
-            }
-            record["semantic"] = semantic
-            expected_actuality = semantic_definition["expectedActuality"]
-            if expected_actuality and expected_actuality != actuality:
-                record["actualityConflict"] = True
-                self._style_conflicts.append({
-                    "cell": coordinate,
-                    "metricId": metric_id,
-                    "periodId": period_id,
-                    "actuality": actuality,
-                    "expectedActuality": expected_actuality,
-                    "semanticId": semantic_definition["id"],
-                })
+            record["semantic"] = deepcopy(semantic_definition)
         self._style_records.append(record)
         return record
 
@@ -578,11 +718,11 @@ class MappedWorkbookExtractor:
             for item in self._style_records
         )
         return {
-            "format": "financial-workbook-style-evidence@0.2",
+            "format": "financial-workbook-style-evidence@0.3",
             "source": {
                 "filename": inventory["input"]["filename"],
                 "sha256": inventory["input"]["sha256"],
-                "sheet": self.sheet_name,
+                "sheets": sorted({item["sheet"] for item in self._style_records}),
             },
             "styleConvention": (
                 {
@@ -593,11 +733,7 @@ class MappedWorkbookExtractor:
                         "foregroundColor": deepcopy(YELLOW_FILL_SOURCE_COLOR),
                     },
                     "roles": [
-                        {
-                            key: deepcopy(value)
-                            for key, value in semantic.items()
-                            if key != "conflictQuestion"
-                        }
+                        deepcopy(semantic)
                         for semantic in STYLE_SEMANTICS.values()
                     ],
                 }
@@ -612,14 +748,12 @@ class MappedWorkbookExtractor:
                 "selectedCells": len(self._style_records),
                 "matchedCells": sum(count for role, count in role_counts.items() if role != "unmatched"),
                 "unmatchedCells": role_counts.get("unmatched", 0),
-                "actualityConflicts": len(self._style_conflicts),
                 "byRole": dict(sorted(role_counts.items())),
                 "byRoleAndCellKind": [
                     {"role": role, "cellKind": cell_kind, "count": count}
                     for (role, cell_kind), count in sorted(role_kind_counts.items())
                 ],
             },
-            "conflicts": deepcopy(self._style_conflicts),
             "cells": self._style_records,
         }
 
@@ -627,6 +761,8 @@ class MappedWorkbookExtractor:
     def _canonical_metric(mapped_metric: dict[str, Any]) -> dict[str, Any]:
         excluded = {
             "row",
+            "cells",
+            "sheet",
             "labelCell",
             "canonicalExpression",
             "canonicalExpressions",
@@ -706,6 +842,7 @@ class MappedWorkbookExtractor:
         self,
         metric_id: str,
         period_id: str,
+        sheet: str,
         coordinate: str,
         model_id: str,
         source_id: str,
@@ -718,16 +855,18 @@ class MappedWorkbookExtractor:
             "description": "The workbook formula has no materialized cached value; no observation was emitted.",
             "targetId": metric_id,
             "sourceArtifactId": source_id,
-            "locator": _locator(self.sheet_name, cell=coordinate),
+            "locator": _locator(sheet, cell=coordinate),
             "confidence": 0.2,
+            "attentionLevel": "action_required",
             "status": "open",
-            "analystQuestion": f"Should `{coordinate}` be recalculated in the source workbook, or omitted from `{metric_id}`?",
+            "nextAction": f"Recalculate `{sheet}!{coordinate}` in the source workbook, or explicitly omit it from `{metric_id}`.",
         })
 
     def _incompatible_value(
         self,
         metric_id: str,
         period_id: str,
+        sheet: str,
         coordinate: str,
         value: Any,
         model_id: str,
@@ -741,10 +880,11 @@ class MappedWorkbookExtractor:
             "description": f"The source cell contains {value!r}, which is incompatible with the mapped metric type; no observation was emitted.",
             "targetId": metric_id,
             "sourceArtifactId": source_id,
-            "locator": _locator(self.sheet_name, cell=coordinate),
+            "locator": _locator(sheet, cell=coordinate),
             "confidence": 0.2,
+            "attentionLevel": "action_required",
             "status": "open",
-            "analystQuestion": f"What numeric source value should replace {value!r} at `{self.sheet_name}!{coordinate}` for `{metric_id}`?",
+            "nextAction": f"Provide the valid source value or corrected metric type at `{sheet}!{coordinate}` for `{metric_id}`.",
         })
 
     def _add_comment_evidence(
@@ -770,15 +910,16 @@ class MappedWorkbookExtractor:
             "toId": observation_id,
             "attributes": {"author": comment["author"], "kind": "workbook_comment"},
         })
-        locator = _locator(self.sheet_name, cell=comment["cell"])
+        locator = _locator(comment["sheet"], cell=comment["cell"])
         self._provenance(evidence_id, locator, 0.98)
         self._provenance(relationship_id, locator, 0.95)
 
     def _report(
         self,
         inventory: dict[str, Any],
-        opaque_cells: dict[str, list[str]],
+        opaque_cells: dict[str, list[tuple[str, str, tuple[str, ...]]]],
         comments_used: set[str],
+        unmapped_comments: list[str],
         style_evidence: dict[str, Any],
     ) -> str:
         counts = {key: len(self.database[key]) for key in (
@@ -786,6 +927,11 @@ class MappedWorkbookExtractor:
             "assumptions", "decisions", "unresolvedItems",
         )}
         statuses = Counter(item["status"] for item in self.database["transformations"])
+        attention = Counter(
+            item["attentionLevel"]
+            for item in self.database["unresolvedItems"]
+            if item["status"] == "open"
+        )
         lines = [
             "# Extraction report", "", "## Inputs and hashes", "",
             f"- `{inventory['input']['filename']}` — {inventory['input']['bytes']} bytes — `sha256:{inventory['input']['sha256']}`.",
@@ -808,7 +954,7 @@ class MappedWorkbookExtractor:
             "- Style evidence: "
             f"{style_summary['selectedCells']} selected cells inspected, "
             f"{semantic_result}, "
-            f"{style_summary['actualityConflicts']} actuality conflicts; "
+            "with font/fill roles kept independent of actual/estimate status; "
             "see `workbook-style-evidence.json`."
         )
         lines.extend(
@@ -819,7 +965,7 @@ class MappedWorkbookExtractor:
             f"- Extraction scope: {self.mapping['scope']}",
             "", "## Object counts", "",
             f"- 1 model; {counts['entities']} entity; {counts['metrics']} metrics; {counts['observations']} observations; {counts['transformations']} transformations; {counts['relationships']} relationships.",
-            f"- {len(self.database['tablePresentations'][0]['sections'])} table-presentation sections; {counts['assumptions']} assumptions; {counts['decisions']} decisions; {counts['unresolvedItems']} open unresolved items.",
+            f"- {len(self.database['tablePresentations'][0]['sections'])} table-presentation sections; {counts['assumptions']} assumptions; {counts['decisions']} decisions; {attention['needs_review']} items need review; {attention['action_required']} require action.",
             "", "## Table presentation", "",
         ])
         lines.extend(
@@ -832,11 +978,18 @@ class MappedWorkbookExtractor:
             f"- {statuses['supported']} supported, {statuses['opaque']} opaque, and {statuses['unresolved']} unresolved transformations.",
             f"- {self._auto_translated_count} formulas were auto-translated from mapped cells and accepted only after cached-value replay matched the XLSX result.",
             f"- {len(comments_used)} comments on selected observation cells were preserved as evidence and linked to those observations.",
+            (
+                f"- {len(unmapped_comments)} comments outside the selected observation graph remain preserved "
+                f"in `workbook-inventory.json`; examples: {', '.join(unmapped_comments[:5])}."
+                if unmapped_comments
+                else "- No workbook comments remain outside the selected observation graph."
+            ),
             "", "## Unresolved mappings", "",
         ])
         lines.extend(
             [
-                f"- WARNING — `{item['id']}` at `{_format_locator(item.get('locator'))}`: "
+                f"- {'ACTION REQUIRED' if item['attentionLevel'] == 'action_required' else 'NEEDS REVIEW'} — "
+                f"`{item['id']}` at `{_format_locator(item.get('locator'))}`: "
                 f"{item['description']}"
                 for item in self.database["unresolvedItems"]
             ]
@@ -851,12 +1004,12 @@ class MappedWorkbookExtractor:
             "", "## Validator result", "",
             "- `npm run validate -- <output>/model-db.json` — required after generation.",
             "- `npm run extraction:check -- <output>` — required final strict package check.",
-            "- Every open warning listed above remains explicit in `unresolvedItems`; no warning was silently discarded.",
-            "", "## Analyst questions", "",
+            "- Every open attention item listed above remains explicit in `unresolvedItems`; none was silently discarded.",
+            "", "## Questions and next actions", "",
         ])
         lines.extend(
             f"- `{item['id']}` — Source: `{_format_locator(item.get('locator'))}`. "
-            f"{self._analyst_questions[item['id']]}"
+            f"{self._next_actions[item['id']]}"
             for item in self.database["unresolvedItems"]
         )
         if not self.database["unresolvedItems"]:

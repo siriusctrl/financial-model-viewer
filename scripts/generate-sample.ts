@@ -414,6 +414,7 @@ const unresolvedItems: UnresolvedItem[] = [
     sourceArtifactId: "artifact_harbor_workbook",
     locator: { sheet: "Model", cell: "A14" },
     confidence: 0.64,
+    attentionLevel: "needs_review",
     status: "open",
   },
 ];

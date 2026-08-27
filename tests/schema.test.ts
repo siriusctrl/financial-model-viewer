@@ -15,11 +15,47 @@ describe("deterministic model database validator", () => {
       expect(result.stats.models).toBe(2);
       expect(result.stats.observations).toBeGreaterThan(50);
       expect(result.stats.unresolved).toBe(1);
+      expect(result.stats.needsReview).toBe(1);
+      expect(result.stats.actionRequired).toBe(0);
       expect(result.warnings).toContainEqual(
         expect.objectContaining({
-          code: "unresolved.open",
+          code: "unresolved.needs_review",
           objectId: "unresolved_harbor_provision_label",
+          attentionLevel: "needs_review",
         }),
+      );
+    }
+  });
+
+  it("separates neutral review items from required actions", () => {
+    const database = fixture();
+    database.unresolvedItems[0].attentionLevel = "action_required";
+
+    const result = validateModelDatabase(database);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.stats.needsReview).toBe(0);
+      expect(result.stats.actionRequired).toBe(1);
+      expect(result.warnings).toContainEqual(
+        expect.objectContaining({
+          code: "unresolved.action_required",
+          attentionLevel: "action_required",
+        }),
+      );
+    }
+  });
+
+  it("does not call a run completed while attention items remain open", () => {
+    const database = fixture();
+    database.extractionRuns.find(
+      (run) => run.id === "run_harbor_2025_03_15",
+    )!.status = "completed";
+
+    const result = validateModelDatabase(database);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "extraction_run.open_attention" }),
       );
     }
   });
@@ -216,8 +252,12 @@ describe("deterministic model database validator", () => {
       description: "The source does not expose defensible worksheet sections.",
       sourceArtifactId: "artifact_northstar_workbook",
       confidence: 0.4,
+      attentionLevel: "needs_review",
       status: "open",
     });
+    database.extractionRuns.find(
+      (run) => run.id === "run_northstar_2025_03_15",
+    )!.status = "completed_with_issues";
     database.provenanceRecords.push({
       id: "provenance_unresolved_northstar_table_presentation",
       targetId: "unresolved_northstar_table_presentation",

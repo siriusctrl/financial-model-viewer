@@ -113,6 +113,8 @@ export type ModelOverviewProjection = {
   actualCount: number;
   estimateCount: number;
   unresolvedCount: number;
+  needsReviewCount: number;
+  actionRequiredCount: number;
   unreviewedCount: number;
 };
 
@@ -233,6 +235,18 @@ export class ModelDatabaseQueries {
       estimateCount: observations.filter((item) => item.actuality === "estimate").length,
       unresolvedCount: this.database.unresolvedItems.filter(
         (item) => item.modelId === modelId && item.status === "open",
+      ).length,
+      needsReviewCount: this.database.unresolvedItems.filter(
+        (item) =>
+          item.modelId === modelId &&
+          item.status === "open" &&
+          item.attentionLevel === "needs_review",
+      ).length,
+      actionRequiredCount: this.database.unresolvedItems.filter(
+        (item) =>
+          item.modelId === modelId &&
+          item.status === "open" &&
+          item.attentionLevel === "action_required",
       ).length,
       unreviewedCount: this.database.provenanceRecords.filter(
         (item) => targetIds.has(item.targetId) && item.reviewStatus === "unreviewed",

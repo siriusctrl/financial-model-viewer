@@ -16,8 +16,8 @@ This file is the operating map for agents working in this repository. Keep produ
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
 - `skills/extract-financial-model/`: reusable workbook/model extraction workflow and contract.
 - `skills/extract-financial-model/scripts/ooxml.py`: sparse read-only XLSX package access used by inventory and mapped extraction.
-- `skills/extract-financial-model/scripts/formula_translation.py`: restricted mapped-cell arithmetic/SUM translation with cached-value replay.
-- `workbook-style-evidence.json` in a mapped extraction output: non-canonical per-cell styles, matches from the fixed Alice convention, and conflicts.
+- `skills/extract-financial-model/scripts/formula_translation.py`: restricted mapped-cell arithmetic/SUM/AVERAGE translation with cached-value replay across mapped periods and worksheets.
+- `workbook-style-evidence.json` in a mapped extraction output: non-canonical per-cell styles and matches from the fixed Alice convention.
 - `skills/extract-financial-model/scripts/build-preview.mjs`: validates, compiles, and Playwright-reviews a local extraction bundle without changing GitHub Pages.
 - `examples/`: generated semantic dataset and its extraction report.
 - `tests/`: expression, validator, query-generality, and Playwright browser behavior.
@@ -31,9 +31,9 @@ This file is the operating map for agents working in this repository. Keep produ
 - Keep `Observation` point-in-time: model, metric, entity, period, scenario, actuality, as-of, and version must remain explicit.
 - Never execute expressions with `eval`, `new Function`, imports, assignments, loops, property access, or browser/network APIs.
 - Derive dependency edges from parsed transformations. Do not store duplicate `calculated_from` relationships.
-- Preserve unsupported formulas as `opaque` with their original formula and workbook materialized value.
+- Expand defensible referenced-cell mappings before preserving a formula as `opaque`; retain its original formula and workbook materialized value.
 - Every extracted canonical object requires provenance, confidence, review status, source artifact, and extraction run.
-- Treat style and position as extraction signals only. Put uncertain mappings in `unresolvedItems`.
+- Treat style and position as extraction signals only. Accepted mappings have no open issue; reversible assumptions use `needs_review`; blocked semantic choices or unusable source values use `action_required`.
 - Visualizations consume `ModelDatabaseQueries`; do not assemble pages directly from JSON arrays.
 - Keep the viewer statically buildable and company-agnostic.
 

@@ -61,7 +61,7 @@ All supported formulas preserve a representative original Excel formula and a pa
 
 ## Unresolved mappings
 
-`unresolved_harbor_provision_label`: the source-style label `LLP` is mapped to “Provision for credit losses,” but the representative source contains no explicit definition. The object remains unreviewed with 64% confidence.
+NEEDS REVIEW — `unresolved_harbor_provision_label`: the source-style label `LLP` is mapped to “Provision for credit losses,” but the representative source contains no explicit definition. The object remains unreviewed with 64% confidence.
 
 ## Missing lineage
 
@@ -73,10 +73,10 @@ The deterministic validator reports no missing provenance for canonical objects.
 npm run validate -- examples/sample-model-db.json
 npm run extraction:check -- examples/sample-model-db.json examples/extraction-report.md
 PASS — schema, references, types, dependencies, cycles, point-in-time uniqueness, and provenance coverage
-WARNING — `unresolved_harbor_provision_label` remains open and requires analyst review; this warning is visible in the viewer.
+NEEDS REVIEW — `unresolved_harbor_provision_label` remains open and requires analyst review; this item is visible in the viewer.
 ```
 
-## Analyst questions
+## Questions and next actions
 
 1. Does `LLP` in the bank model mean provision expense, allowance balance, or another credit metric?
 2. For a real workbook, which source establishes the actual/estimate boundary when columns are not explicitly labeled?

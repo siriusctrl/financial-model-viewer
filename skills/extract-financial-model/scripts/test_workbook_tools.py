@@ -210,6 +210,11 @@ class WorkbookToolTests(unittest.TestCase):
                         "periodId": "period_fy2025",
                         "dataType": "number",
                     },
+                    "D1": {
+                        "metricId": "metric_test_blank_input",
+                        "periodId": "period_fy2025",
+                        "dataType": "number",
+                    },
                 })
 
             sum_translation = translator.translate(
@@ -260,17 +265,85 @@ class WorkbookToolTests(unittest.TestCase):
                 '(ref("metric_test_input") - '
                 'sum(period_ref("metric_test_input", "period_fy2024")))',
             )
+            blank_arithmetic = translator.translate(
+                "=C1+D1", "C2", "period_fy2025", 3,
+            )
+            self.assertIsNotNone(blank_arithmetic)
             self.assertEqual(
-                translator.blocker("=D1"),
+                (blank_arithmetic.expression, blank_arithmetic.dependency_metric_ids),
+                ('(ref("metric_test_input") + 0)', ["metric_test_input"]),
+            )
+            average_translation = translator.translate(
+                "=AVERAGE(B1:D1)", "C2", "period_fy2025", 2.5,
+            )
+            self.assertIsNotNone(average_translation)
+            self.assertEqual(
+                average_translation.expression,
+                'average(period_ref("metric_test_input", "period_fy2024"), '
+                'ref("metric_test_input"))',
+            )
+            discrete_average = translator.translate(
+                "=AVERAGE(C1,D1)", "C2", "period_fy2025", 3,
+            )
+            self.assertIsNotNone(discrete_average)
+            self.assertEqual(
+                discrete_average.expression,
+                'average(ref("metric_test_input"))',
+            )
+            literal_average = translator.translate(
+                "=AVERAGE(8.35,10.76,11.54)",
+                "C2",
+                "period_fy2025",
+                10.216666666666667,
+            )
+            self.assertIsNotNone(literal_average)
+            self.assertEqual(
+                literal_average.expression,
+                "average(8.35, 10.76, 11.54)",
+            )
+            self.assertEqual(
+                translator.blocker("=IF(MOD(C1,4),90,91)"),
+                "unsupported Excel function(s): IF, MOD",
+            )
+            self.assertEqual(
+                translator.blocker("=E1"),
                 "referenced period columns outside the selected semantic map",
             )
             self.assertEqual(
                 translator.blocker("='Reported'!B1"),
-                "cross-sheet reference to worksheet `Reported` without an explicit semantic map for that source sheet",
+                "referenced worksheet semantics are not mapped: `Reported`",
             )
-            period_blocker = translator.blocker_details("=D1")
+            period_blocker = translator.blocker_details("=E1")
             self.assertEqual(period_blocker.kind, "unmapped_period")
-            self.assertEqual(period_blocker.coordinates, ("D1",))
+            self.assertEqual(period_blocker.coordinates, ("E1",))
+
+            qualified = FormulaTranslator(
+                {"Drivers!B1": {"value": 2, "style": 0}},
+                {
+                    "Drivers!B1": {
+                        "metricId": "metric_test_driver",
+                        "periodId": "period_fy2025",
+                        "dataType": "number",
+                    },
+                },
+                default_sheet="Model",
+                strict_grid=False,
+            )
+            cross_sheet = qualified.translate(
+                "='Drivers'!B1*2",
+                "B2",
+                "period_fy2025",
+                4,
+                "Model",
+            )
+            self.assertIsNotNone(cross_sheet)
+            self.assertEqual(
+                cross_sheet.expression,
+                '(ref("metric_test_driver") * 2)',
+            )
+            unmapped_sheet = qualified.blocker_details("='Unmapped'!B1", "Model")
+            self.assertEqual(unmapped_sheet.kind, "unmapped_sheet")
+            self.assertEqual(unmapped_sheet.coordinates, ("Unmapped!B1",))
 
     def test_mapped_extraction_rejects_formula_period_gaps(self) -> None:
         with TemporaryDirectory() as directory:
@@ -285,9 +358,39 @@ class WorkbookToolTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ValueError,
-                r"period mapping is incomplete.*Model!B2 references C1",
+                r"period mapping is incomplete.*Model!B2 references Model!C1",
             ):
                 MappedWorkbookExtractor(workbook, gap_mapping).extract()
+
+    def test_explicit_cells_support_vertical_and_non_grid_formula_chains(self) -> None:
+        with TemporaryDirectory() as directory:
+            workbook = Path(directory) / "fixture.xlsx"
+            write_fixture(workbook)
+            explicit_mapping = mapping()
+            explicit_mapping["format"] = "financial-model-workbook-map@0.2"
+            for period in explicit_mapping["periods"]:
+                del period["column"]
+            input_metric, output_metric = explicit_mapping["sections"][0]["metrics"]
+            del input_metric["row"]
+            input_metric["cells"] = [
+                {"cell": "B1", "periodId": "period_fy2024"},
+                {"cell": "C1", "periodId": "period_fy2025"},
+            ]
+            del output_metric["row"]
+            output_metric["cells"] = [
+                {"cell": "B2", "periodId": "period_fy2024"},
+                {"cell": "B3", "periodId": "period_fy2025"},
+            ]
+
+            result = MappedWorkbookExtractor(workbook, explicit_mapping).extract()
+
+            self.assertEqual(len(result.database["observations"]), 4)
+            self.assertEqual(
+                result.database["transformations"][1]["expression"],
+                '(period_ref("metric_test_output", "period_fy2024") * 2)',
+            )
+            self.assertEqual(result.database["unresolvedItems"], [])
+            self.assertIn("2 formulas were auto-translated", result.report)
 
     def test_sparse_inventory_and_mapped_extraction(self) -> None:
         with TemporaryDirectory() as directory:
@@ -321,7 +424,10 @@ class WorkbookToolTests(unittest.TestCase):
                 result.style_evidence["styleConvention"]["id"],
                 "alice-blue-yellow@0.1",
             )
-            self.assertEqual(result.style_evidence["summary"]["actualityConflicts"], 0)
+            self.assertEqual(
+                result.style_evidence["format"],
+                "financial-workbook-style-evidence@0.3",
+            )
             self.assertEqual(
                 result.style_evidence["cells"][0]["styleId"],
                 1,
@@ -346,15 +452,23 @@ class WorkbookToolTests(unittest.TestCase):
             )
             self.assertIn("2 formulas were auto-translated", automatic.report)
 
-            conflicting_mapping = deepcopy(mapping())
-            conflicting_mapping["periods"][1]["actuality"] = "actual"
-            conflicting = MappedWorkbookExtractor(workbook, conflicting_mapping).extract()
-            self.assertEqual(conflicting.style_evidence["summary"]["actualityConflicts"], 1)
-            self.assertEqual(
-                conflicting.database["unresolvedItems"][0]["id"],
-                "unresolved_style_actuality_alice_hardcode",
+            alternate_actuality_mapping = deepcopy(mapping())
+            alternate_actuality_mapping["periods"][1]["actuality"] = "actual"
+            alternate_actuality = MappedWorkbookExtractor(
+                workbook,
+                alternate_actuality_mapping,
+            ).extract()
+            self.assertEqual(alternate_actuality.database["unresolvedItems"], [])
+            hardcode_cell = next(
+                item
+                for item in alternate_actuality.style_evidence["cells"]
+                if item["cell"] == "Model!C1"
             )
-            self.assertIn("Source: `Model!C1`.", conflicting.report)
+            self.assertEqual(
+                hardcode_cell["semantic"]["role"],
+                "alice_hardcode",
+            )
+            self.assertNotIn("actualityConflict", hardcode_cell)
 
             invalid_mapping = deepcopy(mapping())
             invalid_mapping["styleConvention"] = "configurable-colors@0.1"

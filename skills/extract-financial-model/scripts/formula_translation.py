@@ -10,12 +10,17 @@ import re
 from typing import Any
 
 
-CELL_REFERENCE = re.compile(
-    r"(?<![A-Z0-9_.!])(?P<cell>\$?[A-Z]{1,3}\$?[1-9][0-9]*)(?![A-Z0-9_])",
+QUALIFIED_CELL_REFERENCE = re.compile(
+    r"(?<![A-Z0-9_.!])"
+    r"(?:(?:'(?P<quoted>[^']+)'|(?P<plain>[A-Za-z_][A-Za-z0-9_. ]*))!)?"
+    r"(?P<cell>\$?[A-Z]{1,3}\$?[1-9][0-9]*)(?![A-Z0-9_])",
     re.IGNORECASE,
 )
-SUM_RANGE = re.compile(
-    r"SUM\(\s*(?P<start>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*:\s*"
+QUALIFIED_AGGREGATE_RANGE = re.compile(
+    r"(?P<function>SUM|AVERAGE)\(\s*"
+    r"(?:(?:'(?P<start_quoted>[^']+)'|(?P<start_plain>[A-Za-z_][A-Za-z0-9_. ]*))!)?"
+    r"(?P<start>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*:\s*"
+    r"(?:(?:'(?P<end_quoted>[^']+)'|(?P<end_plain>[A-Za-z_][A-Za-z0-9_. ]*))!)?"
     r"(?P<end>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*\)",
     re.IGNORECASE,
 )
@@ -23,12 +28,11 @@ PERCENT_LITERAL = re.compile(
     r"(?<![A-Z0-9_.])(?P<number>(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))%(?![A-Z0-9_])",
     re.IGNORECASE,
 )
-COORDINATE = re.compile(r"(?P<column>[A-Z]{1,3})(?P<row>[1-9][0-9]*)", re.IGNORECASE)
-CROSS_SHEET_REFERENCE = re.compile(
-    r"(?:'(?P<quoted>[^']+)'|(?P<plain>[A-Za-z_][A-Za-z0-9_. ]*))!"
-    r"\$?[A-Z]{1,3}\$?[1-9][0-9]*",
+FUNCTION_CALL = re.compile(
+    r"(?<![A-Z0-9_.])(?P<name>[A-Z][A-Z0-9_.]*)\s*\(",
     re.IGNORECASE,
 )
+COORDINATE = re.compile(r"(?P<column>[A-Z]{1,3})(?P<row>[1-9][0-9]*)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -102,32 +106,75 @@ class FormulaTranslator:
         self,
         cells: dict[str, dict[str, Any]],
         coordinate_semantics: dict[str, dict[str, str]],
+        default_sheet: str | None = None,
+        strict_grid: bool = True,
     ):
         self.cells = cells
         self.coordinate_semantics = coordinate_semantics
-        semantic_parts = [
-            _coordinate_parts(coordinate)
-            for coordinate in coordinate_semantics
-        ]
-        self.mapped_columns = {column for column, _row in semantic_parts}
-        self.mapped_rows = {row for _column, row in semantic_parts}
+        self.default_sheet = default_sheet
+        self.strict_grid = strict_grid
+        self.qualified = default_sheet is not None or any(
+            "!" in coordinate for coordinate in coordinate_semantics
+        )
+        self.mapped_columns: dict[str | None, set[int]] = {}
+        self.mapped_rows: dict[str | None, set[int]] = {}
+        self.mapped_sheets: set[str | None] = set()
+        for key in coordinate_semantics:
+            sheet, coordinate = self._split_key(key)
+            column, row = _coordinate_parts(coordinate)
+            self.mapped_sheets.add(sheet)
+            self.mapped_columns.setdefault(sheet, set()).add(column)
+            self.mapped_rows.setdefault(sheet, set()).add(row)
+
+    @staticmethod
+    def _split_key(key: str) -> tuple[str | None, str]:
+        if "!" not in key:
+            return None, key.replace("$", "").upper()
+        sheet, coordinate = key.rsplit("!", 1)
+        return sheet, coordinate.replace("$", "").upper()
+
+    def _key(
+        self,
+        coordinate: str,
+        reference_sheet: str | None,
+        target_sheet: str | None,
+    ) -> str | None:
+        normalized = coordinate.replace("$", "").upper()
+        if not self.qualified:
+            return f"{reference_sheet}!{normalized}" if reference_sheet else normalized
+        sheet = reference_sheet or target_sheet or self.default_sheet
+        return f"{sheet}!{normalized}" if sheet else None
+
+    @staticmethod
+    def _sheet_from_match(match: re.Match[str], prefix: str) -> str | None:
+        return match.group(f"{prefix}_quoted") or match.group(f"{prefix}_plain")
 
     def _canonical_cell_reference(
         self,
         coordinate: str,
         target_coordinate: str,
         target_period_id: str,
-    ) -> tuple[str, float | int, str] | None:
-        normalized = coordinate.replace("$", "").upper()
-        if normalized == target_coordinate.upper():
+        reference_sheet: str | None = None,
+        target_sheet: str | None = None,
+    ) -> tuple[str, float | int, str | None] | None:
+        key = self._key(coordinate, reference_sheet, target_sheet)
+        target_key = self._key(target_coordinate, target_sheet, target_sheet)
+        if key is None or key == target_key:
             return None
-        semantic = self.coordinate_semantics.get(normalized)
-        cell = self.cells.get(normalized)
-        if not semantic or not cell:
+        semantic = self.coordinate_semantics.get(key)
+        if not semantic:
             return None
-        value = _numeric(cell.get("value"))
         data_type = semantic["dataType"]
-        if value is None or data_type not in {"number", "percentage", "currency", "count"}:
+        if data_type not in {"number", "percentage", "currency", "count"}:
+            return None
+        cell = self.cells.get(key)
+        raw_value = cell.get("value") if cell else None
+        if raw_value is None:
+            # Excel coerces a directly referenced blank cell to zero in numeric
+            # arithmetic. Keep it as a literal: there is no source observation.
+            return "0", 0, None
+        value = _numeric(raw_value)
+        if value is None:
             return None
         if data_type == "count" and not isinstance(value, int):
             return None
@@ -140,44 +187,79 @@ class FormulaTranslator:
         )
         return expression, value, metric_id
 
-    def _resolve_sum_range(
+    def _resolve_aggregate_range(
         self,
+        function_name: str,
         start: str,
         end: str,
         target_coordinate: str,
         target_period_id: str,
+        start_sheet: str | None = None,
+        end_sheet: str | None = None,
+        target_sheet: str | None = None,
     ) -> tuple[str, float | int, list[str]] | None:
+        resolved_start_sheet = start_sheet or target_sheet or self.default_sheet
+        resolved_end_sheet = end_sheet or resolved_start_sheet
+        if resolved_start_sheet != resolved_end_sheet:
+            return None
         coordinates = _expand_range(start, end)
         if not coordinates:
             return None
         references = [
-            self._canonical_cell_reference(coordinate, target_coordinate, target_period_id)
+            self._canonical_cell_reference(
+                coordinate,
+                target_coordinate,
+                target_period_id,
+                resolved_start_sheet,
+                target_sheet,
+            )
             for coordinate in coordinates
         ]
         if any(reference is None for reference in references):
             return None
         resolved = [reference for reference in references if reference is not None]
+        normalized_function = function_name.lower()
+        included = (
+            [reference for reference in resolved if reference[2] is not None]
+            if normalized_function == "average"
+            else resolved
+        )
+        if not included:
+            return None
+        values = [reference[1] for reference in included]
+        calculated = (
+            sum(values) / len(values)
+            if normalized_function == "average"
+            else sum(values)
+        )
         return (
-            f"sum({', '.join(reference[0] for reference in resolved)})",
-            sum(reference[1] for reference in resolved),
-            sorted({reference[2] for reference in resolved}),
+            f"{normalized_function}({', '.join(reference[0] for reference in included)})",
+            calculated,
+            sorted({reference[2] for reference in included if reference[2] is not None}),
         )
 
-    def _translate_sum_range(
+    def _translate_aggregate_range(
         self,
         formula_body: str,
         target_coordinate: str,
         target_period_id: str,
         target_value: float | int,
+        target_sheet: str | None,
     ) -> FormulaTranslation | None:
-        match = SUM_RANGE.fullmatch(formula_body)
+        match = QUALIFIED_AGGREGATE_RANGE.fullmatch(formula_body)
         if not match:
             return None
-        resolved = self._resolve_sum_range(
+        start_sheet = self._sheet_from_match(match, "start")
+        end_sheet = self._sheet_from_match(match, "end")
+        resolved = self._resolve_aggregate_range(
+            match.group("function"),
             match.group("start"),
             match.group("end"),
             target_coordinate,
             target_period_id,
+            start_sheet,
+            end_sheet,
+            target_sheet,
         )
         if resolved is None or not _values_match(resolved[1], target_value):
             return None
@@ -189,44 +271,51 @@ class FormulaTranslator:
         target_coordinate: str,
         target_period_id: str,
         target_value: float | int,
+        target_sheet: str | None,
     ) -> FormulaTranslation | None:
-        if "!" in formula_body or "'" in formula_body or '"' in formula_body:
+        if '"' in formula_body:
             return None
         formula_body = PERCENT_LITERAL.sub(_percentage_value, formula_body)
         compiled_names: dict[str, tuple[str, float | int, list[str]]] = {}
-        unsupported_sum = False
+        unsupported_aggregate = False
 
-        def replace_sum(match: re.Match[str]) -> str:
-            nonlocal unsupported_sum
-            resolved = self._resolve_sum_range(
+        def replace_aggregate(match: re.Match[str]) -> str:
+            nonlocal unsupported_aggregate
+            resolved = self._resolve_aggregate_range(
+                match.group("function"),
                 match.group("start"),
                 match.group("end"),
                 target_coordinate,
                 target_period_id,
+                self._sheet_from_match(match, "start"),
+                self._sheet_from_match(match, "end"),
+                target_sheet,
             )
             if resolved is None:
-                unsupported_sum = True
+                unsupported_aggregate = True
                 return match.group(0)
             name = f"range_{len(compiled_names)}"
             compiled_names[name] = resolved
             return name
 
-        formula_body = SUM_RANGE.sub(replace_sum, formula_body)
-        if unsupported_sum or ":" in formula_body:
+        formula_body = QUALIFIED_AGGREGATE_RANGE.sub(replace_aggregate, formula_body)
+        if unsupported_aggregate or ":" in formula_body:
             return None
-        coordinate_by_name: dict[str, str] = {}
-        name_by_coordinate: dict[str, str] = {}
+        coordinate_by_name: dict[str, tuple[str | None, str]] = {}
+        name_by_coordinate: dict[tuple[str | None, str], str] = {}
 
         def replace_reference(match: re.Match[str]) -> str:
             coordinate = match.group("cell").replace("$", "").upper()
-            name = name_by_coordinate.get(coordinate)
+            sheet = match.group("quoted") or match.group("plain")
+            source = (sheet, coordinate)
+            name = name_by_coordinate.get(source)
             if name is None:
                 name = f"cell_{len(name_by_coordinate)}"
-                name_by_coordinate[coordinate] = name
-                coordinate_by_name[name] = coordinate
+                name_by_coordinate[source] = name
+                coordinate_by_name[name] = source
             return name
 
-        python_expression = CELL_REFERENCE.sub(replace_reference, formula_body)
+        python_expression = QUALIFIED_CELL_REFERENCE.sub(replace_reference, formula_body)
         try:
             parsed = ast.parse(python_expression, mode="eval")
         except SyntaxError:
@@ -245,17 +334,21 @@ class FormulaTranslator:
                 if compiled_name is not None:
                     dependencies.update(compiled_name[2])
                     return compiled_name[0], compiled_name[1]
-                coordinate = coordinate_by_name.get(node.id)
-                if coordinate is None:
+                source = coordinate_by_name.get(node.id)
+                if source is None:
                     return None
+                reference_sheet, coordinate = source
                 reference = self._canonical_cell_reference(
                     coordinate,
                     target_coordinate,
                     target_period_id,
+                    reference_sheet,
+                    target_sheet,
                 )
                 if reference is None:
                     return None
-                dependencies.add(reference[2])
+                if reference[2] is not None:
+                    dependencies.add(reference[2])
                 return reference[0], reference[1]
             if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
                 operand = compile_node(node.operand)
@@ -265,6 +358,51 @@ class FormulaTranslator:
                     (f"(-{operand[0]})", -operand[1])
                     if isinstance(node.op, ast.USub)
                     else (f"(+{operand[0]})", operand[1])
+                )
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id.upper() in {"SUM", "AVERAGE"}
+                and node.args
+                and not node.keywords
+            ):
+                argument_nodes = node.args
+                arguments = [compile_node(argument) for argument in argument_nodes]
+                if any(argument is None for argument in arguments):
+                    return None
+                compiled_arguments = [
+                    (argument_node, argument)
+                    for argument_node, argument in zip(argument_nodes, arguments, strict=True)
+                    if argument is not None
+                ]
+                function_name = node.func.id.lower()
+                if function_name == "average":
+                    compiled_arguments = [
+                        (argument_node, argument)
+                        for argument_node, argument in compiled_arguments
+                        if not (
+                            isinstance(argument_node, ast.Name)
+                            and argument_node.id in coordinate_by_name
+                            and self._canonical_cell_reference(
+                                coordinate_by_name[argument_node.id][1],
+                                target_coordinate,
+                                target_period_id,
+                                coordinate_by_name[argument_node.id][0],
+                                target_sheet,
+                            )[2] is None
+                        )
+                    ]
+                    if not compiled_arguments:
+                        return None
+                values = [argument[1] for _node, argument in compiled_arguments]
+                calculated = (
+                    sum(values) / len(values)
+                    if function_name == "average"
+                    else sum(values)
+                )
+                return (
+                    f"{function_name}({', '.join(argument[0] for _node, argument in compiled_arguments)})",
+                    calculated,
                 )
             if isinstance(node, ast.BinOp) and isinstance(
                 node.op,
@@ -281,12 +419,14 @@ class FormulaTranslator:
                     ast.Div: "/",
                 }[type(node.op)]
                 try:
-                    calculated = {
-                        "+": left[1] + right[1],
-                        "-": left[1] - right[1],
-                        "*": left[1] * right[1],
-                        "/": left[1] / right[1],
-                    }[operator]
+                    if operator == "+":
+                        calculated = left[1] + right[1]
+                    elif operator == "-":
+                        calculated = left[1] - right[1]
+                    elif operator == "*":
+                        calculated = left[1] * right[1]
+                    else:
+                        calculated = left[1] / right[1]
                 except ZeroDivisionError:
                     return None
                 return f"({left[0]} {operator} {right[0]})", calculated
@@ -303,67 +443,101 @@ class FormulaTranslator:
         target_coordinate: str,
         target_period_id: str,
         target_value: Any,
+        target_sheet: str | None = None,
     ) -> FormulaTranslation | None:
         cached = _numeric(target_value)
         if cached is None or not original_formula.startswith("="):
             return None
         formula_body = original_formula[1:].strip()
-        return self._translate_sum_range(
+        return self._translate_aggregate_range(
             formula_body,
             target_coordinate,
             target_period_id,
             cached,
+            target_sheet,
         ) or self._translate_arithmetic(
             formula_body,
             target_coordinate,
             target_period_id,
             cached,
+            target_sheet,
         )
 
-    def blocker_details(self, original_formula: str) -> FormulaBlocker:
+    def blocker_details(
+        self,
+        original_formula: str,
+        target_sheet: str | None = None,
+    ) -> FormulaBlocker:
         formula_body = original_formula[1:].strip() if original_formula.startswith("=") else original_formula
-        if "!" in formula_body:
-            source_sheets = sorted({
-                match.group("quoted") or match.group("plain")
-                for match in CROSS_SHEET_REFERENCE.finditer(formula_body)
-            })
-            source_description = (
-                f"worksheet{'s' if len(source_sheets) != 1 else ''} "
-                + ", ".join(f"`{sheet}`" for sheet in source_sheets)
-                if source_sheets
-                else "another worksheet"
-            )
+        unsupported_functions = sorted({
+            match.group("name").upper()
+            for match in FUNCTION_CALL.finditer(formula_body)
+            if match.group("name").upper() not in {"SUM", "AVERAGE"}
+        })
+        if unsupported_functions:
             return FormulaBlocker(
-                "cross_sheet",
-                f"cross-sheet reference to {source_description} without an explicit semantic map "
-                "for that source sheet",
+                "syntax_or_replay",
+                "unsupported Excel function(s): " + ", ".join(unsupported_functions),
             )
-
-        referenced_coordinates = {
-            match.group("cell").replace("$", "").upper()
-            for match in CELL_REFERENCE.finditer(formula_body)
-        }
-        for match in SUM_RANGE.finditer(formula_body):
-            referenced_coordinates.update(_expand_range(match.group("start"), match.group("end")))
+        referenced_coordinates: set[str] = set()
+        without_ranges = formula_body
+        for match in QUALIFIED_AGGREGATE_RANGE.finditer(formula_body):
+            start_sheet = self._sheet_from_match(match, "start")
+            end_sheet = self._sheet_from_match(match, "end") or start_sheet
+            if start_sheet and end_sheet and start_sheet != end_sheet:
+                return FormulaBlocker(
+                    "unsupported_range",
+                    "three-dimensional or cross-sheet range endpoints are not supported",
+                )
+            for coordinate in _expand_range(match.group("start"), match.group("end")):
+                key = self._key(coordinate, start_sheet, target_sheet)
+                if key:
+                    referenced_coordinates.add(key)
+        without_ranges = QUALIFIED_AGGREGATE_RANGE.sub("", without_ranges)
+        for match in QUALIFIED_CELL_REFERENCE.finditer(without_ranges):
+            key = self._key(
+                match.group("cell"),
+                match.group("quoted") or match.group("plain"),
+                target_sheet,
+            )
+            if key:
+                referenced_coordinates.add(key)
         missing_coordinates = sorted(
             coordinate
             for coordinate in referenced_coordinates
             if coordinate not in self.coordinate_semantics
         )
         if missing_coordinates:
+            missing_sheets = sorted({
+                sheet
+                for coordinate in missing_coordinates
+                for sheet, _cell in [self._split_key(coordinate)]
+                if sheet not in self.mapped_sheets
+            })
+            if missing_sheets:
+                return FormulaBlocker(
+                    "unmapped_sheet",
+                    "referenced worksheet semantics are not mapped: "
+                    + ", ".join(f"`{sheet}`" for sheet in missing_sheets),
+                    tuple(missing_coordinates),
+                )
             missing_parts = {
-                coordinate: _coordinate_parts(coordinate)
+                coordinate: (*self._split_key(coordinate)[:1], *_coordinate_parts(self._split_key(coordinate)[1]))
                 for coordinate in missing_coordinates
             }
             period_gaps = [
                 coordinate
-                for coordinate, (column, row) in missing_parts.items()
-                if row in self.mapped_rows and column not in self.mapped_columns
+                for coordinate, (sheet, column, row) in missing_parts.items()
+                if self.strict_grid
+                and row in self.mapped_rows.get(sheet, set())
+                and column not in self.mapped_columns.get(sheet, set())
             ]
             metric_gaps = [
                 coordinate
-                for coordinate, (column, row) in missing_parts.items()
-                if column in self.mapped_columns and row not in self.mapped_rows
+                for coordinate, (sheet, column, row) in missing_parts.items()
+                if self.strict_grid
+                and column in self.mapped_columns.get(sheet, set())
+                and row not in self.mapped_rows.get(sheet, set())
             ]
             coordinates = tuple(missing_coordinates)
             if len(period_gaps) == len(missing_coordinates):
@@ -388,5 +562,5 @@ class FormulaTranslator:
             "restricted-syntax or cached-value replay failure",
         )
 
-    def blocker(self, original_formula: str) -> str:
-        return self.blocker_details(original_formula).reason
+    def blocker(self, original_formula: str, target_sheet: str | None = None) -> str:
+        return self.blocker_details(original_formula, target_sheet).reason

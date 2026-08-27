@@ -934,6 +934,14 @@
           "confidence": {
             "$ref": "#/$defs/__schema23"
           },
+          "attentionLevel": {
+            "default": "needs_review",
+            "type": "string",
+            "enum": [
+              "needs_review",
+              "action_required"
+            ]
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -947,6 +955,7 @@
           "id",
           "category",
           "description",
+          "attentionLevel",
           "status"
         ],
         "additionalProperties": false

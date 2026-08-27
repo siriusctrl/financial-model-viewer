@@ -15,7 +15,7 @@ const REQUIRED_REPORT_SECTIONS = [
   "Unresolved mappings",
   "Missing lineage",
   "Validator result",
-  "Analyst questions",
+  "Questions and next actions",
 ];
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
@@ -137,19 +137,28 @@ function checkReport(reportPath, databasePath) {
   if (existsSync(databasePath) && statSync(databasePath).isFile()) {
     try {
       const database = JSON.parse(readFileSync(databasePath, "utf8"));
-      const openUnresolvedIds = Array.isArray(database.unresolvedItems)
+      const openUnresolvedItems = Array.isArray(database.unresolvedItems)
         ? database.unresolvedItems
             .filter((item) => item?.status === "open" && typeof item.id === "string")
-            .map((item) => item.id)
         : [];
-      for (const unresolvedId of openUnresolvedIds) {
-        if (!report.includes(unresolvedId)) {
-          fail(`${reportPath} does not record open warning ${unresolvedId}.`);
+      const reportLines = report.split(/\r?\n/);
+      for (const item of openUnresolvedItems) {
+        const itemLines = reportLines.filter((line) => line.includes(item.id));
+        if (itemLines.length === 0) {
+          fail(`${reportPath} does not record open attention item ${item.id}.`);
+          valid = false;
+          continue;
+        }
+        const label = item.attentionLevel === "action_required"
+          ? "ACTION REQUIRED"
+          : "NEEDS REVIEW";
+        if (!itemLines.some((line) => line.includes(label))) {
+          fail(`${reportPath} must label ${item.id} as ${label}.`);
           valid = false;
         }
       }
     } catch (cause) {
-      fail(`Could not compare report warnings with ${databasePath}: ${cause instanceof Error ? cause.message : String(cause)}`);
+      fail(`Could not compare report attention items with ${databasePath}: ${cause instanceof Error ? cause.message : String(cause)}`);
       valid = false;
     }
   }

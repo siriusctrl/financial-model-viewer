@@ -131,6 +131,23 @@ function CellDetail({
   onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
 }) {
+  const attentionGroups = [
+    {
+      level: "action_required" as const,
+      label: "Action required",
+      items: detail.unresolvedItems.filter(
+        (item) => item.attentionLevel === "action_required",
+      ),
+    },
+    {
+      level: "needs_review" as const,
+      label: "Needs review",
+      items: detail.unresolvedItems.filter(
+        (item) => item.attentionLevel === "needs_review",
+      ),
+    },
+  ].filter((group) => group.items.length > 0);
+
   return (
     <>
       <header className="inspector-header">
@@ -155,20 +172,27 @@ function CellDetail({
           </div>
         </section>
 
-        {detail.unresolvedItems.length > 0 && (
-          <section className="cell-review-warning" data-testid="cell-review-warning">
-            <Icon name="warning" size={16} />
-            <div>
-              <strong>Open extraction issue</strong>
-              {detail.unresolvedItems.map((item) => (
-                <p key={item.id}>
-                  {item.description}
-                  {item.locator ? ` · ${formatLocator(item.locator)}` : ""}
-                  {item.confidence !== undefined ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}
-                </p>
-              ))}
-            </div>
-          </section>
+        {attentionGroups.length > 0 && (
+          <div className="cell-attention-stack" data-testid="cell-review-warning">
+            {attentionGroups.map((group) => (
+              <section
+                key={group.level}
+                className={`cell-review-warning cell-review-warning--${group.level}`}
+              >
+                <Icon name="warning" size={16} />
+                <div>
+                  <strong>{group.label}</strong>
+                  {group.items.map((item) => (
+                    <p key={item.id}>
+                      {item.description}
+                      {item.locator ? ` · ${formatLocator(item.locator)}` : ""}
+                      {item.confidence !== undefined ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}
+                    </p>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         )}
 
         <section className="inspector-section">

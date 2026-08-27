@@ -298,6 +298,7 @@ export const UnresolvedItemSchema = z
     sourceArtifactId: IdSchema.optional(),
     locator: SourceLocatorSchema.optional(),
     confidence: ConfidenceSchema.optional(),
+    attentionLevel: z.enum(["needs_review", "action_required"]).default("needs_review"),
     status: z.enum(["open", "resolved", "dismissed"]),
   })
   .strict();

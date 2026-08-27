@@ -30,14 +30,14 @@ Check all of the following against the source workbook or lossless IR:
 - metric names, indentation, units, sign, precision, and missing values;
 - selected-cell value, source locator, confidence, and review state;
 - derived input metrics, input periods, workbook cells, and original formula;
-- visible review warnings and row/cell cues for every open unresolved item;
+- neutral-blue `needs_review` cues for reversible assumptions and red `action_required` cues for blocked decisions, at status, row, and cell-detail level;
 - table scrolling and inspector placement on desktop and mobile.
 
 ## Decide what to fix
 
 - Fix `model-db.json` and the extraction logic when the viewer accurately reveals incorrect or missing semantic data, presentation metadata, provenance, or formula translation.
 - Fix repository query/UI code when the validated data is correct but the viewer orders, formats, resolves, or displays it incorrectly. Run `npm run check`, `npm run verify:ui`, and the extraction preview again.
-- Add or refine a validator rule when a repeatable extraction defect reached visual review without an error or explicit warning.
+- Add or refine a validator rule when a repeatable extraction defect reached visual review without an explicit attention item or error.
 - Do not patch generated viewer files. They are replaced on the next build.
 
 ## Interactive browser session

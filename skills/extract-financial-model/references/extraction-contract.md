@@ -8,7 +8,7 @@
 4. Formula translation
 5. Actual and estimate boundary
 6. Provenance and review
-7. Unresolved items
+7. Attention items
 8. Required report
 
 ## 1. Input inventory
@@ -63,7 +63,7 @@ Map input concepts as follows:
 
 Do not add a `calculated_from` relationship when the same edge is derivable from a transformation's dependencies.
 
-Workbook-specific formatting conventions belong outside the canonical schema. The mapped extractor supports one explicit opt-in convention, `alice-blue-yellow@0.1`; it does not expose a generic color-rule language. Treat its matches only as reviewable evidence. Formula presence takes precedence over a style-implied value type: keep the observation `derived` and retain the style role alongside it. If the convention expects actual or estimate status and the mapped period disagrees, create an unresolved item instead of silently overriding actuality.
+Workbook-specific formatting conventions belong outside the canonical schema. The mapped extractor supports one explicit opt-in convention, `alice-blue-yellow@0.1`; it does not expose a generic color-rule language. Treat its matches only as reviewable source/adjustability evidence. Formula presence takes precedence over a style-implied value type: keep the observation `derived` and retain the style role alongside it. The convention does not imply actual or estimate status; determine actuality independently from period evidence.
 
 ### Table presentation metadata
 
@@ -74,7 +74,7 @@ Emit at most one `tablePresentations` entry per model. Use it only when workshee
 - Preserve the workbook sheet/range in `sourceLocator` when available.
 - Use `component_of` for semantic hierarchy; table sections do not create business relationships.
 - Do not preserve blank rows, merged cells, indentation, coordinates, or formatting as canonical identity.
-- If the grouping is uncertain, omit the presentation and add an unresolved item. The viewer will fall back to semantic hierarchy and provenance order.
+- If the grouping is uncertain, omit the presentation and add a `needs_review` presentation item. The viewer will fall back to semantic hierarchy and provenance order. Use `action_required` only when no defensible, inspectable fallback can be produced without a semantic decision.
 
 The validator enforces presentation coverage automatically. If a presentation exists, every observed model metric must appear exactly once and every model, metric, section, and source reference must resolve. If it does not exist, add an open unresolved item with `category: presentation`; the validator emits a visible fallback warning. Missing both the presentation and that unresolved item is an error.
 
@@ -110,7 +110,7 @@ sum(period_ref("metric_acme_revenue", "period_q1_2025"),
 
 Never use `eval`, `new Function`, assignment, loops, imports, async work, property access, DOM/network APIs, or arbitrary JavaScript. Parse to an AST and let the deterministic interpreter evaluate the AST.
 
-The mapped XLSX extractor may auto-translate numeric and percentage literals, `+`, `-`, `*`, `/`, and `SUM(range)` only when every referenced cell already has an explicit metric/period mapping. It must replay the restricted expression against source cached values and accept the translation only when the result matches the formula cell's cached result. An accepted source-derived translation takes precedence over a generic mapped expression because it preserves the actual period-specific lineage. A source cell outside the semantic map, unsupported syntax, non-numeric dependency, or replay mismatch uses a reviewed mapped expression when one exists; otherwise it keeps the formula opaque and creates a visible warning.
+The mapped XLSX extractor may auto-translate numeric and percentage literals, `+`, `-`, `*`, `/`, and restricted `SUM`/`AVERAGE` calls only when every referenced cell already has an explicit metric/period mapping. Mappings may come from a legacy metric-row/period-column grid or explicit per-metric cells on any mapped worksheet. It follows Excel's numeric handling for mapped blank references: direct arithmetic and `SUM` coerce them to zero, while `AVERAGE` excludes them. It must replay the restricted expression against source cached values and accept the translation only when the result matches the formula cell's cached result. An accepted source-derived translation takes precedence over a generic mapped expression because it preserves the actual period-specific lineage. Before leaving a formula opaque, expand the semantic map for every defensible referenced cell. Unsupported syntax or replay mismatch uses a reviewed mapped expression when one exists; otherwise preserve the formula as opaque and classify the remaining issue under Section 7.
 
 For an unsupported formula:
 
@@ -146,17 +146,27 @@ Use the narrowest available locator:
 
 Use `confirmed` only for human-reviewed or directly unambiguous mappings. Use `unreviewed` for AI extraction, even when confidence is high. Confidence expresses extraction certainty; it does not replace review status.
 
-## 7. Unresolved items
+## 7. Attention items
 
-Create an unresolved item for every ambiguous metric mapping, hierarchy, formula, lineage gap, or actual/estimate boundary. Each item must state:
+Do not create an unresolved item merely because the extraction agent or current map lacks coverage. Expand the map or implementation first. Create one only for a remaining provisional interpretation or blocked decision.
+
+Use:
+
+- `attentionLevel: needs_review` when a useful, reversible interpretation can be emitted with its assumption stated;
+- `attentionLevel: action_required` when the source must be repaired or a person must choose among materially different meanings. Do not emit the disputed claim.
+
+Accepted mappings have no open unresolved item. They may still have `reviewStatus: unreviewed`; acceptance means extraction may proceed, not that a person confirmed it.
+
+Each attention item must state:
 
 - what is ambiguous;
 - the source location;
 - any affected canonical object;
 - confidence;
-- one concrete question an analyst can answer.
+- the assumption already made, if any;
+- one concrete instruction or question that resolves it.
 
-Never hide an unresolved item by choosing a plausible mapping silently.
+Never hide an unresolved item by choosing a plausible mapping silently. Conversely, do not manufacture one for an explicit scope exclusion, a non-model workbook feature, or an inventory comment outside the selected semantic graph. Preserve those facts in scope and inventory evidence. Translator-only limitations are engineering follow-ups, not analyst questions.
 
 ## 8. Required report
 
@@ -174,9 +184,9 @@ Write `extraction-report.md` with these sections:
 ## Unresolved mappings
 ## Missing lineage
 ## Validator result
-## Analyst questions
+## Questions and next actions
 ```
 
 The table-presentation section must list every model, its ordered sections, metric coverage, source range, and any fallback warning. Formula coverage must count supported, opaque, and unresolved transformations. Object counts must include entities, metrics, observations, transformations, relationships, table presentation sections, assumptions, decisions, and unresolved items. The validator section must record both the fast validator and the final strict checker invocation (`npm run extraction:check` or the repository's `check-extraction.mjs` path), their result, every remaining error, and every warning; do not summarize a failed validator as successful.
 
-Every workbook warning and analyst question must name its worksheet and narrowest available cell or range. For a cross-sheet formula, name both the worksheet containing the formula and every referenced worksheet that blocks translation. For a genuinely workbook-level issue, say that no single worksheet owns it and list the affected worksheets when known.
+Every open item must appear on one report line prefixed by `NEEDS REVIEW` or `ACTION REQUIRED`, and the extraction run must remain `completed_with_issues`. Every workbook issue and next action must name its worksheet and narrowest available cell or range. Distinguish engineering follow-up from analyst decisions. For a cross-sheet formula, name both the worksheet containing the formula and every referenced worksheet that blocks translation. For a genuinely workbook-level issue, say that no single worksheet owns it and list the affected worksheets when known.

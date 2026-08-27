@@ -16,7 +16,11 @@ export type ValidationError = {
   suggestion: string;
 };
 
-export type ValidationWarning = ValidationError;
+export type AttentionLevel = "needs_review" | "action_required";
+
+export type ValidationWarning = ValidationError & {
+  attentionLevel: AttentionLevel;
+};
 
 export type ValidationStats = {
   models: number;
@@ -24,6 +28,8 @@ export type ValidationStats = {
   observations: number;
   transformations: number;
   unresolved: number;
+  needsReview: number;
+  actionRequired: number;
   unreviewed: number;
 };
 
@@ -72,6 +78,17 @@ function error(
   suggestion: string,
 ): ValidationError {
   return { code, objectId, field, reason, suggestion };
+}
+
+function warning(
+  attentionLevel: AttentionLevel,
+  code: string,
+  objectId: string,
+  field: string,
+  reason: string,
+  suggestion: string,
+): ValidationWarning {
+  return { ...error(code, objectId, field, reason, suggestion), attentionLevel };
 }
 
 function objectIdForSchemaIssue(
@@ -375,6 +392,12 @@ function statsFor(database: ModelDatabase): ValidationStats {
     observations: database.observations.length,
     transformations: database.transformations.length,
     unresolved: database.unresolvedItems.filter((item) => item.status === "open").length,
+    needsReview: database.unresolvedItems.filter(
+      (item) => item.status === "open" && item.attentionLevel === "needs_review",
+    ).length,
+    actionRequired: database.unresolvedItems.filter(
+      (item) => item.status === "open" && item.attentionLevel === "action_required",
+    ).length,
     unreviewed: database.provenanceRecords.filter(
       (record) => record.reviewStatus === "unreviewed",
     ).length,
@@ -402,6 +425,7 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   const scenarioIds = new Set(database.scenarios.map((item) => item.id));
   const transformationIds = new Set(database.transformations.map((item) => item.id));
   const sourceArtifactIds = new Set(database.sourceArtifacts.map((item) => item.id));
+  const extractionRuns = new Map(database.extractionRuns.map((item) => [item.id, item]));
   const extractionRunIds = new Set(database.extractionRuns.map((item) => item.id));
   const observationIds = new Set(database.observations.map((item) => item.id));
   const decisionIds = new Set(database.decisions.map((item) => item.id));
@@ -523,7 +547,8 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     if (unresolvedPresentation) {
       specificallyReportedUnresolvedIds.add(unresolvedPresentation.id);
       warnings.push(
-        error(
+        warning(
+          unresolvedPresentation.attentionLevel,
           "presentation.fallback",
           model.id,
           "tablePresentations",
@@ -730,11 +755,16 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     ),
   );
   const targetsWithProvenance = new Set<string>();
+  const provenanceByTarget = new Map<string, ModelDatabase["provenanceRecords"]>();
   for (const provenance of database.provenanceRecords) {
     pushMissingReference(errors, provenance.id, "targetId", provenance.targetId, validProvenanceTargets, "Provenance target");
     pushMissingReference(errors, provenance.id, "sourceArtifactId", provenance.sourceArtifactId, sourceArtifactIds, "Source artifact");
     pushMissingReference(errors, provenance.id, "extractionRunId", provenance.extractionRunId, extractionRunIds, "Extraction run");
     targetsWithProvenance.add(provenance.targetId);
+    provenanceByTarget.set(
+      provenance.targetId,
+      [...(provenanceByTarget.get(provenance.targetId) ?? []), provenance],
+    );
   }
   for (const targetId of validProvenanceTargets) {
     if (!targetsWithProvenance.has(targetId)) {
@@ -787,10 +817,27 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     pushMissingReference(errors, unresolved.id, "modelId", unresolved.modelId, new Set(models.keys()), "Model");
     pushMissingReference(errors, unresolved.id, "targetId", unresolved.targetId, relationshipTargetIds, "Canonical object");
     pushMissingReference(errors, unresolved.id, "sourceArtifactId", unresolved.sourceArtifactId, sourceArtifactIds, "Source artifact");
+    if (unresolved.status === "open") {
+      for (const provenance of provenanceByTarget.get(unresolved.id) ?? []) {
+        const run = extractionRuns.get(provenance.extractionRunId);
+        if (run?.status === "completed") {
+          errors.push(
+            error(
+              "extraction_run.open_attention",
+              run.id,
+              "status",
+              `Extraction run is completed even though ${unresolved.id} remains open`,
+              "Use completed_with_issues until every needs_review or action_required item is resolved or dismissed",
+            ),
+          );
+        }
+      }
+    }
     if (unresolved.status === "open" && !specificallyReportedUnresolvedIds.has(unresolved.id)) {
       warnings.push(
-        error(
-          "unresolved.open",
+        warning(
+          unresolved.attentionLevel,
+          `unresolved.${unresolved.attentionLevel}`,
           unresolved.id,
           unresolved.category,
           unresolved.description,
