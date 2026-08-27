@@ -206,6 +206,9 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
     modelId: "model_northstar_cloud",
     category: "formula",
     description: "The workbook formula is preserved but has no canonical translation.",
+    currentTreatment: "The cached workbook value is available only as preview material.",
+    impact: "Canonical lineage and safe recalculation are unavailable for this formula cell.",
+    nextAction: "Translate the workbook formula and rerun extraction.",
     targetId: transformation.outputMetricId,
     sourceArtifactId: "artifact_northstar_workbook",
     locator: { sheet: "Model", cell: "E17" },
@@ -235,8 +238,8 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
     "Translate the workbook formula and rerun extraction",
   );
   const inspector = page.getByTestId("detail-panel");
-  await expect(inspector.getByRole("button", { name: "Resolve" })).toHaveCount(0);
-  await expect(inspector.getByRole("button", { name: "Dismiss" })).toHaveCount(0);
+  await expect(inspector.getByRole("button", { name: "Confirm interpretation" })).toHaveCount(0);
+  await expect(inspector).toContainText("Cannot be cleared in the viewer");
 });
 
 test("uses extracted sections for a structurally different bank model", async ({ page }) => {
@@ -256,12 +259,15 @@ test("uses extracted sections for a structurally different bank model", async ({
   await expect(page.getByText("Subscription revenue", { exact: true })).toHaveCount(0);
 });
 
-test("resolves a review item from the selected cell", async ({ page }) => {
+test("confirms a review interpretation from the selected cell", async ({ page }) => {
   await page.goto("./");
   await page.getByLabel("Active model").selectOption("model_harbor_national");
   await page.getByTitle(/obs_harbor_provision_fy2025/).click();
   const inspector = page.getByTestId("detail-panel");
-  await inspector.getByRole("button", { name: "Resolve" }).click();
+  await expect(inspector).toContainText("Current treatment");
+  await expect(inspector).toContainText("Why it matters");
+  await expect(inspector).toContainText("What to check");
+  await inspector.getByRole("button", { name: "Confirm interpretation" }).click();
 
   await expect(page.getByTestId("attention-trigger")).toHaveCount(0);
   await expect(page.locator(".validation-status")).toContainText("Accepted");
@@ -277,6 +283,12 @@ test("renders required extraction actions separately from neutral review", async
   imported.unresolvedItems[0].locator = { sheet: "Model", cell: "E14" };
   imported.unresolvedItems[0].description =
     "The FY25 provision value needs a source-backed decision before extraction can proceed.";
+  imported.unresolvedItems[0].currentTreatment =
+    "The database keeps the provisional source value visible but does not treat the issue as resolved.";
+  imported.unresolvedItems[0].impact =
+    "The FY25 provision value cannot be treated as canonically accepted.";
+  imported.unresolvedItems[0].nextAction =
+    "Verify the FY25 source value at Model!E14, correct the extraction, and re-import.";
   imported.provenanceRecords.find(
     (item) => item.targetId === "unresolved_harbor_provision_label",
   )!.locator = { sheet: "Model", cell: "E14" };
@@ -286,7 +298,8 @@ test("renders required extraction actions separately from neutral review", async
   await page.getByLabel("Search metrics").fill("revenue");
   await page.getByTestId("attention-trigger").click();
   const attentionCenter = page.getByTestId("attention-center");
-  await expect(attentionCenter).toContainText("Review queue");
+  await expect(attentionCenter).toContainText("What needs attention");
+  await expect(attentionCenter).toContainText("Blocks complete ingestion");
   await expect(attentionCenter.locator(".attention-overview-action")).toContainText("1");
   await expect(attentionCenter).toContainText("Provision for credit losses");
   await expect(attentionCenter).toContainText("Model!E14");
@@ -304,6 +317,11 @@ test("renders required extraction actions separately from neutral review", async
   await expect(page.locator(".attention-cell-focus--action_required")).toContainText("235.0");
   await expect(page.getByTestId("detail-panel")).toContainText("Action required");
   await expect(page.getByTestId("detail-panel")).toContainText("Model!E14");
+  await expect(page.getByTestId("detail-panel")).toContainText("Required next step");
+  await expect(page.getByTestId("detail-panel")).toContainText("Cannot be cleared in the viewer");
+  await expect(
+    page.getByTestId("detail-panel").getByRole("button", { name: "Confirm interpretation" }),
+  ).toHaveCount(0);
 });
 
 test("persists the selected dark appearance", async ({ page }) => {
@@ -356,8 +374,9 @@ test("previews a validated model database JSON file locally", async ({ page }) =
   await uploadJson(page, "analyst-model.json", imported);
 
   const notice = page.getByTestId("import-notice");
-  await expect(notice).toContainText("Previewing analyst-model.json");
-  await expect(notice).toContainText("The file stays in this browser tab");
+  await expect(notice).toContainText("Loaded analyst-model.json");
+  await expect(notice).toContainText("Confirm a review only when its stated interpretation matches the source");
+  await expect(notice.getByRole("button", { name: "Review attention" })).toBeVisible();
   await expect(page.locator(".dataset-breadcrumb")).toContainText("Imported analyst model");
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
 });

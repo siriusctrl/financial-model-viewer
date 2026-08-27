@@ -496,8 +496,8 @@ select:focus-visible,
 .attention-overview > div {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: baseline;
+  gap: 11px;
+  align-items: center;
   padding: 11px 16px;
   background: var(--surface);
 }
@@ -508,9 +508,21 @@ select:focus-visible,
   font-weight: 500;
 }
 
-.attention-overview span {
-  color: var(--muted);
+.attention-overview > div > span {
+  display: grid;
+  gap: 1px;
+}
+
+.attention-overview span b {
+  color: var(--ink);
   font-size: 10px;
+  font-weight: 700;
+}
+
+.attention-overview span small {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.35;
 }
 
 .attention-overview-action strong {
@@ -644,12 +656,16 @@ select:focus-visible,
 }
 
 .attention-item-arrow {
-  display: grid;
-  place-items: center;
-  width: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
   height: 26px;
+  padding: 0 7px;
   margin-top: 9px;
   color: var(--soft-muted);
+  font-size: 8px;
+  font-weight: 700;
   border: 1px solid var(--line);
   border-radius: 3px;
   transition: color 150ms ease, border-color 150ms ease, transform 150ms ease;
@@ -735,6 +751,36 @@ select:focus-visible,
 .import-notice code {
   font-family: var(--mono);
   font-size: 10px;
+}
+
+.import-notice-actions {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.import-review-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+  background: var(--control-bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.import-review-button:hover {
+  background: var(--surface);
+  border-color: currentColor;
+}
+
+.import-review-button:active {
+  transform: translateY(1px);
 }
 
 .model-toolbar {
@@ -1436,6 +1482,21 @@ select:focus-visible,
   line-height: 1.5;
 }
 
+.attention-evidence-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  margin-top: 6px;
+  color: var(--soft-muted);
+  font-family: var(--mono);
+  font-size: 8px;
+}
+
+.attention-evidence-line span + span {
+  padding-left: 9px;
+  border-left: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+}
+
 .cell-attention-item + .cell-attention-item {
   margin-top: 9px;
   padding-top: 9px;
@@ -1443,55 +1504,11 @@ select:focus-visible,
   border-top-color: color-mix(in srgb, currentColor 18%, transparent);
 }
 
-.attention-resolution-actions {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  margin-top: 8px;
-}
-
-.resolve-button,
-.dismiss-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 8px;
-  font-size: 9px;
-  font-weight: 700;
-  border-radius: 3px;
-  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
-}
-
-.resolve-button {
-  color: var(--inverse-ink);
-  background: var(--green);
-  border: 1px solid var(--green);
-}
-
-.resolve-button:hover {
-  background: var(--ink);
-  border-color: var(--ink);
-}
-
-.dismiss-button {
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--line-strong);
-}
-
-.dismiss-button:hover {
-  color: var(--ink);
-  background: var(--surface);
-}
-
 .attention-resolution {
   margin: 12px 0 2px;
-  padding: 10px;
-  background: var(--surface);
-  border-left: 2px solid var(--green);
+  padding: 0;
 }
 
-.attention-resolution > span,
 .value-editor > div:first-child > span,
 .reverse-lineage .inspector-section-heading span {
   color: var(--green);
@@ -1501,31 +1518,113 @@ select:focus-visible,
   text-transform: uppercase;
 }
 
-.attention-resolution p {
-  margin: 5px 0 0;
+.attention-guidance {
+  margin-top: 9px;
+  color: var(--ink);
+  background: var(--inspector-bg);
+  border: 1px solid var(--line);
+}
+
+.attention-guidance dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.attention-guidance dl > div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 9px;
+}
+
+.attention-guidance dl > div + div {
+  border-top: 1px solid var(--property-line);
+}
+
+.attention-guidance dt {
+  color: var(--soft-muted);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.attention-guidance dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.attention-decision-lock,
+.attention-confirmation {
+  border-top: 1px solid var(--line);
+}
+
+.attention-decision-lock {
+  display: flex;
+  gap: 8px;
+  align-items: start;
+  padding: 9px;
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.attention-decision-lock svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.attention-decision-lock span {
+  display: grid;
+  gap: 2px;
+  color: var(--action-ink);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.attention-decision-lock strong {
+  color: var(--red);
+  font-size: 9px;
+}
+
+.attention-confirmation {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  background: var(--surface);
+}
+
+.attention-confirmation p {
+  margin: 0;
   color: var(--muted);
   font-size: 9px;
   line-height: 1.5;
 }
 
-.opaque-action-lock {
-  padding: 8px 9px;
-  color: var(--red);
-  background: var(--red-soft);
-  border-left: 2px solid var(--red);
+.confirm-interpretation-button {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  color: var(--inverse-ink);
+  font-size: 9px;
+  font-weight: 750;
+  background: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 3px;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
-.opaque-action-lock strong {
-  font-size: 9px;
-  letter-spacing: 0.035em;
-  text-transform: uppercase;
+.confirm-interpretation-button:hover {
+  background: var(--ink);
+  border-color: var(--ink);
 }
 
-.opaque-action-lock p {
-  margin: 4px 0 0;
-  color: var(--ink);
-  font-size: 9px;
-  line-height: 1.5;
+.confirm-interpretation-button:active {
+  transform: translateY(1px);
 }
 
 .value-editor {
@@ -2221,6 +2320,11 @@ select:focus-visible,
     grid-template-columns: 1fr;
     gap: 2px;
     padding: 13px 16px;
+  }
+
+  .attention-guidance dl > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
   }
 
   .attention-item {

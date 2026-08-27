@@ -160,12 +160,16 @@ Accepted mappings have no open unresolved item. They may still have `reviewStatu
 
 Each attention item must state:
 
-- what is ambiguous;
+- `description`: what was found or remains ambiguous;
+- `currentTreatment`: exactly what the database emitted, inherited, retained for preview, or omitted;
+- `impact`: which value, label, period boundary, lineage, or presentation may be wrong or unavailable;
+- `nextAction`: one concrete confirmation or repair instruction that closes the item;
 - the source location;
 - any affected canonical object;
 - confidence;
-- the assumption already made, if any;
-- one concrete instruction or question that resolves it.
+- the assumption already made, if any.
+
+Write the four explanation fields into each `unresolvedItems` object in `model-db.json`; the report is not a substitute for machine-readable UI guidance. A `needs_review` item may be cleared only by confirming its stated current treatment. An `action_required` item must remain open until its `nextAction` has been completed in the source or extraction and the database is re-imported.
 
 Never hide an unresolved item by choosing a plausible mapping silently. Conversely, do not manufacture one for an explicit scope exclusion, a non-model workbook feature, or an inventory comment outside the selected semantic graph. Preserve those facts in scope and inventory evidence. Translator-only limitations are engineering follow-ups, not analyst questions.
 

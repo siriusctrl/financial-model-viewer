@@ -79,6 +79,8 @@ Use these three product states:
 | Needs review | Open unresolved item with `attentionLevel: needs_review` | Emit the useful, reversible interpretation and state the assumption. The viewer shows a neutral review cue. |
 | Action required | Open unresolved item with `attentionLevel: action_required` | Do not make the disputed semantic claim or fabricate the missing value. Preserve raw material where safe. The viewer shows a red action cue. |
 
+For either open state, store four separate user-facing facts: `description` for what was found, `currentTreatment` for what the database did, `impact` for the affected scope, and `nextAction` for the exact confirmation or repair. Do not concatenate these into one warning paragraph. The viewer may confirm a `needs_review` interpretation, but it must not dismiss attention or manually clear an `action_required` item.
+
 Typical `needs_review` cases:
 
 - a high-confidence label normalization supported by neighboring rows;
@@ -125,5 +127,6 @@ An extraction iteration is ready for preview when:
 - every blocked decision is `action_required` and no disputed value was invented;
 - the extraction run uses `completed_with_issues` while any attention item remains open;
 - the report labels every open item as `NEEDS REVIEW` or `ACTION REQUIRED`.
+- every open item carries non-empty `currentTreatment`, `impact`, and `nextAction` fields in the database.
 
 Previewing a dataset with action-required items is allowed so the issue can be inspected visually. Do not describe the extraction as complete until those items are resolved or dismissed with evidence.

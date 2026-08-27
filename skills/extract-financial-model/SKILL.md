@@ -66,6 +66,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - Do not create an unresolved item for a high-confidence mapping that passed deterministic checks. This is the accepted state even when provenance remains `unreviewed`.
    - Use `attentionLevel: needs_review` for a useful, explicit, reversible assumption. Emit the provisional object and state the assumption.
    - Use `attentionLevel: action_required` when a semantic decision, source repair, or engineering fix is required before canonical ingestion succeeds. Do not emit a disputed value or invented interpretation; an opaque cached value may remain only as explicit preview material.
+   - For every open attention item, write `description` (what was found), `currentTreatment` (what the database emitted or omitted), `impact` (what may be wrong or unavailable), and `nextAction` (one concrete confirmation or repair instruction). Put these fields in `model-db.json`, not only the report.
    - Confidence, provenance review status, and attention level are independent; follow the decision table in `mapping-judgment.md`.
 
 6. Emit and validate.
@@ -74,7 +75,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - Before reporting completion, run `npm run extraction:check -- path/to/output-directory`. This loads `model-db.json` through the viewer's runtime contract and checks that `extraction-report.md` has every required, non-empty section in contract order.
    - The checker resolves repository code relative to itself, so an agent outside the repository root may run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/check-extraction.mjs path/to/output-directory`.
    - From the repository root, run `npm run check` after changing schema, fixtures, expressions, validator, or query code.
-   - Label every open report item `NEEDS REVIEW` or `ACTION REQUIRED`. Keep the extraction run `completed_with_issues` while either kind remains open. Do not report success while validator errors, silent presentation fallbacks, or missing-lineage objects remain.
+   - Label every open report item `NEEDS REVIEW` or `ACTION REQUIRED`. The strict package checker rejects open items without `currentTreatment`, `impact`, or `nextAction`. Keep the extraction run `completed_with_issues` while either kind remains open. Do not report success while validator errors, silent presentation fallbacks, or missing-lineage objects remain.
 
 7. Compile and visually review.
    - Run `npm run extraction:preview -- path/to/output-directory`. This reruns the strict extraction checker, builds a local static viewer, exercises it with Playwright, and writes `viewer/review/` screenshots plus `review.json`.
@@ -86,4 +87,4 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
 
 ## Output discipline
 
-Keep raw precision in `model-db.json`; apply display rounding only in visualization code. In the report, name every attention item, its worksheet/cell, the assumption already made, and the one instruction needed next under `Questions and next actions`. Label translator limitations as engineering follow-up and consume the corresponding `formula-translation-tasks.json` items before final handoff. Ask an analyst only about genuine source ambiguity or source defects—not about limitations the extraction agent can resolve by expanding the map or code. New private maps should use `nextAction`; `analystQuestion` remains a legacy alias. Treat `viewer/` as a generated local review artifact: do not commit or publish it, especially when inputs are confidential, unless the user explicitly authorizes publication.
+Keep raw precision in `model-db.json`; apply display rounding only in visualization code. In the report, name every attention item, its worksheet/cell, current treatment, impact, and the one instruction needed next under `Questions and next actions`. Label translator limitations as engineering follow-up and consume the corresponding `formula-translation-tasks.json` items before final handoff. Ask an analyst only about genuine source ambiguity or source defects—not about limitations the extraction agent can resolve by expanding the map or code. New private maps should use `nextAction`; `analystQuestion` remains a legacy alias. Treat `viewer/` as a generated local review artifact: do not commit or publish it, especially when inputs are confidential, unless the user explicitly authorizes publication.

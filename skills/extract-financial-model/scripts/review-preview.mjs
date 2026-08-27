@@ -228,6 +228,30 @@ export async function reviewPreview(viewerDirectory, extraction) {
       }
     }
 
+    const warningStatus = desktop.locator(".validation-status.has-warning");
+    const reviewWarning = await warningStatus.count() > 0
+      ? await warningStatus.textContent()
+      : null;
+    let attentionQueue = "not-applicable";
+    let attentionQueueScreenshot;
+    if (await warningStatus.count() > 0) {
+      await warningStatus.click();
+      const attentionCenter = desktop.getByTestId("attention-center");
+      await attentionCenter.waitFor({ state: "visible" });
+      if (await attentionCenter.locator(".attention-item").count() === 0) {
+        throw new Error("Attention status opened an empty attention center");
+      }
+      attentionQueue = "passed";
+      attentionQueueScreenshot = await capture(
+        desktop,
+        reviewDirectory,
+        "04-attention-queue",
+        captures,
+      );
+      await attentionCenter.getByLabel("Close review queue").click();
+      await attentionCenter.waitFor({ state: "hidden" });
+    }
+
     let unresolvedCue = "not-applicable";
     let unresolvedScreenshot;
     if (unresolvedView) {
@@ -245,15 +269,10 @@ export async function reviewPreview(viewerDirectory, extraction) {
       unresolvedScreenshot = await capture(
         desktop,
         reviewDirectory,
-        "04-unresolved-review",
+        "05-unresolved-review",
         captures,
       );
     }
-
-    const warningStatus = desktop.locator(".validation-status.has-warning");
-    const reviewWarning = await warningStatus.count() > 0
-      ? await warningStatus.textContent()
-      : null;
     const mobile = await browser.newPage({ viewport: { width: 393, height: 852 } });
     attachRuntimeChecks(mobile, browserErrors, failedResponses);
     await mobile.goto(preview.url, { waitUntil: "networkidle" });
@@ -303,6 +322,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
       result: "automated-checks-passed-visual-judgment-required",
       checks: {
         browserConsole: "passed",
+        attentionQueue,
         cellInspector: "passed",
         dependencyGraph,
         derivedLineage,
@@ -320,6 +340,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
         inspectorScreenshot,
         derivedScreenshot,
         graphScreenshot,
+        attentionQueueScreenshot,
         unresolvedScreenshot,
         mobileScreenshot,
         mobileScrolledScreenshot,

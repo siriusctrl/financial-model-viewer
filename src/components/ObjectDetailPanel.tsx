@@ -11,6 +11,7 @@ import type {
   Observation,
   ScalarValue,
   SourceLocator,
+  UnresolvedItem,
 } from "../model-db/types";
 
 type Props = {
@@ -23,10 +24,7 @@ type Props = {
     observationId: string,
     value: ScalarValue,
   ) => ObservationEditResult;
-  onResolveAttention: (
-    itemId: string,
-    status: "resolved" | "dismissed",
-  ) => void;
+  onConfirmAttention: (itemId: string) => void;
 };
 
 type InspectorSide = "left" | "right";
@@ -105,7 +103,7 @@ export function ObjectDetailPanel({
   onSelectTarget,
   onFocusGraph,
   onUpdateObservation,
-  onResolveAttention,
+  onConfirmAttention,
 }: Props) {
   const panelRef = useRef<HTMLElement>(null);
   const [displayTargetId, setDisplayTargetId] = useState(targetId);
@@ -167,52 +165,85 @@ export function ObjectDetailPanel({
           onSelectTarget={onSelectTarget}
           onFocusGraph={onFocusGraph}
           onUpdateObservation={onUpdateObservation}
-          onResolveAttention={onResolveAttention}
+          onConfirmAttention={onConfirmAttention}
         />
       ) : displayTargetId ? (
         <ObjectDetail
           targetId={displayTargetId}
           queries={queries}
           onClose={onClose}
-          onResolveAttention={onResolveAttention}
+          onConfirmAttention={onConfirmAttention}
         />
       ) : null}
     </aside>
   );
 }
 
-function AttentionActions({
-  itemId,
-  onResolveAttention,
-}: {
-  itemId: string;
-  onResolveAttention: Props["onResolveAttention"];
-}) {
-  return (
-    <div className="attention-resolution-actions">
-      <button
-        className="resolve-button"
-        onClick={() => onResolveAttention(itemId, "resolved")}
-      >
-        <Icon name="check" size={13} /> Resolve
-      </button>
-      <button
-        className="dismiss-button"
-        onClick={() => onResolveAttention(itemId, "dismissed")}
-      >
-        Dismiss
-      </button>
-    </div>
-  );
+function attentionGuidance(item: UnresolvedItem) {
+  const isAction = item.attentionLevel === "action_required";
+  return {
+    currentTreatment: item.currentTreatment ?? (isAction
+      ? "The database keeps this item incomplete instead of inventing a value or interpretation."
+      : "The extracted interpretation remains active while this review stays open."),
+    impact: item.impact ?? "The affected model context may be incorrect until this item is checked.",
+    nextAction: item.nextAction ?? (isAction
+      ? "Fix the source or extraction, then re-import the validated database."
+      : "Compare the interpretation with the source and confirm it only if it is correct."),
+  };
 }
 
-function OpaqueFormulaActionLock() {
+function AttentionGuidance({
+  item,
+  locked,
+  onConfirmAttention,
+}: {
+  item: UnresolvedItem;
+  locked: boolean;
+  onConfirmAttention: Props["onConfirmAttention"];
+}) {
+  const guidance = attentionGuidance(item);
+  const isAction = item.attentionLevel === "action_required";
   return (
-    <div className="opaque-action-lock" data-testid="opaque-action-lock">
-      <strong>Translation required</strong>
-      <p>
-        This cached value is preview-only. Translate the workbook formula and rerun extraction before closing this action.
-      </p>
+    <div
+      className={`attention-guidance attention-guidance--${item.attentionLevel}`}
+      data-testid={locked ? "opaque-action-lock" : "attention-guidance"}
+    >
+      <dl>
+        <div>
+          <dt>Current treatment</dt>
+          <dd>{guidance.currentTreatment}</dd>
+        </div>
+        <div>
+          <dt>Why it matters</dt>
+          <dd>{guidance.impact}</dd>
+        </div>
+        <div>
+          <dt>{isAction ? "Required next step" : "What to check"}</dt>
+          <dd>{guidance.nextAction}</dd>
+        </div>
+      </dl>
+      {isAction ? (
+        <div className="attention-decision-lock">
+          <Icon name="lock" size={13} />
+          <span>
+            <strong>Cannot be cleared in the viewer</strong>
+            Complete the step above and re-import the extraction.
+          </span>
+        </div>
+      ) : (
+        <div className="attention-confirmation">
+          <p>
+            Confirm only if the current treatment matches your understanding of the source.
+            Otherwise leave this item open.
+          </p>
+          <button
+            className="confirm-interpretation-button"
+            onClick={() => onConfirmAttention(item.id)}
+          >
+            <Icon name="check" size={13} /> Confirm interpretation
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -350,7 +381,7 @@ function CellDetail({
   onSelectTarget,
   onFocusGraph,
   onUpdateObservation,
-  onResolveAttention,
+  onConfirmAttention,
 }: {
   detail: ObservationDetailProjection;
   queries: ModelDatabaseQueries;
@@ -358,7 +389,7 @@ function CellDetail({
   onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
   onUpdateObservation: Props["onUpdateObservation"];
-  onResolveAttention: Props["onResolveAttention"];
+  onConfirmAttention: Props["onConfirmAttention"];
 }) {
   const attentionGroups = [
     {
@@ -418,19 +449,18 @@ function CellDetail({
                   <strong>{group.label}</strong>
                   {group.items.map((item) => (
                     <div className="cell-attention-item" key={item.id}>
-                      <p>
-                        {item.description}
-                        {item.locator ? ` · ${formatLocator(item.locator)}` : ""}
-                        {item.confidence !== undefined ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}
-                      </p>
-                      {queries.isOpaqueFormulaAction(item.id) ? (
-                        <OpaqueFormulaActionLock />
-                      ) : (
-                        <AttentionActions
-                          itemId={item.id}
-                          onResolveAttention={onResolveAttention}
-                        />
-                      )}
+                      <p>{item.description}</p>
+                      <div className="attention-evidence-line">
+                        <span>{item.locator ? formatLocator(item.locator) : "No narrow source locator"}</span>
+                        {item.confidence !== undefined && (
+                          <span>{Math.round(item.confidence * 100)}% extraction confidence</span>
+                        )}
+                      </div>
+                      <AttentionGuidance
+                        item={item}
+                        locked={queries.isOpaqueFormulaAction(item.id)}
+                        onConfirmAttention={onConfirmAttention}
+                      />
                     </div>
                   ))}
                 </div>
@@ -546,12 +576,12 @@ function ObjectDetail({
   targetId,
   queries,
   onClose,
-  onResolveAttention,
+  onConfirmAttention,
 }: {
   targetId: string;
   queries: ModelDatabaseQueries;
   onClose: () => void;
-  onResolveAttention: Props["onResolveAttention"];
+  onConfirmAttention: Props["onConfirmAttention"];
 }) {
   const object = queries.getObject(targetId);
   const record = objectRecord(object);
@@ -561,8 +591,19 @@ function ObjectDetail({
       ? "needs_review"
       : null;
   const opaqueFormulaAction = queries.isOpaqueFormulaAction(targetId);
+  const attentionItem = attentionLevel ? (object as UnresolvedItem) : undefined;
   const fields = Object.entries(record).filter(
-    ([key, value]) => !["id", "name", "title", "description", "attentionLevel"].includes(key) && value !== undefined,
+    ([key, value]) => ![
+      "id",
+      "name",
+      "title",
+      "description",
+      "currentTreatment",
+      "impact",
+      "nextAction",
+      "attentionLevel",
+      "status",
+    ].includes(key) && value !== undefined,
   );
   return (
     <>
@@ -585,22 +626,13 @@ function ObjectDetail({
         {record.description !== undefined && (
           <p className="object-description">{String(record.description)}</p>
         )}
-        {attentionLevel && record.status === "open" && (
+        {attentionItem && record.status === "open" && (
           <section className="attention-resolution">
-            {opaqueFormulaAction ? (
-              <OpaqueFormulaActionLock />
-            ) : (
-              <>
-                <span>Local review decision</span>
-                <p>
-                  Resolve confirms the extracted interpretation. Dismiss removes the item without inventing a value.
-                </p>
-                <AttentionActions
-                  itemId={targetId}
-                  onResolveAttention={onResolveAttention}
-                />
-              </>
-            )}
+            <AttentionGuidance
+              item={attentionItem}
+              locked={opaqueFormulaAction}
+              onConfirmAttention={onConfirmAttention}
+            />
           </section>
         )}
         <section className="inspector-section">

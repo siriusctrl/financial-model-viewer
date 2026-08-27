@@ -922,6 +922,18 @@
             "type": "string",
             "minLength": 1
           },
+          "currentTreatment": {
+            "type": "string",
+            "minLength": 1
+          },
+          "impact": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nextAction": {
+            "type": "string",
+            "minLength": 1
+          },
           "targetId": {
             "$ref": "#/$defs/__schema2"
           },

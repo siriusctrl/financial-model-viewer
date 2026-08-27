@@ -37,6 +37,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - Derive dependency edges from parsed transformations. Do not store duplicate `calculated_from` relationships.
 - Expand defensible referenced-cell mappings before preserving a formula as `opaque`; retain its original formula and workbook materialized value, and keep an open `action_required` formula item until canonical translation succeeds.
 - Every extracted canonical object requires provenance, confidence, review status, source artifact, and extraction run.
+- Every open attention item in a new extraction package must state `currentTreatment`, `impact`, and `nextAction`. Review items may be confirmed in the viewer; action-required items may not be manually cleared.
 - Treat style and position as extraction signals only. Accepted mappings have no open issue; reversible assumptions use `needs_review`; blocked semantic choices or unusable source values use `action_required`.
 - Visualizations consume `ModelDatabaseQueries`; do not assemble pages directly from JSON arrays.
 - Keep the viewer statically buildable and company-agnostic.

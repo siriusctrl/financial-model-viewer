@@ -428,6 +428,16 @@ export function setUnresolvedItemStatus(
       "Opaque formula actions stay open until a replay-checked canonical translation succeeds",
     );
   }
+  if (status === "dismissed") {
+    throw new Error(
+      "Attention items cannot be dismissed in the viewer. Confirm a review interpretation or fix an action and re-import.",
+    );
+  }
+  if (item.attentionLevel === "action_required") {
+    throw new Error(
+      "Action-required items stay open until the stated source or extraction change is completed",
+    );
+  }
   item.status = status;
   for (const provenance of next.provenanceRecords) {
     if (provenance.targetId === itemId) {

@@ -873,7 +873,11 @@ export function validateModelDatabase(input: unknown): ValidationResult {
           unresolved.id,
           unresolved.category,
           unresolved.description,
-          "Resolve the item with source evidence, or explicitly mark it resolved or dismissed",
+          unresolved.nextAction ?? (
+            unresolved.attentionLevel === "action_required"
+              ? "Fix the source or extraction and re-import the database"
+              : "Confirm the stated interpretation only when it matches the source"
+          ),
         ),
       );
     }

@@ -278,10 +278,13 @@ export default function App() {
             ? "review"
             : "success",
         title: result.warnings.length > 0
-          ? `Previewing ${file.name} · ${attentionSummary(result.warnings)}`
-          : `Previewing ${file.name}`,
-        message: `${result.stats.models} model${result.stats.models === 1 ? "" : "s"}, ${result.stats.metrics} metrics, and ${result.stats.observations} observations validated locally. The file stays in this browser tab.`,
-        errors: result.warnings,
+          ? `Loaded ${file.name} · ${attentionSummary(result.warnings)}`
+          : `Loaded ${file.name}`,
+        message: result.stats.actionRequired > 0
+          ? `${result.stats.models} model${result.stats.models === 1 ? "" : "s"}, ${result.stats.metrics} metrics, and ${result.stats.observations} observations validated locally. The model is available, but action items need a source or extraction change before they can be cleared.`
+          : result.warnings.length > 0
+            ? `${result.stats.models} model${result.stats.models === 1 ? "" : "s"}, ${result.stats.metrics} metrics, and ${result.stats.observations} observations validated locally. Confirm a review only when its stated interpretation matches the source.`
+            : `${result.stats.models} model${result.stats.models === 1 ? "" : "s"}, ${result.stats.metrics} metrics, and ${result.stats.observations} observations validated locally. The file stays in this browser tab.`,
       });
     } catch (cause) {
       setImportNotice({
@@ -313,11 +316,8 @@ export default function App() {
     return result;
   };
 
-  const resolveAttentionItem = (
-    itemId: string,
-    status: "resolved" | "dismissed",
-  ) => {
-    setDatabase(setUnresolvedItemStatus(database, itemId, status));
+  const confirmAttentionItem = (itemId: string) => {
+    setDatabase(setUnresolvedItemStatus(database, itemId, "resolved"));
     setDraftTransactions((count) => count + 1);
     if (selectedTargetId === itemId) {
       setSelectedTargetId(null);
@@ -452,9 +452,16 @@ export default function App() {
               </ul>
             )}
           </div>
-          <button className="icon-button" aria-label="Dismiss import message" onClick={() => setImportNotice(null)}>
-            <Icon name="close" size={15} />
-          </button>
+          <div className="import-notice-actions">
+            {(importNotice.kind === "action" || importNotice.kind === "review") && (
+              <button className="import-review-button" onClick={() => setAttentionOpen(true)}>
+                Review attention <Icon name="arrow" size={13} />
+              </button>
+            )}
+            <button className="icon-button" aria-label="Dismiss import message" onClick={() => setImportNotice(null)}>
+              <Icon name="close" size={15} />
+            </button>
+          </div>
         </section>
       )}
 
@@ -538,7 +545,7 @@ export default function App() {
           onSelectTarget={selectObservation}
           onFocusGraph={focusGraph}
           onUpdateObservation={updateObservationValue}
-          onResolveAttention={resolveAttentionItem}
+          onConfirmAttention={confirmAttentionItem}
         />
       </div>
     </div>

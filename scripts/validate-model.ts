@@ -24,7 +24,7 @@ if (result.success) {
     for (const item of result.warnings) {
       console.warn(`\n[${item.attentionLevel}:${item.code}] ${item.objectId} · ${item.field}`);
       console.warn(`  Reason: ${item.reason}`);
-      console.warn(`  Resolve: ${item.suggestion}`);
+      console.warn(`  Next: ${item.suggestion}`);
     }
   }
 } else {

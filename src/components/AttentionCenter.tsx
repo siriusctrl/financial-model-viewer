@@ -79,8 +79,10 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
         <header className="attention-center-header">
           <div>
             <span>Extraction attention</span>
-            <h2 id="attention-center-title">Review queue</h2>
-            <p>Open an item to jump to its model context and source location.</p>
+            <h2 id="attention-center-title">What needs attention</h2>
+            <p>
+              Action items need a source or extraction change. Review items ask you to confirm an explicit interpretation.
+            </p>
           </div>
           <button
             ref={closeButtonRef}
@@ -95,11 +97,11 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
         <div className="attention-overview" aria-label="Open attention counts">
           <div className="attention-overview-action">
             <strong>{actionCount}</strong>
-            <span>Action required</span>
+            <span><b>Action required</b><small>Blocks complete ingestion</small></span>
           </div>
           <div className="attention-overview-review">
             <strong>{reviewCount}</strong>
-            <span>Needs review</span>
+            <span><b>Needs review</b><small>Confirm an interpretation</small></span>
           </div>
         </div>
 
@@ -131,17 +133,17 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
                 </span>
                 <span className="attention-item-copy">
                   <span className="attention-item-state">
-                    <i /> {isAction ? "Action required" : "Needs review"}
+                    <i /> {isAction ? "Blocking · change required" : "Confirmation needed"}
                   </span>
                   <strong>{projection.targetLabel}</strong>
                   <small>
                     {projection.model?.name && `${projection.model.name} · `}
-                    {categoryLabel(projection.item.category)} · {formatLocator(projection.locator)}
+                    {formatLocator(projection.locator)} · {categoryLabel(projection.item.category)}
                   </small>
                   <p>{projection.item.description}</p>
                 </span>
                 <span className="attention-item-arrow" aria-hidden="true">
-                  <Icon name="arrow" size={15} />
+                  Review <Icon name="arrow" size={13} />
                 </span>
               </button>
             );

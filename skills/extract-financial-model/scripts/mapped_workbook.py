@@ -190,7 +190,6 @@ class MappedWorkbookExtractor:
             "tablePresentations": [],
         }
         self._provenance_targets: set[str] = set()
-        self._next_actions: dict[str, str] = {}
         self._resolved_styles: dict[int, dict[str, Any]] = {}
         self._evidence_styles: dict[int, dict[str, Any]] = {}
         self._style_records: list[dict[str, Any]] = []
@@ -220,20 +219,19 @@ class MappedWorkbookExtractor:
         })
 
     def _unresolved(self, item: dict[str, Any]) -> None:
-        canonical = {
-            key: deepcopy(value)
-            for key, value in item.items()
-            if key not in {"nextAction", "analystQuestion"}
-        }
+        canonical = deepcopy(item)
+        canonical["nextAction"] = canonical.pop(
+            "analystQuestion",
+            canonical.get("nextAction"),
+        )
+        for field in ("currentTreatment", "impact", "nextAction"):
+            value = canonical.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"Attention item {canonical.get('id', '<unknown>')} must provide non-empty {field}"
+                )
         canonical.setdefault("attentionLevel", "needs_review")
         self.database["unresolvedItems"].append(canonical)
-        self._next_actions[canonical["id"]] = item.get(
-            "nextAction",
-            item.get(
-                "analystQuestion",
-                f"Inspect source evidence and resolve `{canonical['id']}`.",
-            ),
-        )
         self._provenance(
             canonical["id"],
             canonical.get("locator") or _locator(self.sheet_name),
@@ -650,6 +648,14 @@ class MappedWorkbookExtractor:
                         else ""
                     )
                 ),
+                "currentTreatment": (
+                    "The workbook cached values remain available for preview, but the database does not "
+                    "claim canonical calculation lineage for these cells."
+                ),
+                "impact": (
+                    f"{len(coordinates)} formula cell{'s' if len(coordinates) != 1 else ''} for "
+                    f"`{metric_id}` cannot participate in trusted lineage or recalculation."
+                ),
                 "targetId": metric_id,
                 "sourceArtifactId": source["id"],
                 "locator": _locator_from_key(coordinates[0]),
@@ -909,6 +915,8 @@ class MappedWorkbookExtractor:
             "modelId": model_id,
             "category": "formula",
             "description": "The workbook formula has no materialized cached value; no observation was emitted.",
+            "currentTreatment": f"The database omits `{metric_id}` for `{period_id}`.",
+            "impact": "The selected metric-period point is unavailable in the table and formula graph.",
             "targetId": metric_id,
             "sourceArtifactId": source_id,
             "locator": _locator(sheet, cell=coordinate),
@@ -934,6 +942,8 @@ class MappedWorkbookExtractor:
             "modelId": model_id,
             "category": "metric_mapping",
             "description": f"The source cell contains {value!r}, which is incompatible with the mapped metric type; no observation was emitted.",
+            "currentTreatment": f"The database omits `{metric_id}` for `{period_id}` instead of inventing a replacement value.",
+            "impact": "That metric-period point is absent; other valid periods and metrics remain available.",
             "targetId": metric_id,
             "sourceArtifactId": source_id,
             "locator": _locator(sheet, cell=coordinate),
@@ -1047,7 +1057,8 @@ class MappedWorkbookExtractor:
             [
                 f"- {'ACTION REQUIRED' if item['attentionLevel'] == 'action_required' else 'NEEDS REVIEW'} — "
                 f"`{item['id']}` at `{_format_locator(item.get('locator'))}`: "
-                f"{item['description']}"
+                f"{item['description']} Current treatment: {item['currentTreatment']} "
+                f"Impact: {item['impact']}"
                 for item in self.database["unresolvedItems"]
             ]
             or ["- None."]
@@ -1066,7 +1077,7 @@ class MappedWorkbookExtractor:
         ])
         lines.extend(
             f"- `{item['id']}` — Source: `{_format_locator(item.get('locator'))}`. "
-            f"{self._next_actions[item['id']]}"
+            f"{item['nextAction']}"
             for item in self.database["unresolvedItems"]
         )
         if not self.database["unresolvedItems"]:

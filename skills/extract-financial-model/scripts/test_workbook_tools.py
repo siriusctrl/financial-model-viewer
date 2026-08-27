@@ -517,6 +517,9 @@ class WorkbookToolTests(unittest.TestCase):
                 if item["category"] == "formula"
             )
             self.assertEqual(opaque_action["attentionLevel"], "action_required")
+            self.assertTrue(opaque_action["currentTreatment"])
+            self.assertTrue(opaque_action["impact"])
+            self.assertIn("extend the restricted translator", opaque_action["nextAction"])
 
             alternate_actuality_mapping = deepcopy(mapping())
             alternate_actuality_mapping["periods"][1]["actuality"] = "actual"
@@ -535,6 +538,18 @@ class WorkbookToolTests(unittest.TestCase):
                 "alice_hardcode",
             )
             self.assertNotIn("actualityConflict", hardcode_cell)
+
+            incomplete_attention_mapping = deepcopy(mapping())
+            incomplete_attention_mapping["unresolvedItems"] = [{
+                "id": "unresolved_missing_guidance",
+                "modelId": "model_test",
+                "category": "other",
+                "description": "A review item without actionable guidance.",
+                "status": "open",
+                "attentionLevel": "needs_review",
+            }]
+            with self.assertRaisesRegex(ValueError, "non-empty currentTreatment"):
+                MappedWorkbookExtractor(workbook, incomplete_attention_mapping).extract()
 
             invalid_mapping = deepcopy(mapping())
             invalid_mapping["styleConvention"] = "configurable-colors@0.1"

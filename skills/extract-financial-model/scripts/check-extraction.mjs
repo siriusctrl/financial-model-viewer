@@ -142,6 +142,34 @@ function checkFormulaTranslationTasks(tasksPath, databasePath) {
   }
 }
 
+function checkAttentionGuidance(databasePath) {
+  if (!existsSync(databasePath) || !statSync(databasePath).isFile()) return false;
+
+  try {
+    const database = JSON.parse(readFileSync(databasePath, "utf8"));
+    const openItems = Array.isArray(database.unresolvedItems)
+      ? database.unresolvedItems.filter((item) => item?.status === "open")
+      : [];
+    let valid = true;
+    for (const item of openItems) {
+      for (const field of ["currentTreatment", "impact", "nextAction"]) {
+        if (typeof item?.[field] !== "string" || item[field].trim().length === 0) {
+          fail(`${databasePath} attention item ${item?.id ?? "<unknown>"} must provide non-empty ${field}.`);
+          valid = false;
+        }
+      }
+    }
+    if (valid) {
+      console.log(`VALID ${databasePath} attention guidance`);
+      console.log(`openAttentionItems=${openItems.length}`);
+    }
+    return valid;
+  } catch (cause) {
+    fail(`Could not validate attention guidance in ${databasePath}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    return false;
+  }
+}
+
 function checkReport(reportPath, databasePath) {
   if (!existsSync(reportPath) || !statSync(reportPath).isFile()) {
     fail(`Missing extraction report: ${reportPath}`);
@@ -270,9 +298,10 @@ function checkDatabase(databasePath) {
 const { databasePath, reportPath, translationTasksPath } = resolveArtifacts(process.argv.slice(2));
 const reportIsValid = checkReport(reportPath, databasePath);
 const databaseIsValid = checkDatabase(databasePath);
+const attentionGuidanceIsValid = checkAttentionGuidance(databasePath);
 const translationTasksAreValid = checkFormulaTranslationTasks(translationTasksPath, databasePath);
 
-if (!reportIsValid || !databaseIsValid || !translationTasksAreValid) {
+if (!reportIsValid || !databaseIsValid || !attentionGuidanceIsValid || !translationTasksAreValid) {
   process.exitCode = 1;
 } else {
   console.log("PASS extraction package matches the viewer contract and report format.");

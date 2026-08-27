@@ -90,6 +90,22 @@ describe("local model editing", () => {
     expect(() => assertValidModelDatabase(next as ModelDatabase)).not.toThrow();
   });
 
+  it("does not let the viewer dismiss reviews or clear required actions", () => {
+    expect(() => setUnresolvedItemStatus(
+      sample,
+      "unresolved_harbor_provision_label",
+      "dismissed",
+    )).toThrow("cannot be dismissed in the viewer");
+
+    const database = structuredClone(sample) as ModelDatabase;
+    database.unresolvedItems[0].attentionLevel = "action_required";
+    expect(() => setUnresolvedItemStatus(
+      database,
+      "unresolved_harbor_provision_label",
+      "resolved",
+    )).toThrow("Action-required items stay open");
+  });
+
   it("keeps an opaque formula action open until translation succeeds", () => {
     const database = structuredClone(sample) as ModelDatabase;
     const transformation = database.transformations.find(
@@ -102,6 +118,9 @@ describe("local model editing", () => {
       modelId: "model_northstar_cloud",
       category: "formula",
       description: "Canonical formula translation is incomplete.",
+      currentTreatment: "The cached value remains preview-only.",
+      impact: "Canonical formula lineage is unavailable.",
+      nextAction: "Translate the formula and rerun extraction.",
       targetId: transformation!.outputMetricId,
       sourceArtifactId: "artifact_northstar_workbook",
       attentionLevel: "action_required",
