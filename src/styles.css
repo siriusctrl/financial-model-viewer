@@ -934,8 +934,8 @@ select:focus-visible,
 }
 
 .financial-table {
-  width: 100%;
-  min-width: 860px;
+  width: auto;
+  min-width: 0;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
