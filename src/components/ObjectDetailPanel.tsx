@@ -1,18 +1,32 @@
+import { useEffect, useState, type FormEvent } from "react";
 import { Icon } from "./Icon";
+import type { ObservationEditResult } from "../model-db/calculation";
 import type {
   ModelDatabaseQueries,
   ObservationDetailProjection,
   ProvenanceProjection,
 } from "../model-db/queries";
-import type { Metric, Observation, SourceLocator } from "../model-db/types";
+import type {
+  Metric,
+  Observation,
+  ScalarValue,
+  SourceLocator,
+} from "../model-db/types";
 
 type Props = {
   targetId: string | null;
-  modelId: string;
   queries: ModelDatabaseQueries;
   onClose: () => void;
   onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
+  onUpdateObservation: (
+    observationId: string,
+    value: ScalarValue,
+  ) => ObservationEditResult;
+  onResolveAttention: (
+    itemId: string,
+    status: "resolved" | "dismissed",
+  ) => void;
 };
 
 function objectRecord(value: unknown): Record<string, unknown> {
@@ -61,62 +75,209 @@ function fieldValue(value: unknown): string {
 
 export function ObjectDetailPanel({
   targetId,
-  modelId,
   queries,
   onClose,
   onSelectTarget,
   onFocusGraph,
+  onUpdateObservation,
+  onResolveAttention,
 }: Props) {
-  const observation = targetId
-    ? queries.database.observations.find((item) => item.id === targetId)
+  const [displayTargetId, setDisplayTargetId] = useState(targetId);
+  useEffect(() => {
+    if (targetId) setDisplayTargetId(targetId);
+  }, [targetId]);
+  useEffect(() => {
+    if (!targetId) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, targetId]);
+
+  const observation = displayTargetId
+    ? queries.database.observations.find((item) => item.id === displayTargetId)
     : undefined;
 
   return (
-    <aside className="inspector-panel" aria-label="Cell inspector" data-testid="detail-panel">
-      {observation ? (
+    <aside
+      className={`inspector-panel ${targetId ? "is-open" : ""}`}
+      aria-label="Cell inspector"
+      aria-hidden={!targetId}
+      data-testid="detail-panel"
+      onTransitionEnd={(event) => {
+        if (!targetId && event.propertyName === "transform") setDisplayTargetId(null);
+      }}
+    >
+      {observation && displayTargetId ? (
         <CellDetail
           detail={queries.getObservationDetail(observation.id)}
           onClose={onClose}
           onSelectTarget={onSelectTarget}
           onFocusGraph={onFocusGraph}
+          onUpdateObservation={onUpdateObservation}
+          onResolveAttention={onResolveAttention}
         />
-      ) : targetId ? (
-        <ObjectDetail targetId={targetId} queries={queries} onClose={onClose} />
-      ) : (
-        <EmptyInspector modelId={modelId} queries={queries} />
-      )}
+      ) : displayTargetId ? (
+        <ObjectDetail
+          targetId={displayTargetId}
+          queries={queries}
+          onClose={onClose}
+          onResolveAttention={onResolveAttention}
+        />
+      ) : null}
     </aside>
   );
 }
 
-function EmptyInspector({
-  modelId,
-  queries,
+function AttentionActions({
+  itemId,
+  onResolveAttention,
 }: {
-  modelId: string;
-  queries: ModelDatabaseQueries;
+  itemId: string;
+  onResolveAttention: Props["onResolveAttention"];
 }) {
-  const model = queries.getModel(modelId);
-  const observed = queries.database.observations.filter(
-    (item) => item.modelId === modelId,
-  ).length;
   return (
-    <div className="inspector-empty">
-      <div className="inspector-heading">
-        <span>Cell inspector</span>
-        <strong>No cell selected</strong>
-      </div>
-      <div className="empty-inspector-copy">
-        <span className="selection-glyph"><Icon name="table" size={22} /></span>
-        <h2>Select any value in the table.</h2>
-        <p>Its model properties, workbook locator, review state, and formula inputs will appear here.</p>
-      </div>
-      <dl className="inspector-summary">
-        <div><dt>Model</dt><dd>{model.name}</dd></div>
-        <div><dt>As of</dt><dd>{model.asOf}</dd></div>
-        <div><dt>Observed cells</dt><dd>{observed}</dd></div>
-      </dl>
+    <div className="attention-resolution-actions">
+      <button
+        className="resolve-button"
+        onClick={() => onResolveAttention(itemId, "resolved")}
+      >
+        <Icon name="check" size={13} /> Resolve
+      </button>
+      <button
+        className="dismiss-button"
+        onClick={() => onResolveAttention(itemId, "dismissed")}
+      >
+        Dismiss
+      </button>
     </div>
+  );
+}
+
+function ValueEditor({
+  detail,
+  onUpdateObservation,
+}: {
+  detail: ObservationDetailProjection;
+  onUpdateObservation: Props["onUpdateObservation"];
+}) {
+  const numericMetric = ["number", "percentage", "currency", "count"].includes(
+    detail.metric.dataType,
+  );
+  const editable = numericMetric
+    && detail.observation.valueType !== "derived"
+    && !detail.transformation
+    && (typeof detail.observation.value === "number" || detail.observation.value === null);
+  const displayValue = typeof detail.observation.value === "number"
+    ? detail.metric.dataType === "percentage"
+      ? detail.observation.value * 100
+      : detail.observation.value
+    : "";
+  const [draft, setDraft] = useState(String(displayValue));
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(String(displayValue));
+  }, [detail.observation.id, displayValue]);
+
+  useEffect(() => {
+    setResult(null);
+    setError(null);
+  }, [detail.observation.id]);
+
+  if (!editable) return null;
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setResult(null);
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) {
+      setError("Enter a finite numeric value.");
+      return;
+    }
+    try {
+      const stored = detail.metric.dataType === "percentage" ? parsed / 100 : parsed;
+      const update = onUpdateObservation(detail.observation.id, stored);
+      const count = update.propagatedChanges.length;
+      setResult(
+        count > 0
+          ? `Saved locally · ${count} downstream formula cell${count === 1 ? "" : "s"} recalculated.`
+          : "Saved locally · no formula cells changed.",
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The value could not be updated.");
+    }
+  };
+
+  return (
+    <form className="value-editor" onSubmit={save} data-testid="value-editor">
+      <div>
+        <span>Local value edit</span>
+        <small>
+          {detail.metric.dataType === "percentage"
+            ? "Enter a percentage; formulas use its decimal value."
+            : "The validated working copy stays in this tab until exported."}
+        </small>
+      </div>
+      <div className="value-editor-control">
+        <input
+          type="number"
+          step={detail.metric.dataType === "count" ? 1 : "any"}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          aria-label={`Edit ${detail.metric.name} value`}
+        />
+        <button type="submit">Apply</button>
+      </div>
+      {result && <p className="edit-result" role="status">{result}</p>}
+      {error && <p className="edit-error" role="alert">{error}</p>}
+    </form>
+  );
+}
+
+function ReverseLineage({
+  detail,
+  onSelectTarget,
+}: {
+  detail: ObservationDetailProjection;
+  onSelectTarget: (targetId: string) => void;
+}) {
+  if (detail.dependents.length === 0) return null;
+  const visible = detail.dependents.slice(0, 12);
+  return (
+    <section className="inspector-section reverse-lineage" data-testid="reverse-lineage">
+      <div className="inspector-section-heading">
+        <div>
+          <span>Reverse lineage</span>
+          <h3>
+            Used by {detail.dependents.length} formula cell{detail.dependents.length === 1 ? "" : "s"}
+          </h3>
+        </div>
+      </div>
+      <div className="lineage-inputs">
+        {visible.map((dependent) => (
+          <button
+            key={dependent.observation.id}
+            className="lineage-input"
+            onClick={() => onSelectTarget(dependent.observation.id)}
+          >
+            <span>
+              <strong>{dependent.metric.name}</strong>
+              <small>{dependent.period.label} · derived</small>
+            </span>
+            <b>{formatValue(dependent.observation.value, dependent.metric)}</b>
+          </button>
+        ))}
+      </div>
+      {detail.dependents.length > visible.length && (
+        <p className="lineage-overflow">
+          Plus {detail.dependents.length - visible.length} more direct formula cells.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -125,11 +286,15 @@ function CellDetail({
   onClose,
   onSelectTarget,
   onFocusGraph,
+  onUpdateObservation,
+  onResolveAttention,
 }: {
   detail: ObservationDetailProjection;
   onClose: () => void;
   onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
+  onUpdateObservation: Props["onUpdateObservation"];
+  onResolveAttention: Props["onResolveAttention"];
 }) {
   const attentionGroups = [
     {
@@ -172,6 +337,11 @@ function CellDetail({
           </div>
         </section>
 
+        <ValueEditor
+          detail={detail}
+          onUpdateObservation={onUpdateObservation}
+        />
+
         {attentionGroups.length > 0 && (
           <div className="cell-attention-stack" data-testid="cell-review-warning">
             {attentionGroups.map((group) => (
@@ -183,11 +353,17 @@ function CellDetail({
                 <div>
                   <strong>{group.label}</strong>
                   {group.items.map((item) => (
-                    <p key={item.id}>
-                      {item.description}
-                      {item.locator ? ` · ${formatLocator(item.locator)}` : ""}
-                      {item.confidence !== undefined ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}
-                    </p>
+                    <div className="cell-attention-item" key={item.id}>
+                      <p>
+                        {item.description}
+                        {item.locator ? ` · ${formatLocator(item.locator)}` : ""}
+                        {item.confidence !== undefined ? ` · ${Math.round(item.confidence * 100)}% confidence` : ""}
+                      </p>
+                      <AttentionActions
+                        itemId={item.id}
+                        onResolveAttention={onResolveAttention}
+                      />
+                    </div>
                   ))}
                 </div>
               </section>
@@ -263,6 +439,8 @@ function CellDetail({
           </section>
         )}
 
+        <ReverseLineage detail={detail} onSelectTarget={onSelectTarget} />
+
         <SourceSection provenance={detail.provenance} />
       </div>
     </>
@@ -300,10 +478,12 @@ function ObjectDetail({
   targetId,
   queries,
   onClose,
+  onResolveAttention,
 }: {
   targetId: string;
   queries: ModelDatabaseQueries;
   onClose: () => void;
+  onResolveAttention: Props["onResolveAttention"];
 }) {
   const object = queries.getObject(targetId);
   const record = objectRecord(object);
@@ -335,6 +515,18 @@ function ObjectDetail({
       <div className="inspector-body">
         {record.description !== undefined && (
           <p className="object-description">{String(record.description)}</p>
+        )}
+        {attentionLevel && record.status === "open" && (
+          <section className="attention-resolution">
+            <span>Local review decision</span>
+            <p>
+              Resolve confirms the extracted interpretation. Dismiss removes the item without inventing a value.
+            </p>
+            <AttentionActions
+              itemId={targetId}
+              onResolveAttention={onResolveAttention}
+            />
+          </section>
         )}
         <section className="inspector-section">
           <h3>Properties</h3>

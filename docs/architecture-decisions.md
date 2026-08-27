@@ -20,6 +20,8 @@ Function arity is validated before import, and `lag`/`lead` offsets must be posi
 
 When a model contains multiple period frequencies, lagged references stay within the current observation's period type. The table exposes period type as an explicit view instead of interleaving annual and quarterly columns. Metric-level dependency graphs deduplicate equivalent period-specific transformations, while the cell inspector retains the exact transformation and workbook formula for each observation.
 
+Browser-local value edits use this same interpreter and the same point-in-time reference resolution as the inspector. Only non-formula numeric cells are directly writable. A reverse observation index identifies exact downstream formula cells, which are recalculated transitively and validated as one atomic working-copy mutation. Supported formula cells remain read-only; opaque formulas are never guessed or recomputed.
+
 Member access, arbitrary identifiers/functions, arrays, assignment, loops, imports, async work, browser/network APIs, `eval`, and `new Function` are outside the language boundary.
 
 Unsupported workbook formulas retain their original formula and materialized workbook value with `opaque` or `unresolved` status. They do not block unrelated data.
@@ -47,6 +49,8 @@ The public viewer is a Vite static build deployed with GitHub Pages. The sample 
 This proves the contract and visualization loop without selecting a production database, API, authentication model, or collaboration system prematurely.
 
 Users may open a local `model-db@0.1.0` JSON file in the static viewer. The browser reads and validates the file in memory, and the accepted database replaces the sample only for the current tab. The viewer does not upload, persist, cache, or encode imported model data into the URL. This keeps local preview within the static-hosting boundary; sharing and storage remain explicitly deferred.
+
+The static viewer may mutate an in-memory working copy: edit eligible observation values, resolve or dismiss attention items, update review state, recalculate supported downstream formulas, and export a validated JSON file. These operations do not write back to the source workbook or GitHub Pages and disappear on reload unless the user downloads the draft. Server persistence, simultaneous editors, authentication, and conflict resolution remain outside the static boundary.
 
 Extraction agents may also compile a validated dataset into a separate local static review bundle. That build uses relative assets, embeds the dataset into the generated HTML, and is served only on `127.0.0.1` for Playwright or human inspection. It is a derivative review artifact and does not replace or modify the GitHub Pages build, deployment workflow, or public representative dataset.
 

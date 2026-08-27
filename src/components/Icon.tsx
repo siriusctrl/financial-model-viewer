@@ -14,6 +14,7 @@ export type IconName =
   | "warning"
   | "theme"
   | "upload"
+  | "download"
   | "external";
 
 export function Icon({
@@ -88,6 +89,12 @@ export function Icon({
       <>
         <path d="M12 16V4M7 9l5-5 5 5" />
         <path d="M5 14v6h14v-6" />
+      </>
+    ),
+    download: (
+      <>
+        <path d="M12 4v12M7 11l5 5 5-5" />
+        <path d="M5 20h14" />
       </>
     ),
     external: (

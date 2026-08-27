@@ -13,7 +13,7 @@ Analyst workbook / lossless model IR
   → dedicated table viewer + lineage inspector
 ```
 
-This project tests a product direction. It does not replace Excel, execute workbook macros, or provide a production database/editor.
+This project tests a product direction. It does not replace Excel, execute workbook macros, or provide a production database or collaborative editor.
 
 ## What the MVP proves
 
@@ -24,7 +24,8 @@ This project tests a product direction. It does not replace Excel, execute workb
 - Extraction outcomes are explicit: accepted mappings proceed without an open issue, reversible assumptions appear as neutral-blue `needs_review` items, and blocked decisions or unusable source values appear as red `action_required` items. The global review queue groups both levels, names the model and workbook locator, and jumps to the affected metric row or period cell.
 - Mixed-frequency models expose explicit annual/quarterly period views, and lagged lineage resolves within the selected period type.
 - The same query layer and frontend render a SaaS model and a structurally different bank model without company-specific UI branches.
-- A user can move from a forecast number to its metric, formula, source workbook cell, confidence, review status, and extraction run. Selecting a derived value highlights its visible direct inputs; inputs in another period view remain explicit in the inspector and can be selected to jump there.
+- A user can move from a forecast number to its metric, formula, source workbook cell, confidence, review status, and extraction run. The dismissible inspector shows both formula inputs and reverse “used by” links.
+- A browser-local working copy supports validated numeric input edits, deterministic downstream formula propagation, explicit review resolution, and JSON export without uploading or persisting model data.
 
 ## Repository map
 
@@ -33,7 +34,7 @@ financial-model-viewer/
 ├── src/
 │   ├── model-db/                    # schema, inferred types, expressions, queries, validator
 │   ├── visualizations/              # financial table and dependency graph
-│   └── components/                  # persistent cell/property inspector
+│   └── components/                  # review queue and slide-over cell/property inspector
 ├── skills/extract-financial-model/ # reusable extraction workflow
 ├── schema/model-db.schema.json      # generated portable JSON Schema
 ├── examples/                        # validated cross-sector semantic fixture
@@ -74,7 +75,9 @@ The public and local viewers include an **Open JSON** action. Choose a `model-db
 
 Reload the page or use **Restore bundled** to return to the dataset compiled into the viewer.
 
-When open attention exists, select the status in the header to open the **Review queue**. Filter Action or Review, inspect the source worksheet/cell, and select an item to switch models and reveal its issue detail. Metric-backed items scroll to and highlight the affected table row; when period provenance can be inferred, the exact period cell is outlined. The appearance control switches between the restrained light and dark palettes and persists the choice in local browser storage; model data itself is still not persisted.
+When open attention exists, select the status in the header to open the **Review queue**. Filter Action or Review, inspect the source worksheet/cell, and select an item to switch models and reveal its issue detail. Metric-backed items scroll to and highlight the affected table row; when period provenance can be inferred, the exact period cell is outlined. The cell inspector is a dismissible slide-over and stays hidden until a cell or issue is selected.
+
+Numeric reported, assumption, and external-estimate cells can be edited in a browser-local working copy. Supported downstream `model-expression@0.1` formulas recalculate transitively, while derived and opaque formula cells remain read-only. The inspector shows direct reverse dependencies, and open review items can be resolved or dismissed explicitly. Use **Export draft** to download the fully validated edited JSON. Changes are not uploaded, cached, or retained after reload. The appearance control switches between the restrained light and dark palettes and persists only that preference in local browser storage.
 
 ## Deterministic data workflow
 
@@ -176,7 +179,8 @@ Implemented:
 - extraction skill and contract;
 - sparse read-only XLSX inventory and explicit mapped-workbook extraction;
 - validated cross-sector fixture and extraction report;
-- table-first model viewer, dependency graph, persistent cell/property inspector, dark appearance, and navigable review queue;
+- table-first model viewer, dependency graph, dismissible slide-over inspector, dark appearance, and navigable review queue;
+- validated browser-local value editing, reverse formula lineage, deterministic propagation, review resolution, and JSON export;
 - unit, cross-sector generality, browser, responsive, and visual-proof checks;
 - static GitHub Pages deployment.
 
@@ -187,7 +191,7 @@ Deferred:
 - revision timeline and point-in-time reconstruction UI;
 - bull/base/bear comparison;
 - source → assumption → change visualization;
-- persistent database/API, editing, collaboration, and permissions;
+- persistent database/API, collaborative editing, authentication, and permissions;
 - full Excel calculation compatibility.
 
 See [architecture decisions](docs/architecture-decisions.md) for the contract boundaries and trade-offs.

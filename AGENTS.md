@@ -7,11 +7,12 @@ This file is the operating map for agents working in this repository. Keep produ
 - `src/model-db/schema.ts`: the only hand-maintained canonical data contract.
 - `src/model-db/types.ts`: TypeScript types inferred from the runtime schema.
 - `src/model-db/expressions.ts`: restricted `model-expression@0.1` parser validation and interpreter.
+- `src/model-db/calculation.ts`: exact observation input/reverse-dependency resolution, local value mutation, and deterministic downstream formula propagation.
 - `src/model-db/validate.ts`: deterministic schema, reference, type, cycle, uniqueness, and provenance checks.
 - `src/model-db/queries.ts`: visualization-neutral query layer. UI code consumes projections from here.
 - `tablePresentations` in `src/model-db/schema.ts`: optional non-canonical table sections and metric order captured during extraction.
 - `src/visualizations/`: table-first financial model viewer and optional dependency graph projection.
-- `src/components/ObjectDetailPanel.tsx`: canonical object, formula, relationship, and provenance inspection.
+- `src/components/ObjectDetailPanel.tsx`: dismissible slide-over for object/property inspection, local value edits, reverse lineage, and attention resolution.
 - `src/components/AttentionCenter.tsx`: global open-attention queue and model/source navigation.
 - `scripts/generate-schema.ts`: generates `schema/model-db.schema.json` from `schema.ts`.
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
@@ -31,6 +32,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `schema.ts` is the only maintained contract. Generate JSON Schema and infer TypeScript types from it.
 - Keep `Observation` point-in-time: model, metric, entity, period, scenario, actuality, as-of, and version must remain explicit.
 - Never execute expressions with `eval`, `new Function`, imports, assignments, loops, property access, or browser/network APIs.
+- Keep browser-local mutations atomic and schema-valid. Direct edits cannot overwrite supported or opaque formula cells; downstream propagation must use `model-expression@0.1` and exact observation references.
 - Derive dependency edges from parsed transformations. Do not store duplicate `calculated_from` relationships.
 - Expand defensible referenced-cell mappings before preserving a formula as `opaque`; retain its original formula and workbook materialized value.
 - Every extracted canonical object requires provenance, confidence, review status, source artifact, and extraction run.

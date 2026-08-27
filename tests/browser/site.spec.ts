@@ -26,21 +26,63 @@ test("opens on the extracted model table and inspects a sourced cell", async ({ 
   await expect(page.getByTestId("financial-table-view")).toBeVisible();
   await expect(page.getByText("Revenue build", { exact: true })).toBeVisible();
   await expect(page.getByText("Gross profit", { exact: true }).first()).toBeVisible();
+  const inspector = page.getByTestId("detail-panel");
+  await expect(inspector).not.toBeVisible();
 
   const forecastCell = page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/);
   await expect(forecastCell).toContainText("1,315.0");
   await forecastCell.click();
 
-  const inspector = page.getByTestId("detail-panel");
+  await expect(inspector).toBeVisible();
   await expect(inspector.getByText("Selected cell · FY25E")).toBeVisible();
   await expect(inspector.getByText("Model!E11")).toBeVisible();
   await expect(inspector.getByText("94%")).toBeVisible();
   await expect(inspector.getByText("unreviewed", { exact: true })).toBeVisible();
+  await inspector.getByLabel("Clear selection").click();
+  await expect(inspector).not.toBeVisible();
+});
+
+test("edits an input, propagates formulas, and exports the local draft", async ({ page }) => {
+  await page.goto("./");
+  await page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/).click();
+  const inspector = page.getByTestId("detail-panel");
+  await expect(inspector.getByTestId("reverse-lineage")).toContainText("Used by 1 formula cell");
+  await expect(inspector.getByTestId("reverse-lineage")).toContainText("Revenue");
+
+  await inspector.getByLabel("Edit Subscription revenue value").fill("1400");
+  await inspector.getByRole("button", { name: "Apply" }).click();
+  await expect(inspector.getByRole("status")).toContainText(
+    "3 downstream formula cells recalculated",
+  );
+  await expect(
+    page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/),
+  ).toContainText("1,400.0");
+  await expect(page.getByTitle(/Derived · obs_northstar_revenue_fy2025/)).toContainText(
+    "1,620.0",
+  );
+  await expect(page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/)).toContainText(
+    "1,140.0",
+  );
+  await expect(page.getByTitle(/Derived · obs_northstar_gross_margin_fy2025/)).toContainText(
+    "70.4%",
+  );
+
+  await inspector.getByTestId("reverse-lineage").locator("button").first().click();
+  await expect(inspector.getByTestId("formula-lineage")).toContainText("Derived from 2 inputs");
+  await expect(inspector.getByTestId("value-editor")).toHaveCount(0);
+  await expect(inspector.getByRole("status")).toHaveCount(0);
+  await inspector.getByLabel("Clear selection").click();
+  await expect(inspector).not.toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Export draft/ }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("model-db.edited.json");
 });
 
 test("shows actual workbook inputs for a derived cell", async ({ page }) => {
   await page.goto("./");
   await page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/).click();
+  await page.getByTestId("detail-panel").getByLabel("Clear selection").click();
   const derivedCell = page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/);
   await derivedCell.click();
   await expect(derivedCell).toHaveClass(/selected/);
@@ -102,6 +144,20 @@ test("uses extracted sections for a structurally different bank model", async ({
   );
   await expect(page.getByTestId("cell-review-warning")).toContainText("Model!A14");
   await expect(page.getByText("Subscription revenue", { exact: true })).toHaveCount(0);
+});
+
+test("resolves a review item from the selected cell", async ({ page }) => {
+  await page.goto("./");
+  await page.getByLabel("Active model").selectOption("model_harbor_national");
+  await page.getByTitle(/obs_harbor_provision_fy2025/).click();
+  const inspector = page.getByTestId("detail-panel");
+  await inspector.getByRole("button", { name: "Resolve" }).click();
+
+  await expect(page.getByTestId("attention-trigger")).toHaveCount(0);
+  await expect(page.locator(".validation-status")).toContainText("Accepted");
+  await expect(page.locator(".row-warning")).toHaveCount(0);
+  await expect(inspector.getByTestId("cell-review-warning")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Export draft/ })).toBeVisible();
 });
 
 test("renders required extraction actions separately from neutral review", async ({ page }) => {
@@ -249,7 +305,7 @@ test("separates annual and quarterly periods in a mixed-frequency model", async 
 
   await page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/).click();
   await expect(page.getByText("1 direct input outside this table", { exact: true })).toBeVisible();
-  await page.locator(".lineage-input").click();
+  await page.getByTestId("formula-lineage").locator(".lineage-input").click();
   await expect(periodView).toHaveValue("fiscal_quarter");
   await expect(page.locator(".value-button.selected")).toHaveAttribute(
     "title",

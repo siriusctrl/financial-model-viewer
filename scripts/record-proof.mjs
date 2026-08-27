@@ -55,7 +55,15 @@ try {
   await capture(desktop, "01-table-desktop");
 
   await desktop.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/).click();
+  await desktop.waitForTimeout(250);
   await capture(desktop, "02-source-inspector-desktop");
+
+  await desktop.getByLabel("Edit Subscription revenue value").fill("1400");
+  await desktop.getByRole("button", { name: "Apply" }).click();
+  await desktop.getByRole("status").waitFor();
+  await capture(desktop, "03-local-edit-propagation-desktop");
+
+  await desktop.reload({ waitUntil: "networkidle" });
 
   const derivedCell = desktop.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/);
   await derivedCell.click();
@@ -63,25 +71,26 @@ try {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
   await desktop.waitForTimeout(200);
-  await capture(desktop, "03-derived-lineage-desktop");
+  await capture(desktop, "04-derived-lineage-desktop");
+  await desktop.getByTestId("detail-panel").getByLabel("Clear selection").click();
 
   await desktop.getByRole("button", { name: "Lineage map" }).click();
   await desktop.locator(".metric-picker select").selectOption("metric_northstar_gross_profit");
-  await capture(desktop, "04-lineage-map-desktop");
+  await capture(desktop, "05-lineage-map-desktop");
 
   await desktop.getByLabel("Active model").selectOption("model_harbor_national");
-  await capture(desktop, "05-bank-table-desktop");
+  await capture(desktop, "06-bank-table-desktop");
 
   await desktop.getByTestId("attention-trigger").click();
-  await capture(desktop, "06-review-queue-desktop");
+  await capture(desktop, "07-review-queue-desktop");
   await desktop.getByTestId("attention-center").getByLabel("Close review queue").click();
 
   await desktop.getByLabel("Active model").selectOption("model_northstar_cloud");
   await desktop.getByLabel("Switch to dark mode").click();
   await desktop.waitForTimeout(250);
-  await capture(desktop, "07-dark-table-desktop");
+  await capture(desktop, "08-dark-table-desktop");
   await desktop.getByTestId("attention-trigger").click();
-  await capture(desktop, "08-dark-review-queue-desktop");
+  await capture(desktop, "09-dark-review-queue-desktop");
 
   const mobile = await browser.newPage({
     viewport: { width: 393, height: 852 },
@@ -90,7 +99,10 @@ try {
   });
   await mobile.goto(baseUrl, { waitUntil: "networkidle" });
   await mobile.waitForTimeout(250);
-  await capture(mobile, "09-dark-table-mobile");
+  await capture(mobile, "10-dark-table-mobile");
+  await mobile.getByTitle(/obs_northstar_subscription_revenue_fy2022/).click();
+  await mobile.waitForTimeout(250);
+  await capture(mobile, "11-dark-inspector-mobile");
   await browser.close();
 
   const thumbWidth = 680;

@@ -3,12 +3,17 @@ import { AttentionCenter } from "./components/AttentionCenter";
 import { Icon } from "./components/Icon";
 import { ObjectDetailPanel } from "./components/ObjectDetailPanel";
 import { defaultDatabase } from "./data/database";
+import {
+  editObservationValue,
+  setUnresolvedItemStatus,
+  type ObservationEditResult,
+} from "./model-db/calculation";
 import { parseModelDatabaseJson } from "./model-db/import";
 import {
   ModelDatabaseQueries,
   type AttentionItemProjection,
 } from "./model-db/queries";
-import type { ModelDatabase, Period } from "./model-db/types";
+import type { ModelDatabase, Period, ScalarValue } from "./model-db/types";
 import type { ValidationError } from "./model-db/validate";
 import { DependencyGraph } from "./visualizations/dependency-graph/DependencyGraph";
 import { FinancialTable } from "./visualizations/financial-table/FinancialTable";
@@ -93,6 +98,7 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [database, setDatabase] = useState(defaultDatabase);
   const [datasetSource, setDatasetSource] = useState<DatasetSource>({ kind: "bundled" });
+  const [draftTransactions, setDraftTransactions] = useState(0);
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const [selectedModelId, setSelectedModelId] = useState(() => defaultModelId(defaultDatabase));
   const [selectedPeriodType, setSelectedPeriodType] = useState<Period["type"] | undefined>(() =>
@@ -192,6 +198,11 @@ export default function App() {
     setSelectedTargetId(metricId);
   };
 
+  const closeInspector = () => {
+    setSelectedTargetId(null);
+    setAttentionFocus(null);
+  };
+
   const navigateToAttention = (projection: AttentionItemProjection) => {
     if (projection.model) {
       const modelChanged = projection.model.id !== selectedModelId;
@@ -219,6 +230,7 @@ export default function App() {
     const nextModelId = defaultModelId(nextDatabase);
     setDatabase(nextDatabase);
     setDatasetSource(source);
+    setDraftTransactions(0);
     setSelectedModelId(nextModelId);
     setSelectedPeriodType(initialPeriodType(nextDatabase, nextModelId));
     setGraphMetricId(initialGraphMetric(nextDatabase, nextModelId));
@@ -291,6 +303,43 @@ export default function App() {
     });
   };
 
+  const updateObservationValue = (
+    observationId: string,
+    value: ScalarValue,
+  ): ObservationEditResult => {
+    const result = editObservationValue(database, observationId, value);
+    setDatabase(result.database);
+    setDraftTransactions((count) => count + 1);
+    return result;
+  };
+
+  const resolveAttentionItem = (
+    itemId: string,
+    status: "resolved" | "dismissed",
+  ) => {
+    setDatabase(setUnresolvedItemStatus(database, itemId, status));
+    setDraftTransactions((count) => count + 1);
+    if (selectedTargetId === itemId) {
+      setSelectedTargetId(null);
+      setAttentionFocus(null);
+    }
+  };
+
+  const exportDraft = () => {
+    const sourceName = datasetSource.kind === "file"
+      ? datasetSource.filename.replace(/\.json$/i, "")
+      : "model-db";
+    const blob = new Blob([`${JSON.stringify(database, null, 2)}\n`], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${sourceName}.edited.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="app-shell">
       <header className="viewer-header">
@@ -342,6 +391,16 @@ export default function App() {
             <Icon name="theme" size={15} />
             <span>{theme === "light" ? "Dark" : "Light"}</span>
           </button>
+          {draftTransactions > 0 && (
+            <button
+              className="draft-export-button"
+              onClick={exportDraft}
+              title="Download the validated local working copy"
+            >
+              <Icon name="download" size={14} />
+              Export draft <span>{draftTransactions}</span>
+            </button>
+          )}
           <input
             ref={fileInputRef}
             className="json-file-input"
@@ -474,11 +533,12 @@ export default function App() {
 
         <ObjectDetailPanel
           targetId={selectedTargetId}
-          modelId={selectedModelId}
           queries={queries}
-          onClose={() => setSelectedTargetId(null)}
+          onClose={closeInspector}
           onSelectTarget={selectObservation}
           onFocusGraph={focusGraph}
+          onUpdateObservation={updateObservationValue}
+          onResolveAttention={resolveAttentionItem}
         />
       </div>
     </div>

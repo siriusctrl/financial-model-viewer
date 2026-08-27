@@ -162,6 +162,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
     if (await firstCell.count() === 0) throw new Error("Compiled viewer contains no selectable observation cells");
     await firstCell.click();
     await desktop.locator(".inspector-header").waitFor({ state: "visible" });
+    await desktop.waitForTimeout(250);
     const inspectorScreenshot = await capture(desktop, reviewDirectory, "02-cell-inspector", captures);
 
     let derivedLineage = "not-applicable";
@@ -183,7 +184,10 @@ export async function reviewPreview(viewerDirectory, extraction) {
       await derivedCell.click();
       await desktop.getByTestId("formula-lineage").waitFor({ state: "visible" });
       if (derivedView.expectedInputCount !== undefined) {
-        const actualInputCount = await desktop.locator(".lineage-input").count();
+        const actualInputCount = await desktop
+          .getByTestId("formula-lineage")
+          .locator(".lineage-input")
+          .count();
         if (actualInputCount !== derivedView.expectedInputCount) {
           throw new Error(
             `Exact-period lineage rendered ${actualInputCount} inputs; expected ${derivedView.expectedInputCount}`,
@@ -217,6 +221,8 @@ export async function reviewPreview(viewerDirectory, extraction) {
         }
         dependencyGraph = "passed";
         graphScreenshot = await capture(desktop, reviewDirectory, "04-dependency-graph", captures);
+        await desktop.getByTestId("detail-panel").getByLabel("Clear selection").click();
+        await desktop.getByTestId("detail-panel").waitFor({ state: "hidden" });
         await desktop.getByRole("button", { name: "Model table" }).click();
         await desktop.getByTestId("financial-table-view").waitFor({ state: "visible" });
       }
@@ -275,6 +281,7 @@ export async function reviewPreview(viewerDirectory, extraction) {
     await tableWrap.evaluate((element) => { element.scrollLeft = 0; });
     await mobile.locator(".value-button").first().click();
     await mobile.locator(".inspector-header").waitFor({ state: "visible" });
+    await mobile.waitForTimeout(250);
     const mobileInspectorScreenshot = await capture(
       mobile,
       reviewDirectory,

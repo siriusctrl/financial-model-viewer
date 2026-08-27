@@ -16,7 +16,7 @@ import type {
   Transformation,
   UnresolvedItem,
 } from "./types";
-import { validateExpression } from "./expressions";
+import { ModelCalculator } from "./calculation";
 
 export type MetricSeriesQuery = {
   modelId: string;
@@ -91,6 +91,13 @@ export type ObservationLineageInput = {
   provenance: ProvenanceProjection;
 };
 
+export type ObservationLineageDependent = {
+  observation: Observation;
+  metric: Metric;
+  period: Period;
+  transformation: Transformation;
+};
+
 export type ObservationDetailProjection = {
   observation: Observation;
   metric: Metric;
@@ -101,6 +108,7 @@ export type ObservationDetailProjection = {
   transformation?: Transformation;
   provenance: ProvenanceProjection;
   inputs: ObservationLineageInput[];
+  dependents: ObservationLineageDependent[];
   unresolvedItems: UnresolvedItem[];
 };
 
@@ -170,6 +178,7 @@ export class ModelDatabaseQueries {
   private readonly transformations: Map<string, Transformation>;
   private readonly relationships: Relationship[];
   private readonly objects: Map<string, CanonicalObject | SourceArtifact | ExtractionRun>;
+  private readonly calculator: ModelCalculator;
 
   constructor(database: ModelDatabase) {
     this.database = database;
@@ -183,6 +192,7 @@ export class ModelDatabaseQueries {
       database.transformations.map((item) => [item.id, item]),
     );
     this.relationships = database.relationships;
+    this.calculator = new ModelCalculator(database);
     this.objects = new Map();
     for (const collection of [
       database.models,
@@ -584,62 +594,34 @@ export class ModelDatabaseQueries {
     const transformation = observation.transformationId
       ? this.transformations.get(observation.transformationId)
       : undefined;
-    const observedPeriods = [...new Set(
-      this.database.observations
-        .filter(
-          (candidate) =>
-            candidate.modelId === observation.modelId &&
-            candidate.entityId === observation.entityId &&
-            candidate.versionId === observation.versionId &&
-            candidate.asOf <= observation.asOf &&
-            observationMatchesScenario(candidate, observation.scenarioId),
-        )
-        .map((candidate) => candidate.periodId),
-    )]
-      .map((periodId) => this.periods.get(periodId))
-      .filter(
-        (candidate): candidate is Period =>
-          candidate !== undefined && candidate.type === period.type,
-      )
-      .sort(comparePeriods);
-    const currentPeriodIndex = observedPeriods.findIndex(
-      (candidate) => candidate.id === observation.periodId,
-    );
-    const references = transformation?.status === "supported"
-      ? validateExpression(transformation.expression).references
-      : [];
-    const inputs = references.map(({ metricId, periodOffset, periodId }) => {
-      const inputPeriod = periodId
-        ? this.periods.get(periodId)
-        : observedPeriods[currentPeriodIndex + periodOffset];
-      const candidates = this.database.observations
-        .filter(
-          (candidate) =>
-            candidate.modelId === observation.modelId &&
-            candidate.metricId === metricId &&
-            candidate.entityId === observation.entityId &&
-            candidate.periodId === inputPeriod?.id &&
-            candidate.versionId === observation.versionId &&
-            candidate.asOf <= observation.asOf &&
-            observationMatchesScenario(candidate, observation.scenarioId),
-        )
-        .sort((left, right) => {
-          const leftExactScenario = left.scenarioId === observation.scenarioId ? 1 : 0;
-          const rightExactScenario = right.scenarioId === observation.scenarioId ? 1 : 0;
-          return rightExactScenario - leftExactScenario || right.asOf.localeCompare(left.asOf);
-        });
-      const inputObservation = candidates[0];
+    const inputs = this.calculator.resolveInputs(observation.id).map((resolved) => {
+      const inputObservation = resolved.observation;
       return {
-        metric: this.getMetric(metricId),
-        period: inputPeriod,
-        periodOffset,
-        referencePeriodId: periodId,
+        metric: this.getMetric(resolved.reference.metricId),
+        period: resolved.period,
+        periodOffset: resolved.reference.periodOffset,
+        referencePeriodId: resolved.reference.periodId,
         observation: inputObservation,
         provenance: inputObservation
           ? this.getProvenance(inputObservation.id)
           : { records: [] },
       };
     });
+    const dependents = this.calculator.getDirectDependents(observation.id)
+      .map((dependent) => {
+        const dependentPeriod = this.periods.get(dependent.periodId);
+        const dependentTransformation = dependent.transformationId
+          ? this.transformations.get(dependent.transformationId)
+          : undefined;
+        if (!dependentPeriod || !dependentTransformation) return undefined;
+        return {
+          observation: dependent,
+          metric: this.getMetric(dependent.metricId),
+          period: dependentPeriod,
+          transformation: dependentTransformation,
+        };
+      })
+      .filter((dependent): dependent is ObservationLineageDependent => dependent !== undefined);
 
     return {
       observation,
@@ -653,6 +635,7 @@ export class ModelDatabaseQueries {
       transformation,
       provenance: this.getProvenance(observation.id),
       inputs,
+      dependents,
       unresolvedItems: this.database.unresolvedItems.filter(
         (item) =>
           item.status === "open" &&
