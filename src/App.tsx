@@ -21,6 +21,16 @@ import { FinancialTable } from "./visualizations/financial-table/FinancialTable"
 type View = "table" | "graph";
 type Theme = "light" | "dark";
 
+type InspectorLocation = {
+  targetId: string;
+  modelId: string;
+  presentationId?: string;
+  entityId: string;
+  periodType?: Period["type"];
+  view: View;
+  graphMetricId: string | null;
+};
+
 const views: Array<{ id: View; label: string }> = [
   { id: "table", label: "Model table" },
   { id: "graph", label: "Lineage map" },
@@ -144,6 +154,7 @@ export default function App() {
   );
   const [view, setView] = useState<View>("table");
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  const [inspectorHistory, setInspectorHistory] = useState<InspectorLocation[]>([]);
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [attentionFocus, setAttentionFocus] = useState<{
     metricId: string;
@@ -220,6 +231,7 @@ export default function App() {
     setSelectedPeriodType(initialPeriodType(database, modelId, presentationId, entityId));
     setGraphMetricId(initialGraphMetric(database, modelId));
     setSelectedTargetId(null);
+    setInspectorHistory([]);
     setAttentionFocus(null);
     setView("table");
   };
@@ -229,31 +241,75 @@ export default function App() {
     setView("graph");
   };
 
+  const rememberCurrentInspector = (nextTargetId: string) => {
+    if (!selectedTargetId || selectedTargetId === nextTargetId) return;
+    const current: InspectorLocation = {
+      targetId: selectedTargetId,
+      modelId: selectedModelId,
+      presentationId: selectedPresentationId,
+      entityId: selectedEntityId,
+      periodType: selectedPeriodType,
+      view,
+      graphMetricId,
+    };
+    setInspectorHistory((history) => {
+      const withoutDuplicateTail = history.at(-1)?.targetId === current.targetId
+        ? history.slice(0, -1)
+        : history;
+      return [...withoutDuplicateTail, current].slice(-24);
+    });
+  };
+
   const selectObservation = (observationId: string) => {
-    const observation = database.observations.find(
-      (candidate) => candidate.id === observationId,
+    rememberCurrentInspector(observationId);
+    setAttentionFocus(null);
+    setSelectedTargetId(observationId);
+  };
+
+  const navigateToObservation = (observationId: string) => {
+    const target = queries.getObservationNavigationTarget(
+      observationId,
+      selectedPresentationId,
     );
-    const period = observation
-      ? database.periods.find((candidate) => candidate.id === observation.periodId)
-      : undefined;
-    if (period && period.type !== selectedPeriodType) {
-      setSelectedPeriodType(period.type);
-    }
+    rememberCurrentInspector(observationId);
+    setSelectedModelId(target.model.id);
+    setSelectedPresentationId(target.presentation?.id);
+    setSelectedEntityId(target.entity.id);
+    setSelectedPeriodType(target.period.type);
+    setGraphMetricId(initialGraphMetric(database, target.model.id));
+    setView("table");
     setAttentionFocus(null);
     setSelectedTargetId(observationId);
   };
 
   const selectMetric = (metricId: string) => {
+    rememberCurrentInspector(metricId);
     setAttentionFocus(null);
     setSelectedTargetId(metricId);
   };
 
+  const navigateBack = () => {
+    const previous = inspectorHistory.at(-1);
+    if (!previous) return;
+    setInspectorHistory((history) => history.slice(0, -1));
+    setSelectedModelId(previous.modelId);
+    setSelectedPresentationId(previous.presentationId);
+    setSelectedEntityId(previous.entityId);
+    setSelectedPeriodType(previous.periodType);
+    setGraphMetricId(previous.graphMetricId);
+    setView(previous.view);
+    setAttentionFocus(null);
+    setSelectedTargetId(previous.targetId);
+  };
+
   const closeInspector = () => {
     setSelectedTargetId(null);
+    setInspectorHistory([]);
     setAttentionFocus(null);
   };
 
   const navigateToAttention = (projection: AttentionItemProjection) => {
+    setInspectorHistory([]);
     if (projection.model) {
       const targetObservation = projection.item.targetId
         ? database.observations.find((item) => item.id === projection.item.targetId)
@@ -307,6 +363,7 @@ export default function App() {
     ));
     setGraphMetricId(initialGraphMetric(nextDatabase, nextModelId));
     setSelectedTargetId(null);
+    setInspectorHistory([]);
     setAttentionFocus(null);
     setAttentionOpen(false);
     setView("table");
@@ -393,6 +450,7 @@ export default function App() {
     setDraftTransactions((count) => count + 1);
     if (selectedTargetId === itemId) {
       setSelectedTargetId(null);
+      setInspectorHistory([]);
       setAttentionFocus(null);
     }
   };
@@ -560,6 +618,7 @@ export default function App() {
                     selectedEntityId,
                   ));
                   setSelectedTargetId(null);
+                  setInspectorHistory([]);
                   setAttentionFocus(null);
                 }}
               >
@@ -587,6 +646,7 @@ export default function App() {
                     entityId,
                   ));
                   setSelectedTargetId(null);
+                  setInspectorHistory([]);
                   setAttentionFocus(null);
                 }}
               >
@@ -605,6 +665,7 @@ export default function App() {
                 onChange={(event) => {
                   setSelectedPeriodType(event.target.value as Period["type"]);
                   setSelectedTargetId(null);
+                  setInspectorHistory([]);
                   setAttentionFocus(null);
                 }}
               >
@@ -648,6 +709,7 @@ export default function App() {
               onFocusMetric={setGraphMetricId}
               onSelectMetric={selectMetric}
               onSelectTransformation={(targetId) => {
+                rememberCurrentInspector(targetId);
                 setAttentionFocus(null);
                 setSelectedTargetId(targetId);
               }}
@@ -666,7 +728,9 @@ export default function App() {
           targetId={selectedTargetId}
           queries={queries}
           onClose={closeInspector}
-          onSelectTarget={selectObservation}
+          canNavigateBack={inspectorHistory.length > 0}
+          onNavigateBack={navigateBack}
+          onSelectTarget={navigateToObservation}
           onFocusGraph={focusGraph}
           onUpdateObservation={updateObservationValue}
           onConfirmReview={confirmReview}

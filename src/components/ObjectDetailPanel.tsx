@@ -19,6 +19,8 @@ type Props = {
   targetId: string | null;
   queries: ModelDatabaseQueries;
   onClose: () => void;
+  canNavigateBack: boolean;
+  onNavigateBack: () => void;
   onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
   onUpdateObservation: (
@@ -97,10 +99,41 @@ function fieldValue(value: unknown): string {
   return String(value);
 }
 
+function InspectorHeaderActions({
+  canNavigateBack,
+  backLabel,
+  onNavigateBack,
+  onClose,
+}: {
+  canNavigateBack: boolean;
+  backLabel: string;
+  onNavigateBack: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="inspector-header-actions">
+      {canNavigateBack && (
+        <button
+          className="inspector-back-button"
+          onClick={onNavigateBack}
+          aria-label={backLabel}
+        >
+          <Icon name="back" size={14} /> Back
+        </button>
+      )}
+      <button className="icon-button" onClick={onClose} aria-label="Clear selection">
+        <Icon name="close" size={17} />
+      </button>
+    </div>
+  );
+}
+
 export function ObjectDetailPanel({
   targetId,
   queries,
   onClose,
+  canNavigateBack,
+  onNavigateBack,
   onSelectTarget,
   onFocusGraph,
   onUpdateObservation,
@@ -162,6 +195,8 @@ export function ObjectDetailPanel({
         <CellDetail
           detail={queries.getObservationDetail(observation.id)}
           onClose={onClose}
+          canNavigateBack={canNavigateBack}
+          onNavigateBack={onNavigateBack}
           onSelectTarget={onSelectTarget}
           onFocusGraph={onFocusGraph}
           onUpdateObservation={onUpdateObservation}
@@ -172,6 +207,8 @@ export function ObjectDetailPanel({
           targetId={displayTargetId}
           queries={queries}
           onClose={onClose}
+          canNavigateBack={canNavigateBack}
+          onNavigateBack={onNavigateBack}
           onConfirmReview={onConfirmReview}
         />
       ) : null}
@@ -308,6 +345,8 @@ function ReverseLineage({
 function CellDetail({
   detail,
   onClose,
+  canNavigateBack,
+  onNavigateBack,
   onSelectTarget,
   onFocusGraph,
   onUpdateObservation,
@@ -315,6 +354,8 @@ function CellDetail({
 }: {
   detail: ObservationDetailProjection;
   onClose: () => void;
+  canNavigateBack: boolean;
+  onNavigateBack: () => void;
   onSelectTarget: (targetId: string) => void;
   onFocusGraph: (metricId: string) => void;
   onUpdateObservation: Props["onUpdateObservation"];
@@ -344,9 +385,12 @@ function CellDetail({
           <span>Selected cell · {detail.period.label}</span>
           <h2>{detail.metric.name}</h2>
         </div>
-        <button className="icon-button" onClick={onClose} aria-label="Clear selection">
-          <Icon name="close" size={17} />
-        </button>
+        <InspectorHeaderActions
+          canNavigateBack={canNavigateBack}
+          backLabel="Back to previous inspected cell"
+          onNavigateBack={onNavigateBack}
+          onClose={onClose}
+        />
       </header>
 
       <div className="inspector-body">
@@ -504,11 +548,15 @@ function ObjectDetail({
   targetId,
   queries,
   onClose,
+  canNavigateBack,
+  onNavigateBack,
   onConfirmReview,
 }: {
   targetId: string;
   queries: ModelDatabaseQueries;
   onClose: () => void;
+  canNavigateBack: boolean;
+  onNavigateBack: () => void;
   onConfirmReview: Props["onConfirmReview"];
 }) {
   const object = queries.getObject(targetId);
@@ -547,9 +595,12 @@ function ObjectDetail({
                 : objectLabel(object, targetId)}
           </h2>
         </div>
-        <button className="icon-button" onClick={onClose} aria-label="Clear selection">
-          <Icon name="close" size={17} />
-        </button>
+        <InspectorHeaderActions
+          canNavigateBack={canNavigateBack}
+          backLabel="Back to previous inspected item"
+          onNavigateBack={onNavigateBack}
+          onClose={onClose}
+        />
       </header>
       <div className="inspector-body">
         {record.description !== undefined && (

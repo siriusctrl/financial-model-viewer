@@ -31,7 +31,7 @@ The primary model table supports:
 - worksheet/view switching for models that span multiple source pages;
 - entity switching for peer and portfolio-style datasets;
 - cell inspection with workbook source, confidence, and extraction run;
-- direct and reverse formula lineage;
+- direct and reverse formula lineage with automatic cross-view cell navigation and inspector back history;
 - browser-local input edits with deterministic downstream recalculation;
 - dark and light appearances;
 - validated JSON export of the local working copy.

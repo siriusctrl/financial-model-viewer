@@ -113,6 +113,10 @@ export function FinancialTable({
   }, [attentionFocus]);
 
   useEffect(() => {
+    if (selectedTargetId) setSearch("");
+  }, [selectedTargetId]);
+
+  useEffect(() => {
     if (!attentionFocus) return;
     const cell = document.querySelector<HTMLElement>("[data-attention-cell-focus='true']");
     if (cell) {
@@ -122,6 +126,24 @@ export function FinancialTable({
     const row = document.getElementById(`metric-row-${attentionFocus.metricId}`);
     row?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
   }, [attentionFocus, normalizedSearch, projection.model.id, projection.periods]);
+
+  useEffect(() => {
+    if (!selectedTargetId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(
+        `[data-inspector-target="${CSS.escape(selectedTargetId)}"]`,
+      );
+      target?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    normalizedSearch,
+    projection.entity.id,
+    projection.model.id,
+    projection.periods,
+    projection.presentation?.id,
+    selectedTargetId,
+  ]);
 
   return (
     <section className="table-view" data-testid="financial-table-view">

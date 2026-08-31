@@ -463,6 +463,86 @@ test("separates annual and quarterly periods in a mixed-frequency model", async 
   await expect(page.getByText("FY22A", { exact: true })).toHaveCount(0);
 });
 
+test("navigates lineage across worksheet views and returns through inspector history", async ({ page }) => {
+  await page.goto("./");
+  const imported = structuredClone(sample) as ModelDatabase;
+  const revenuePresentation = imported.tablePresentations[0];
+  revenuePresentation.id = "presentation_northstar_revenue";
+  revenuePresentation.title = "Revenue";
+  revenuePresentation.sections[0].sourceLocator = {
+    sheet: "Revenue",
+    range: "A10:F12",
+  };
+  const profitSections = revenuePresentation.sections.splice(1);
+  profitSections[0].sourceLocator = { sheet: "Profit", range: "A16:F19" };
+  imported.tablePresentations.push({
+    id: "presentation_northstar_profit",
+    title: "Profit",
+    modelId: "model_northstar_cloud",
+    sourceArtifactId: "artifact_northstar_workbook",
+    sections: profitSections,
+  });
+  const revenueObservationIds = new Set(
+    imported.observations
+      .filter((item) => item.metricId === "metric_northstar_revenue")
+      .map((item) => item.id),
+  );
+  for (const provenance of imported.provenanceRecords) {
+    if (revenueObservationIds.has(provenance.targetId) && provenance.locator) {
+      provenance.locator.sheet = "Revenue";
+    }
+  }
+
+  await uploadJson(page, "cross-worksheet-lineage.json", imported);
+  const worksheet = page.getByLabel("Worksheet view");
+  await worksheet.selectOption("presentation_northstar_profit");
+  await page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/).click();
+  await page.getByLabel("Search metrics").fill("Gross profit");
+
+  await page.getByTestId("formula-lineage").locator(".lineage-input").first().click();
+
+  await expect(worksheet).toHaveValue("presentation_northstar_revenue");
+  await expect(page.getByLabel("Search metrics")).toHaveValue("");
+  const selectedRevenue = page.locator(".value-button.selected");
+  await expect(selectedRevenue).toHaveAttribute(
+    "title",
+    /obs_northstar_revenue_fy2025/,
+  );
+  await expect(selectedRevenue).toBeInViewport();
+  await expect(page.getByTestId("detail-panel")).toContainText("Revenue");
+
+  await page.getByTestId("reverse-lineage").getByRole("button").filter({
+    hasText: "Gross profit",
+  }).click();
+  await expect(worksheet).toHaveValue("presentation_northstar_profit");
+  await expect(page.locator(".value-button.selected")).toHaveAttribute(
+    "title",
+    /obs_northstar_gross_profit_fy2025/,
+  );
+
+  await page.getByRole("button", { name: "Back to previous inspected cell" }).click();
+
+  await expect(worksheet).toHaveValue("presentation_northstar_revenue");
+  await expect(page.locator(".value-button.selected")).toHaveAttribute(
+    "title",
+    /obs_northstar_revenue_fy2025/,
+  );
+
+  await page.getByRole("button", { name: "Back to previous inspected cell" }).click();
+
+  await expect(worksheet).toHaveValue("presentation_northstar_profit");
+  const selectedGrossProfit = page.locator(".value-button.selected");
+  await expect(selectedGrossProfit).toHaveAttribute(
+    "title",
+    /obs_northstar_gross_profit_fy2025/,
+  );
+  await expect(selectedGrossProfit).toBeInViewport();
+  await expect(page.getByTestId("detail-panel")).toContainText("Gross profit");
+  await expect(
+    page.getByRole("button", { name: "Back to previous inspected cell" }),
+  ).toHaveCount(0);
+});
+
 test("surfaces an explicitly acknowledged presentation fallback", async ({ page }) => {
   await page.goto("./");
   const imported = structuredClone(sample) as ModelDatabase;

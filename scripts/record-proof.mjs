@@ -72,6 +72,11 @@ try {
   });
   await desktop.waitForTimeout(200);
   await capture(desktop, "04-derived-lineage-desktop");
+  await desktop.getByTestId("formula-lineage").locator(".lineage-input").first().click();
+  await desktop.getByRole("button", { name: "Back to previous inspected cell" }).waitFor();
+  await desktop.waitForTimeout(200);
+  await capture(desktop, "04b-lineage-navigation-back-desktop");
+  await desktop.getByRole("button", { name: "Back to previous inspected cell" }).click();
   await desktop.getByTestId("detail-panel").getByLabel("Clear selection").click();
 
   await desktop.getByRole("button", { name: "Lineage map" }).click();

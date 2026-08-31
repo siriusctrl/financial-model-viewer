@@ -1477,6 +1477,44 @@ select:focus-visible,
   letter-spacing: -0.015em;
 }
 
+.inspector-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.inspector-back-button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 9px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.inspector-back-button:hover {
+  color: var(--green);
+  background: var(--green-soft);
+  border-color: color-mix(in srgb, var(--green) 42%, var(--line-strong));
+}
+
+.inspector-back-button:active {
+  transform: translateY(1px);
+}
+
+.inspector-back-button:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
 .inspector-header--needs_review {
   background: var(--blue-soft);
   border-left: 3px solid var(--blue);

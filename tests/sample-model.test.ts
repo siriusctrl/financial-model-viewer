@@ -57,7 +57,12 @@ describe("query projections", () => {
     const database = structuredClone(sample) as ModelDatabase;
     database.tablePresentations[0].id = "presentation_northstar_revenue";
     database.tablePresentations[0].title = "Revenue";
+    database.tablePresentations[0].sections[0].sourceLocator = {
+      sheet: "Revenue",
+      range: "A10:F12",
+    };
     const grossProfit = database.tablePresentations[0].sections.splice(1);
+    grossProfit[0].sourceLocator = { sheet: "Profit", range: "A16:F19" };
     database.tablePresentations.push({
       id: "presentation_northstar_profit",
       title: "Profit",
@@ -65,6 +70,16 @@ describe("query projections", () => {
       sourceArtifactId: "artifact_northstar_workbook",
       sections: grossProfit,
     });
+    const revenueObservationIds = new Set(
+      database.observations
+        .filter((item) => item.metricId === "metric_northstar_revenue")
+        .map((item) => item.id),
+    );
+    for (const provenance of database.provenanceRecords) {
+      if (revenueObservationIds.has(provenance.targetId) && provenance.locator) {
+        provenance.locator.sheet = "Revenue";
+      }
+    }
     const worksheetQueries = new ModelDatabaseQueries(assertValidModelDatabase(database));
 
     expect(worksheetQueries.getTablePresentations("model_northstar_cloud")).toHaveLength(2);
@@ -76,6 +91,10 @@ describe("query projections", () => {
       "Gross profit",
       "Gross margin",
     ]);
+    expect(worksheetQueries.getObservationNavigationTarget(
+      "obs_northstar_revenue_fy2025",
+      "presentation_northstar_profit",
+    ).presentation?.id).toBe("presentation_northstar_revenue");
   });
 
   it("projects open attention into a navigable cross-model review queue", () => {

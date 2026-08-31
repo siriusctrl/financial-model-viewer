@@ -7,6 +7,7 @@ export type IconName =
   | "database"
   | "search"
   | "arrow"
+  | "back"
   | "close"
   | "source"
   | "formula"
@@ -60,6 +61,7 @@ export function Icon({
       </>
     ),
     arrow: <path d="M5 12h14M14 7l5 5-5 5" />,
+    back: <path d="M19 12H5M10 7l-5 5 5 5" />,
     close: <path d="m6 6 12 12M18 6 6 18" />,
     source: (
       <>

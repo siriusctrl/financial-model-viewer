@@ -116,6 +116,14 @@ export type ObservationDetailProjection = {
   unresolvedItems: UnresolvedItem[];
 };
 
+export type ObservationNavigationTarget = {
+  observation: Observation;
+  model: Model;
+  entity: Entity;
+  period: Period;
+  presentation?: TablePresentation;
+};
+
 export type ModelOverviewProjection = {
   model: Model;
   entity: Entity;
@@ -610,6 +618,47 @@ export class ModelDatabaseQueries {
       presentation,
       sections,
       rows: sections.flatMap((section) => section.rows),
+    };
+  }
+
+  getObservationNavigationTarget(
+    observationId: string,
+    preferredPresentationId?: string,
+  ): ObservationNavigationTarget {
+    const observation = this.observations.get(observationId);
+    if (!observation) throw new Error(`Unknown observation ${observationId}`);
+    const model = this.getModel(observation.modelId);
+    const entity = this.entities.get(observation.entityId);
+    const period = this.periods.get(observation.periodId);
+    if (!entity) throw new Error(`Unknown entity ${observation.entityId}`);
+    if (!period) throw new Error(`Unknown period ${observation.periodId}`);
+
+    const candidates = this.getTablePresentations(model.id).filter(
+      (presentation) => presentation.sections.some(
+        (section) => section.metricIds.includes(observation.metricId),
+      ),
+    );
+    const sourceSheet = this.primarySourceLocator(observation.id)?.sheet
+      ?? this.primarySourceLocator(observation.metricId)?.sheet;
+    const sourcePresentation = sourceSheet
+      ? candidates.find(
+          (presentation) => presentation.sourceLocator?.sheet === sourceSheet
+            || presentation.sections.some(
+              (section) => section.metricIds.includes(observation.metricId)
+                && section.sourceLocator?.sheet === sourceSheet,
+            ),
+        )
+      : undefined;
+    const preferredPresentation = candidates.find(
+      (presentation) => presentation.id === preferredPresentationId,
+    );
+
+    return {
+      observation,
+      model,
+      entity,
+      period,
+      presentation: sourcePresentation ?? preferredPresentation ?? candidates[0],
     };
   }
 
