@@ -367,15 +367,22 @@ class MappedWorkbookExtractor:
             for mapped_period in self.mapping["periods"]
         }
         self._assignments_by_metric = self._build_assignments(periods_by_id)
-        period_header_locator = _mapped_locator(
-            self.mapping["periodHeaderRange"], self.sheet_name, kind="range"
-        )
+        mapped_header_ranges = self.mapping.get("periodHeaderRanges")
+        if mapped_header_ranges is None:
+            mapped_header_ranges = [self.mapping["periodHeaderRange"]]
+        if not isinstance(mapped_header_ranges, list) or not mapped_header_ranges:
+            raise ValueError("periodHeaderRanges must contain at least one mapped range")
+        period_header_locators = [
+            _mapped_locator(value, self.sheet_name, kind="range")
+            for value in mapped_header_ranges
+        ]
+        period_header_locator = period_header_locators[0]
         selected_sheets = {
             assignment["sheet"]
             for assignments in self._assignments_by_metric.values()
             for assignment in assignments
         }
-        selected_sheets.add(period_header_locator["sheet"])
+        selected_sheets.update(locator["sheet"] for locator in period_header_locators)
         with WorkbookPackage(self.workbook) as package:
             inventory = package.inventory("none")
             available_sheets = {sheet["name"] for sheet in inventory["sheets"]}
@@ -429,7 +436,7 @@ class MappedWorkbookExtractor:
             self._provenance(
                 scenario["id"],
                 _mapped_locator(
-                    self.mapping["periodHeaderRange"], self.sheet_name, kind="range"
+                    mapped_header_ranges[0], self.sheet_name, kind="range"
                 ),
                 0.95,
             )
@@ -467,20 +474,22 @@ class MappedWorkbookExtractor:
             "cells" not in metric
             for metric in metrics_by_id.values()
         )
-        header_range = period_header_locator["range"]
-        if ":" in header_range:
-            header_start, header_end = header_range.split(":", 1)
-            header_coordinates = expand_cell_range(header_start, header_end)
-        else:
-            header_coordinates = [header_range.replace("$", "").upper()]
-        if not header_coordinates:
-            raise ValueError(
-                "periodHeaderRange must be a valid, forward, bounded A1 range of at most 1,000 cells"
+        literal_coordinates: set[str] = set()
+        for header_locator in period_header_locators:
+            header_range = header_locator["range"]
+            if ":" in header_range:
+                header_start, header_end = header_range.split(":", 1)
+                header_coordinates = expand_cell_range(header_start, header_end)
+            else:
+                header_coordinates = [header_range.replace("$", "").upper()]
+            if not header_coordinates:
+                raise ValueError(
+                    "periodHeaderRanges must contain valid, forward, bounded A1 ranges of at most 1,000 cells"
+                )
+            literal_coordinates.update(
+                _cell_key(header_locator["sheet"], coordinate)
+                for coordinate in header_coordinates
             )
-        literal_coordinates = {
-            _cell_key(period_header_locator["sheet"], coordinate)
-            for coordinate in header_coordinates
-        }
         self._formula_translator = FormulaTranslator(
             cells,
             coordinate_semantics,
@@ -647,11 +656,51 @@ class MappedWorkbookExtractor:
                 "metricIds": section_metric_ids,
                 "sourceLocator": section_locator,
             })
-        self.database["tablePresentations"] = [{
-            "modelId": model["id"],
-            "sourceArtifactId": source["id"],
-            "sections": sections,
-        }]
+        mapped_presentations = self.mapping.get("presentations")
+        if mapped_presentations:
+            sections_by_id = {section["id"]: section for section in sections}
+            assigned_section_ids: set[str] = set()
+            presentations = []
+            for mapped_presentation in mapped_presentations:
+                section_ids = mapped_presentation.get("sectionIds")
+                if not isinstance(section_ids, list) or not section_ids:
+                    raise ValueError("Each mapped presentation must contain a non-empty sectionIds array")
+                unknown = sorted(set(section_ids) - sections_by_id.keys())
+                if unknown:
+                    raise ValueError(
+                        "Mapped presentation references unknown sections: " + ", ".join(unknown)
+                    )
+                duplicates = sorted(set(section_ids) & assigned_section_ids)
+                if duplicates:
+                    raise ValueError(
+                        "Mapped sections may appear in only one generated presentation: "
+                        + ", ".join(duplicates)
+                    )
+                assigned_section_ids.update(section_ids)
+                presentation = {
+                    "id": mapped_presentation["id"],
+                    "title": mapped_presentation["title"],
+                    "modelId": model["id"],
+                    "sourceArtifactId": source["id"],
+                    "sections": [sections_by_id[section_id] for section_id in section_ids],
+                }
+                if mapped_presentation.get("sourceLocator"):
+                    presentation["sourceLocator"] = _mapped_locator(
+                        mapped_presentation["sourceLocator"], self.sheet_name, kind="range"
+                    )
+                presentations.append(presentation)
+            unassigned = sorted(sections_by_id.keys() - assigned_section_ids)
+            if unassigned:
+                raise ValueError(
+                    "Mapped presentations do not cover sections: " + ", ".join(unassigned)
+                )
+            self.database["tablePresentations"] = presentations
+        else:
+            self.database["tablePresentations"] = [{
+                "modelId": model["id"],
+                "sourceArtifactId": source["id"],
+                "sections": sections,
+            }]
 
         if period_mapping_gaps:
             examples = "; ".join(
@@ -1078,12 +1127,14 @@ class MappedWorkbookExtractor:
             f"- Extraction scope: {self.mapping['scope']}",
             "", "## Object counts", "",
             f"- 1 model; {counts['entities']} entity; {counts['metrics']} metrics; {counts['observations']} observations; {counts['transformations']} transformations; {counts['relationships']} relationships.",
-            f"- {len(self.database['tablePresentations'][0]['sections'])} table-presentation sections; {counts['assumptions']} assumptions; {counts['decisions']} decisions; {attention['needs_review']} items need review; {attention['action_required']} require action.",
+            f"- {sum(len(item['sections']) for item in self.database['tablePresentations'])} table-presentation sections across {len(self.database['tablePresentations'])} worksheet views; {counts['assumptions']} assumptions; {counts['decisions']} decisions; {attention['needs_review']} items need review; {attention['action_required']} require action.",
             "", "## Table presentation", "",
         ])
         lines.extend(
-            f"- `{section['title']}`: {len(section['metricIds'])} metrics from `{section['sourceLocator']['sheet']}!{section['sourceLocator']['range']}`."
-            for section in self.database["tablePresentations"][0]["sections"]
+            f"- `{presentation.get('title', presentation['modelId'])}` / `{section['title']}`: "
+            f"{len(section['metricIds'])} metrics from `{section['sourceLocator']['sheet']}!{section['sourceLocator']['range']}`."
+            for presentation in self.database["tablePresentations"]
+            for section in presentation["sections"]
         )
         lines.extend([
             "", "## Actual / estimate boundary", "", self.mapping["actualityBasis"],

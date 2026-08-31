@@ -35,6 +35,15 @@ FUNCTION_CALL = re.compile(
 COORDINATE = re.compile(r"(?P<column>[A-Z]{1,3})(?P<row>[1-9][0-9]*)", re.IGNORECASE)
 EXCEL_EQUALITY = re.compile(r"(?<![<>=!])=(?!=)")
 EXCEL_BOOLEAN = re.compile(r"(?<![A-Z0-9_.])(?P<value>TRUE|FALSE)(?![A-Z0-9_])", re.IGNORECASE)
+CONDITIONAL_AGGREGATE = re.compile(
+    r"(?P<function>SUMIFS|AVERAGEIFS)\(\s*"
+    r"(?P<sum_start>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*:\s*"
+    r"(?P<sum_end>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*,\s*"
+    r"(?P<criteria_start>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*:\s*"
+    r"(?P<criteria_end>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*,\s*"
+    r"(?P<criterion>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*\)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -182,9 +191,14 @@ class FormulaTranslator:
             return None
         semantic = self.coordinate_semantics.get(key)
         if not semantic:
+            cell = self.cells.get(key)
+            if cell and cell.get("value") is None and "formula" not in cell:
+                # A referenced, materially blank workbook cell is numeric zero in
+                # Excel arithmetic. Preserve that coercion as a literal without
+                # inventing an observation for an empty source cell.
+                return "0", 0, None
             if key not in self.literal_coordinates:
                 return None
-            cell = self.cells.get(key)
             if cell and "formula" in cell:
                 return None
             value = _numeric(cell.get("value") if cell else None)
@@ -289,6 +303,81 @@ class FormulaTranslator:
         if resolved is None or not _values_match(resolved[1], target_value):
             return None
         return FormulaTranslation(resolved[0], resolved[2])
+
+    def _translate_conditional_aggregate(
+        self,
+        formula_body: str,
+        target_coordinate: str,
+        target_period_id: str,
+        target_value: float | int,
+        target_sheet: str | None,
+    ) -> FormulaTranslation | None:
+        match = CONDITIONAL_AGGREGATE.fullmatch(formula_body)
+        if not match:
+            return None
+        sum_coordinates = _expand_range(match.group("sum_start"), match.group("sum_end"))
+        criteria_coordinates = _expand_range(
+            match.group("criteria_start"), match.group("criteria_end")
+        )
+        if not sum_coordinates or len(sum_coordinates) != len(criteria_coordinates):
+            return None
+        criterion_key = self._key(match.group("criterion"), None, target_sheet)
+        criterion_cell = self.cells.get(criterion_key) if criterion_key else None
+        criterion = criterion_cell.get("value") if criterion_cell else None
+        if criterion is None:
+            return None
+
+        selected: list[tuple[str, float | int, str | None]] = []
+        for sum_coordinate, criteria_coordinate in zip(
+            sum_coordinates, criteria_coordinates, strict=True
+        ):
+            criteria_key = self._key(criteria_coordinate, None, target_sheet)
+            criteria_cell = self.cells.get(criteria_key) if criteria_key else None
+            if not criteria_cell or criteria_cell.get("value") != criterion:
+                continue
+            reference = self._canonical_cell_reference(
+                sum_coordinate,
+                target_coordinate,
+                target_period_id,
+                None,
+                target_sheet,
+            )
+            if reference is None:
+                return None
+            selected.append(reference)
+        if not selected:
+            return None
+        function_name = "average" if match.group("function").upper() == "AVERAGEIFS" else "sum"
+        numeric = [reference for reference in selected if reference[2] is not None]
+        included = numeric if function_name == "average" else selected
+        if not included:
+            return None
+        values = [reference[1] for reference in included]
+        calculated = sum(values) / len(values) if function_name == "average" else sum(values)
+        if not _values_match(calculated, target_value):
+            return None
+        return FormulaTranslation(
+            f"{function_name}({', '.join(reference[0] for reference in included)})",
+            sorted({reference[2] for reference in included if reference[2] is not None}),
+        )
+
+    @staticmethod
+    def _iferror_primary_expression(formula_body: str) -> str | None:
+        if not formula_body.upper().startswith("IFERROR(") or not formula_body.endswith(")"):
+            return None
+        inner = formula_body[len("IFERROR("):-1]
+        depth = 0
+        quoted = False
+        for index, character in enumerate(inner):
+            if character == '"':
+                quoted = not quoted
+            elif not quoted and character == "(":
+                depth += 1
+            elif not quoted and character == ")":
+                depth -= 1
+            elif not quoted and character == "," and depth == 0:
+                return inner[:index].strip()
+        return None
 
     def _translate_arithmetic(
         self,
@@ -547,7 +636,14 @@ class FormulaTranslator:
         if cached is None or not original_formula.startswith("="):
             return None
         formula_body = original_formula[1:].strip()
-        return self._translate_aggregate_range(
+        iferror_primary = self._iferror_primary_expression(formula_body)
+        return self._translate_conditional_aggregate(
+            formula_body,
+            target_coordinate,
+            target_period_id,
+            cached,
+            target_sheet,
+        ) or self._translate_aggregate_range(
             formula_body,
             target_coordinate,
             target_period_id,
@@ -559,7 +655,13 @@ class FormulaTranslator:
             target_period_id,
             cached,
             target_sheet,
-        )
+        ) or (self._translate_arithmetic(
+            iferror_primary,
+            target_coordinate,
+            target_period_id,
+            cached,
+            target_sheet,
+        ) if iferror_primary else None)
 
     def blocker_details(
         self,
@@ -570,7 +672,9 @@ class FormulaTranslator:
         unsupported_functions = sorted({
             match.group("name").upper()
             for match in FUNCTION_CALL.finditer(formula_body)
-            if match.group("name").upper() not in {"SUM", "AVERAGE", "IF", "MOD"}
+            if match.group("name").upper() not in {
+                "SUM", "AVERAGE", "SUMIFS", "AVERAGEIFS", "IFERROR", "IF", "MOD"
+            }
         })
         if unsupported_functions:
             return FormulaBlocker(

@@ -77,6 +77,11 @@ export async function reviewPreview(viewerDirectory, extraction) {
     );
   const toView = ({ observation }) => ({
     modelId: observation.modelId,
+    entityId: observation.entityId,
+    presentationId: extraction.database.tablePresentations.find(
+      (presentation) => presentation.modelId === observation.modelId
+        && presentation.sections.some((section) => section.metricIds.includes(observation.metricId)),
+    )?.id,
     periodType: periods.get(observation.periodId)?.type,
     observationId: observation.id,
   });
@@ -108,9 +113,14 @@ export async function reviewPreview(viewerDirectory, extraction) {
       ? {
           ...toView(exactLineage),
           expectedInputCount: new Set(
-            [...exactLineage.transformation.expression.matchAll(
-              /period_ref\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/g,
-            )].map((match) => `${match[1]}|${match[2]}`),
+            [
+              ...[...exactLineage.transformation.expression.matchAll(
+                /period_ref\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/g,
+              )].map((match) => `${match[1]}|${match[2]}`),
+              ...[...exactLineage.transformation.expression.matchAll(
+                /\bref\(\s*["']([^"']+)["']\s*\)/g,
+              )].map((match) => `${match[1]}|${exactLineage.observation.periodId}`),
+            ],
           ).size,
         }
       : undefined;
@@ -121,36 +131,62 @@ export async function reviewPreview(viewerDirectory, extraction) {
     for (const model of modelOptions) {
       await modelSelect.selectOption(model.value);
       await desktop.getByTestId("financial-table-view").waitFor({ state: "visible" });
-      const periodSelect = desktop.getByLabel("Period view");
-      const periodOptions = await periodSelect.count() > 0
-        ? await periodSelect.locator("option").evaluateAll((options) =>
+      const worksheetSelect = desktop.getByLabel("Worksheet view");
+      const worksheetOptions = await worksheetSelect.count() > 0
+        ? await worksheetSelect.locator("option").evaluateAll((options) =>
             options.map((option) => ({
               label: option.textContent?.trim() || option.value,
               value: option.value,
             })),
           )
-        : [{ label: "all-periods", value: undefined }];
-      for (const periodOption of periodOptions) {
-        if (periodOption.value) await periodSelect.selectOption(periodOption.value);
-        if (await desktop.locator(".value-button").count() === 0) {
-          throw new Error(`Model ${model.label} / ${periodOption.label} contains no selectable observation cells`);
+        : [{ label: "model", value: undefined }];
+      for (const worksheetOption of worksheetOptions) {
+        if (worksheetOption.value) await worksheetSelect.selectOption(worksheetOption.value);
+        const periodSelect = desktop.getByLabel("Period view");
+        const periodOptions = await periodSelect.count() > 0
+          ? await periodSelect.locator("option").evaluateAll((options) =>
+              options.map((option) => ({
+                label: option.textContent?.trim() || option.value,
+                value: option.value,
+              })),
+            )
+          : [{ label: "all-periods", value: undefined }];
+        for (const periodOption of periodOptions) {
+          if (periodOption.value) await periodSelect.selectOption(periodOption.value);
+          if (await desktop.locator(".value-button").count() === 0) {
+            throw new Error(
+              `Model ${model.label} / ${worksheetOption.label} / ${periodOption.label} contains no selectable observation cells`,
+            );
+          }
+          if (!derivedView && await desktop.locator(".value-button.derived").count() > 0) {
+            derivedView = {
+              modelId: model.value,
+              presentationId: worksheetOption.value,
+              periodType: periodOption.value,
+            };
+          }
+          if (!graphView && await desktop.locator(".value-button.derived").count() > 0) {
+            graphView = {
+              modelId: model.value,
+              presentationId: worksheetOption.value,
+              periodType: periodOption.value,
+            };
+          }
+          if (!unresolvedView && await desktop.locator(".row-warning").count() > 0) {
+            unresolvedView = {
+              modelId: model.value,
+              presentationId: worksheetOption.value,
+              periodType: periodOption.value,
+            };
+          }
+          periodViewsRendered += 1;
+          tableScreenshots.push(await capture(
+            desktop,
+            reviewDirectory,
+            `01-view-${String(periodViewsRendered).padStart(2, "0")}-${fileSlug(model.label, model.value)}-${fileSlug(worksheetOption.label, "worksheet")}-${fileSlug(periodOption.label, "periods")}`,
+            captures,
+          ));
         }
-        if (!derivedView && await desktop.locator(".value-button.derived").count() > 0) {
-          derivedView = { modelId: model.value, periodType: periodOption.value };
-        }
-        if (!graphView && await desktop.locator(".value-button.derived").count() > 0) {
-          graphView = { modelId: model.value, periodType: periodOption.value };
-        }
-        if (!unresolvedView && await desktop.locator(".row-warning").count() > 0) {
-          unresolvedView = { modelId: model.value, periodType: periodOption.value };
-        }
-        periodViewsRendered += 1;
-        tableScreenshots.push(await capture(
-          desktop,
-          reviewDirectory,
-          `01-view-${String(periodViewsRendered).padStart(2, "0")}-${fileSlug(model.label, model.value)}-${fileSlug(periodOption.label, "periods")}`,
-          captures,
-        ));
       }
     }
     await modelSelect.selectOption(defaultModelId);
@@ -171,6 +207,14 @@ export async function reviewPreview(viewerDirectory, extraction) {
     let graphScreenshot;
     if (derivedView) {
       await modelSelect.selectOption(derivedView.modelId);
+      const worksheetSelect = desktop.getByLabel("Worksheet view");
+      if (derivedView.presentationId && await worksheetSelect.count() > 0) {
+        await worksheetSelect.selectOption(derivedView.presentationId);
+      }
+      const entitySelect = desktop.getByLabel("Entity view");
+      if (derivedView.entityId && await entitySelect.count() > 0) {
+        await entitySelect.selectOption(derivedView.entityId);
+      }
       const periodSelect = desktop.getByLabel("Period view");
       if (derivedView.periodType && await periodSelect.count() > 0) {
         await periodSelect.selectOption(derivedView.periodType);
@@ -200,6 +244,14 @@ export async function reviewPreview(viewerDirectory, extraction) {
 
     if (graphView) {
       await modelSelect.selectOption(graphView.modelId);
+      const worksheetSelect = desktop.getByLabel("Worksheet view");
+      if (graphView.presentationId && await worksheetSelect.count() > 0) {
+        await worksheetSelect.selectOption(graphView.presentationId);
+      }
+      const entitySelect = desktop.getByLabel("Entity view");
+      if (graphView.entityId && await entitySelect.count() > 0) {
+        await entitySelect.selectOption(graphView.entityId);
+      }
       const periodSelect = desktop.getByLabel("Period view");
       if (graphView.periodType && await periodSelect.count() > 0) {
         await periodSelect.selectOption(graphView.periodType);
@@ -283,6 +335,10 @@ export async function reviewPreview(viewerDirectory, extraction) {
     let unresolvedScreenshot;
     if (unresolvedView) {
       await modelSelect.selectOption(unresolvedView.modelId);
+      const worksheetSelect = desktop.getByLabel("Worksheet view");
+      if (unresolvedView.presentationId && await worksheetSelect.count() > 0) {
+        await worksheetSelect.selectOption(unresolvedView.presentationId);
+      }
       const periodSelect = desktop.getByLabel("Period view");
       if (unresolvedView.periodType && await periodSelect.count() > 0) {
         await periodSelect.selectOption(unresolvedView.periodType);

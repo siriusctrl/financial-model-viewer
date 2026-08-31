@@ -27,6 +27,10 @@ export type MetricSeriesQuery = {
   periodType?: Period["type"];
 };
 
+export type FinancialTableQuery = Omit<MetricSeriesQuery, "metricId"> & {
+  presentationId?: string;
+};
+
 export type MetricSeriesPoint = {
   period: Period;
   observation: Observation;
@@ -219,6 +223,19 @@ export class ModelDatabaseQueries {
     return [...this.database.models];
   }
 
+  getEntities(modelId: string): Entity[] {
+    const entityIds = new Set(
+      this.database.observations
+        .filter((item) => item.modelId === modelId)
+        .map((item) => item.entityId),
+    );
+    return this.database.entities.filter((item) => entityIds.has(item.id));
+  }
+
+  getTablePresentations(modelId: string): TablePresentation[] {
+    return this.database.tablePresentations.filter((item) => item.modelId === modelId);
+  }
+
   getModel(modelId: string): Model {
     const model = this.models.get(modelId);
     if (!model) throw new Error(`Unknown model ${modelId}`);
@@ -407,10 +424,22 @@ export class ModelDatabaseQueries {
       .sort((left, right) => comparePeriods(left.period, right.period));
   }
 
-  getPeriodTypes(modelId: string): Period["type"][] {
+  getPeriodTypes(
+    modelId: string,
+    presentationId?: string,
+    entityId?: string,
+  ): Period["type"][] {
+    const presentation = presentationId
+      ? this.getTablePresentations(modelId).find((item) => item.id === presentationId)
+      : undefined;
+    const metricIds = presentation
+      ? new Set(presentation.sections.flatMap((section) => section.metricIds))
+      : undefined;
     const types = new Map<Period["type"], Period>();
     for (const observation of this.database.observations) {
       if (observation.modelId !== modelId) continue;
+      if (entityId && observation.entityId !== entityId) continue;
+      if (metricIds && !metricIds.has(observation.metricId)) continue;
       const period = this.periods.get(observation.periodId);
       if (!period) continue;
       const current = types.get(period.type);
@@ -496,7 +525,8 @@ export class ModelDatabaseQueries {
     scenarioId,
     asOf,
     periodType,
-  }: Omit<MetricSeriesQuery, "metricId">): FinancialTableProjection {
+    presentationId,
+  }: FinancialTableQuery): FinancialTableProjection {
     const model = this.getModel(modelId);
     const resolvedEntityId = entityId ?? model.primaryEntityId;
     const entity = this.entities.get(resolvedEntityId);
@@ -550,9 +580,10 @@ export class ModelDatabaseQueries {
     };
     hierarchy.forEach((node) => flatten(node, 0));
 
-    const presentation = this.database.tablePresentations.find(
-      (item) => item.modelId === modelId,
-    );
+    const presentations = this.getTablePresentations(modelId);
+    const presentation = presentationId
+      ? presentations.find((item) => item.id === presentationId)
+      : presentations[0];
     const rowsByMetric = new Map(rows.map((row) => [row.metric.id, row]));
     const sections: FinancialTableSection[] = presentation
       ? presentation.sections.map((section) => ({

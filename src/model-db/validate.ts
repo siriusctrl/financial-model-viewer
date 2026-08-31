@@ -434,6 +434,8 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   const allVersionIds = new Set(database.models.flatMap((item) => item.versionIds));
 
   const presentationModels = new Set<string>();
+  const presentationIds = new Set<string>();
+  const presentedMetricsByModel = new Map<string, Set<string>>();
   const presentationSectionIds = new Set<string>();
   for (const presentation of database.tablePresentations) {
     pushMissingReference(
@@ -453,16 +455,19 @@ export function validateModelDatabase(input: unknown): ValidationResult {
       "Source artifact",
     );
 
-    if (presentationModels.has(presentation.modelId)) {
-      errors.push(
-        error(
-          "presentation.duplicate_model",
-          presentation.modelId,
-          "tablePresentations",
-          "A model can have only one table presentation",
-          "Merge the ordered sections into one presentation for this model",
-        ),
-      );
+    if (presentation.id) {
+      if (presentationIds.has(presentation.id)) {
+        errors.push(
+          error(
+            "presentation.duplicate_id",
+            presentation.id,
+            "id",
+            "Table presentation ID is already used",
+            "Assign a globally unique semantic presentation ID",
+          ),
+        );
+      }
+      presentationIds.add(presentation.id);
     }
     presentationModels.add(presentation.modelId);
 
@@ -472,6 +477,8 @@ export function validateModelDatabase(input: unknown): ValidationResult {
         .map((observation) => observation.metricId),
     );
     const presentedMetricIds = new Set<string>();
+    const modelPresentedMetricIds = presentedMetricsByModel.get(presentation.modelId)
+      ?? new Set<string>();
     for (const section of presentation.sections) {
       if (presentationSectionIds.has(section.id)) {
         errors.push(
@@ -501,8 +508,8 @@ export function validateModelDatabase(input: unknown): ValidationResult {
               "presentation.duplicate_metric",
               section.id,
               `metricIds.${index}`,
-              `Metric ${metricId} appears more than once in the model presentation`,
-              "Keep each metric in exactly one ordered section",
+              `Metric ${metricId} appears more than once in the table presentation`,
+              "Keep each metric in exactly one ordered section within this worksheet view",
             ),
           );
         }
@@ -518,21 +525,62 @@ export function validateModelDatabase(input: unknown): ValidationResult {
           );
         }
         presentedMetricIds.add(metricId);
+        modelPresentedMetricIds.add(metricId);
       });
     }
+    presentedMetricsByModel.set(presentation.modelId, modelPresentedMetricIds);
+  }
 
-    for (const metricId of visibleMetricIds) {
-      if (!presentedMetricIds.has(metricId)) {
+  for (const modelId of presentationModels) {
+    const modelPresentations = database.tablePresentations.filter(
+      (presentation) => presentation.modelId === modelId,
+    );
+    if (modelPresentations.length <= 1) continue;
+
+    modelPresentations.forEach((presentation, index) => {
+      if (!presentation.id) {
         errors.push(
           error(
-            "presentation.metric_missing",
-            presentation.modelId,
-            "sections",
-            `Observed metric ${metricId} is missing from the table presentation`,
-            "Place the metric in one ordered section or remove this presentation to use the deterministic fallback",
+            "presentation.id_required",
+            modelId,
+            `tablePresentations.${index}.id`,
+            "Each worksheet view needs an ID when a model has multiple table presentations",
+            "Assign a stable semantic ID derived from the worksheet or view name",
           ),
         );
       }
+      if (!presentation.title) {
+        errors.push(
+          error(
+            "presentation.title_required",
+            presentation.id ?? modelId,
+            `tablePresentations.${index}.title`,
+            "Each worksheet view needs a title when a model has multiple table presentations",
+            "Preserve the source worksheet or view label as the presentation title",
+          ),
+        );
+      }
+    });
+  }
+
+  for (const modelId of presentationModels) {
+    const visibleMetricIds = new Set(
+      database.observations
+        .filter((observation) => observation.modelId === modelId)
+        .map((observation) => observation.metricId),
+    );
+    const presentedMetricIds = presentedMetricsByModel.get(modelId) ?? new Set<string>();
+    for (const metricId of visibleMetricIds) {
+      if (presentedMetricIds.has(metricId)) continue;
+      errors.push(
+        error(
+          "presentation.metric_missing",
+          modelId,
+          "sections",
+          `Observed metric ${metricId} is missing from every table presentation`,
+          "Place the metric in at least one ordered worksheet view or remove all presentations to use the explicit fallback",
+        ),
+      );
     }
   }
 

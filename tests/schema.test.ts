@@ -27,6 +27,30 @@ describe("deterministic model database validator", () => {
     }
   });
 
+  it("requires stable IDs and titles for multiple worksheet views", () => {
+    const database = fixture();
+    const presentation = database.tablePresentations.find(
+      (item) => item.modelId === "model_northstar_cloud",
+    )!;
+    const secondSection = presentation.sections.pop()!;
+    database.tablePresentations.push({
+      modelId: presentation.modelId,
+      sourceArtifactId: presentation.sourceArtifactId,
+      sections: [secondSection],
+    });
+
+    const result = validateModelDatabase(database);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "presentation.id_required" }),
+      );
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({ code: "presentation.title_required" }),
+      );
+    }
+  });
+
   it("separates neutral review items from required actions", () => {
     const database = fixture();
     database.unresolvedItems[0].attentionLevel = "action_required";

@@ -198,8 +198,11 @@ export const TableSectionSchema = z
 
 export const TablePresentationSchema = z
   .object({
+    id: IdSchema.optional(),
+    title: z.string().min(1).optional(),
     modelId: IdSchema,
     sourceArtifactId: IdSchema.optional(),
+    sourceLocator: SourceLocatorSchema.optional(),
     sections: z.array(TableSectionSchema).min(1),
   })
   .strict();

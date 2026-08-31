@@ -979,11 +979,21 @@
       "items": {
         "type": "object",
         "properties": {
+          "id": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
           "modelId": {
             "$ref": "#/$defs/__schema2"
           },
           "sourceArtifactId": {
             "$ref": "#/$defs/__schema2"
+          },
+          "sourceLocator": {
+            "$ref": "#/$defs/__schema22"
           },
           "sections": {
             "minItems": 1,

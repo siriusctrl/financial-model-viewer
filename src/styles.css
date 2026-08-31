@@ -2437,10 +2437,12 @@ select:focus-visible,
   .model-toolbar-controls {
     width: 100%;
     align-items: end;
+    flex-wrap: wrap;
   }
 
   .period-switcher {
-    flex: 0 0 132px;
+    flex: 1 1 120px;
+    min-width: 0;
   }
 
   .period-switcher select {
@@ -2448,7 +2450,7 @@ select:focus-visible,
   }
 
   .view-tabs {
-    flex: 1;
+    flex: 1 0 100%;
     width: 100%;
   }
 

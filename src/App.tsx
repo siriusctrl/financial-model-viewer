@@ -26,7 +26,7 @@ const views: Array<{ id: View; label: string }> = [
   { id: "graph", label: "Lineage map" },
 ];
 
-const MAX_JSON_BYTES = 20 * 1024 * 1024;
+const MAX_JSON_BYTES = 100 * 1024 * 1024;
 
 type DatasetSource =
   | { kind: "bundled" }
@@ -55,9 +55,23 @@ function initialGraphMetric(database: ModelDatabase, modelId: string): string | 
   );
 }
 
-function initialPeriodType(database: ModelDatabase, modelId: string): Period["type"] | undefined {
+function initialPresentationId(database: ModelDatabase, modelId: string): string | undefined {
+  return database.tablePresentations.find((item) => item.modelId === modelId)?.id;
+}
+
+function initialEntityId(database: ModelDatabase, modelId: string): string {
+  return database.models.find((item) => item.id === modelId)?.primaryEntityId
+    ?? database.entities[0].id;
+}
+
+function initialPeriodType(
+  database: ModelDatabase,
+  modelId: string,
+  presentationId?: string,
+  entityId?: string,
+): Period["type"] | undefined {
   const queries = new ModelDatabaseQueries(database);
-  const periodTypes = queries.getPeriodTypes(modelId);
+  const periodTypes = queries.getPeriodTypes(modelId, presentationId, entityId);
   const configured = queries.getModel(modelId).attributes?.defaultPeriodType;
   return typeof configured === "string" && periodTypes.includes(configured as Period["type"])
     ? configured as Period["type"]
@@ -101,8 +115,19 @@ export default function App() {
   const [draftTransactions, setDraftTransactions] = useState(0);
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const [selectedModelId, setSelectedModelId] = useState(() => defaultModelId(defaultDatabase));
+  const [selectedPresentationId, setSelectedPresentationId] = useState<string | undefined>(() =>
+    initialPresentationId(defaultDatabase, defaultModelId(defaultDatabase)),
+  );
+  const [selectedEntityId, setSelectedEntityId] = useState(() =>
+    initialEntityId(defaultDatabase, defaultModelId(defaultDatabase)),
+  );
   const [selectedPeriodType, setSelectedPeriodType] = useState<Period["type"] | undefined>(() =>
-    initialPeriodType(defaultDatabase, defaultModelId(defaultDatabase)),
+    initialPeriodType(
+      defaultDatabase,
+      defaultModelId(defaultDatabase),
+      initialPresentationId(defaultDatabase, defaultModelId(defaultDatabase)),
+      initialEntityId(defaultDatabase, defaultModelId(defaultDatabase)),
+    ),
   );
   const [view, setView] = useState<View>("table");
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
@@ -119,15 +144,23 @@ export default function App() {
   const queries = useMemo(() => new ModelDatabaseQueries(database), [database]);
   const models = queries.getModels();
   const attentionItems = useMemo(() => queries.getAttentionItems(), [queries]);
-  const periodTypes = queries.getPeriodTypes(selectedModelId);
+  const presentations = queries.getTablePresentations(selectedModelId);
+  const entities = queries.getEntities(selectedModelId);
+  const periodTypes = queries.getPeriodTypes(
+    selectedModelId,
+    selectedPresentationId,
+    selectedEntityId,
+  );
   const table = useMemo(
     () =>
       queries.getFinancialTable({
         modelId: selectedModelId,
+        entityId: selectedEntityId,
         scenarioId: queries.getModel(selectedModelId).defaultScenarioId,
         periodType: selectedPeriodType,
+        presentationId: selectedPresentationId,
       }),
-    [queries, selectedModelId, selectedPeriodType],
+    [queries, selectedEntityId, selectedModelId, selectedPeriodType, selectedPresentationId],
   );
   const availableMetrics = useMemo(
     () => table.rows.map((row) => row.metric),
@@ -166,8 +199,12 @@ export default function App() {
   }, [theme]);
 
   const changeModel = (modelId: string) => {
+    const presentationId = initialPresentationId(database, modelId);
+    const entityId = initialEntityId(database, modelId);
     setSelectedModelId(modelId);
-    setSelectedPeriodType(initialPeriodType(database, modelId));
+    setSelectedPresentationId(presentationId);
+    setSelectedEntityId(entityId);
+    setSelectedPeriodType(initialPeriodType(database, modelId, presentationId, entityId));
     setGraphMetricId(initialGraphMetric(database, modelId));
     setSelectedTargetId(null);
     setAttentionFocus(null);
@@ -205,11 +242,24 @@ export default function App() {
 
   const navigateToAttention = (projection: AttentionItemProjection) => {
     if (projection.model) {
-      const modelChanged = projection.model.id !== selectedModelId;
+      const targetObservation = projection.item.targetId
+        ? database.observations.find((item) => item.id === projection.item.targetId)
+        : undefined;
+      const entityId = targetObservation?.entityId ?? projection.model.primaryEntityId;
+      const presentationId = projection.metric
+        ? database.tablePresentations.find(
+            (presentation) => presentation.modelId === projection.model?.id
+              && presentation.sections.some(
+                (section) => section.metricIds.includes(projection.metric!.id),
+              ),
+          )?.id
+        : initialPresentationId(database, projection.model.id);
       setSelectedModelId(projection.model.id);
+      setSelectedPresentationId(presentationId);
+      setSelectedEntityId(entityId);
       setSelectedPeriodType(
         projection.period?.type
-          ?? (modelChanged ? initialPeriodType(database, projection.model.id) : selectedPeriodType),
+          ?? initialPeriodType(database, projection.model.id, presentationId, entityId),
       );
       setGraphMetricId(initialGraphMetric(database, projection.model.id));
     }
@@ -228,11 +278,20 @@ export default function App() {
     source: DatasetSource,
   ) => {
     const nextModelId = defaultModelId(nextDatabase);
+    const nextPresentationId = initialPresentationId(nextDatabase, nextModelId);
+    const nextEntityId = initialEntityId(nextDatabase, nextModelId);
     setDatabase(nextDatabase);
     setDatasetSource(source);
     setDraftTransactions(0);
     setSelectedModelId(nextModelId);
-    setSelectedPeriodType(initialPeriodType(nextDatabase, nextModelId));
+    setSelectedPresentationId(nextPresentationId);
+    setSelectedEntityId(nextEntityId);
+    setSelectedPeriodType(initialPeriodType(
+      nextDatabase,
+      nextModelId,
+      nextPresentationId,
+      nextEntityId,
+    ));
     setGraphMetricId(initialGraphMetric(nextDatabase, nextModelId));
     setSelectedTargetId(null);
     setAttentionFocus(null);
@@ -472,6 +531,58 @@ export default function App() {
           <p>{table.model.name} · {table.model.baseCurrency} · as of {table.model.asOf}</p>
         </div>
         <div className="model-toolbar-controls">
+          {presentations.length > 1 && (
+            <label className="period-switcher">
+              <span>Worksheet</span>
+              <select
+                aria-label="Worksheet view"
+                value={selectedPresentationId}
+                onChange={(event) => {
+                  const presentationId = event.target.value;
+                  setSelectedPresentationId(presentationId);
+                  setSelectedPeriodType(initialPeriodType(
+                    database,
+                    selectedModelId,
+                    presentationId,
+                    selectedEntityId,
+                  ));
+                  setSelectedTargetId(null);
+                  setAttentionFocus(null);
+                }}
+              >
+                {presentations.map((presentation, index) => (
+                  <option key={presentation.id ?? index} value={presentation.id}>
+                    {presentation.title ?? `Worksheet ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {entities.length > 1 && (
+            <label className="period-switcher">
+              <span>Entity</span>
+              <select
+                aria-label="Entity view"
+                value={selectedEntityId}
+                onChange={(event) => {
+                  const entityId = event.target.value;
+                  setSelectedEntityId(entityId);
+                  setSelectedPeriodType(initialPeriodType(
+                    database,
+                    selectedModelId,
+                    selectedPresentationId,
+                    entityId,
+                  ));
+                  setSelectedTargetId(null);
+                  setAttentionFocus(null);
+                }}
+              >
+                {entities.map((entity) => (
+                  <option key={entity.id} value={entity.id}>{entity.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           {periodTypes.length > 1 && selectedPeriodType && (
             <label className="period-switcher">
               <span>Period view</span>

@@ -378,10 +378,11 @@ class WorkbookToolTests(unittest.TestCase):
                 (leap_year.expression, leap_year.dependency_metric_ids),
                 ("when((mod(2020, 4) != 0), 365, 366)", []),
             )
-            self.assertEqual(
-                header_literal.blocker("=IFERROR(H2,0)"),
-                "unsupported Excel function(s): IFERROR",
+            iferror = header_literal.translate(
+                "=IFERROR(H2*2,0)", "H3", "period_fy2020", 4040
             )
+            self.assertIsNotNone(iferror)
+            self.assertEqual((iferror.expression, iferror.dependency_metric_ids), ("(2020 * 2)", []))
 
     def test_mapped_extraction_rejects_formula_period_gaps(self) -> None:
         with TemporaryDirectory() as directory:
@@ -430,6 +431,42 @@ class WorkbookToolTests(unittest.TestCase):
             self.assertEqual(result.database["unresolvedItems"], [])
             self.assertEqual(result.formula_translation_tasks["items"], [])
             self.assertIn("2 formulas were auto-translated", result.report)
+
+    def test_mapped_sections_can_be_partitioned_into_worksheet_presentations(self) -> None:
+        with TemporaryDirectory() as directory:
+            workbook = Path(directory) / "fixture.xlsx"
+            write_fixture(workbook)
+            multi_view_mapping = mapping()
+            section = multi_view_mapping["sections"][0]
+            output_metric = section["metrics"].pop()
+            multi_view_mapping["sections"].append({
+                "id": "section_test_output",
+                "title": "Output",
+                "sourceRange": "A2:C2",
+                "metrics": [output_metric],
+            })
+            multi_view_mapping["presentations"] = [
+                {
+                    "id": "presentation_test_inputs",
+                    "title": "Inputs",
+                    "sourceLocator": "A1:C1",
+                    "sectionIds": ["section_test"],
+                },
+                {
+                    "id": "presentation_test_outputs",
+                    "title": "Outputs",
+                    "sourceLocator": "A2:C2",
+                    "sectionIds": ["section_test_output"],
+                },
+            ]
+
+            result = MappedWorkbookExtractor(workbook, multi_view_mapping).extract()
+
+            self.assertEqual(
+                [item["id"] for item in result.database["tablePresentations"]],
+                ["presentation_test_inputs", "presentation_test_outputs"],
+            )
+            self.assertIn("2 worksheet views", result.report)
 
     def test_sparse_inventory_and_mapped_extraction(self) -> None:
         with TemporaryDirectory() as directory:
@@ -493,7 +530,7 @@ class WorkbookToolTests(unittest.TestCase):
 
             opaque_sheet = SHEET_XML.replace(
                 '<f t="shared" si="0" ref="B2:B3">B1*2</f><v>4</v>',
-                '<f>IFERROR(B1*2,0)</f><v>4</v>',
+                '<f>OFFSET(B1,0,0)*2</f><v>4</v>',
             )
             opaque_workbook = Path(directory) / "opaque.xlsx"
             write_fixture(opaque_workbook, opaque_sheet)
@@ -509,7 +546,7 @@ class WorkbookToolTests(unittest.TestCase):
             )
             self.assertEqual(
                 opaque.formula_translation_tasks["items"][0]["blocker"]["reason"],
-                "unsupported Excel function(s): IFERROR",
+                "unsupported Excel function(s): OFFSET",
             )
             opaque_action = next(
                 item

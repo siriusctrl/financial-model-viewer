@@ -53,6 +53,31 @@ describe("query projections", () => {
     ).toEqual(["unresolved_harbor_provision_label"]);
   });
 
+  it("selects among multiple worksheet presentations for one model", () => {
+    const database = structuredClone(sample) as ModelDatabase;
+    database.tablePresentations[0].id = "presentation_northstar_revenue";
+    database.tablePresentations[0].title = "Revenue";
+    const grossProfit = database.tablePresentations[0].sections.splice(1);
+    database.tablePresentations.push({
+      id: "presentation_northstar_profit",
+      title: "Profit",
+      modelId: "model_northstar_cloud",
+      sourceArtifactId: "artifact_northstar_workbook",
+      sections: grossProfit,
+    });
+    const worksheetQueries = new ModelDatabaseQueries(assertValidModelDatabase(database));
+
+    expect(worksheetQueries.getTablePresentations("model_northstar_cloud")).toHaveLength(2);
+    expect(worksheetQueries.getFinancialTable({
+      modelId: "model_northstar_cloud",
+      presentationId: "presentation_northstar_profit",
+    }).rows.map((row) => row.metric.name)).toEqual([
+      "Cost of revenue",
+      "Gross profit",
+      "Gross margin",
+    ]);
+  });
+
   it("projects open attention into a navigable cross-model review queue", () => {
     const attention = queries.getAttentionItems();
 

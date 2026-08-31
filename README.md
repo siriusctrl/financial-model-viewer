@@ -28,6 +28,8 @@ Select **Open JSON** in the public or local viewer and choose a validated `model
 The primary model table supports:
 
 - annual and quarterly period views;
+- worksheet/view switching for models that span multiple source pages;
+- entity switching for peer and portfolio-style datasets;
 - cell inspection with workbook source, confidence, and extraction run;
 - direct and reverse formula lineage;
 - browser-local input edits with deterministic downstream recalculation;

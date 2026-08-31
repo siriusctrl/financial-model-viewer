@@ -44,7 +44,7 @@ Use the preferred `financial-model-workbook-map@0.2` format for new maps.
 - Use `row` plus period `column` only for a genuine repeated metric-row by period-column grid. Add metric `sheet` when that row is on another worksheet.
 - Use metric `cells` for arbitrary layouts. Each entry explicitly declares `sheet`, `cell`, `periodId`, and optional confidence.
 - Mix grid metrics and explicit-cell metrics in the same model when the workbook mixes statements, assumptions, and driver blocks.
-- Put every observed metric in exactly one presentation section, even when its source cells are scattered. Presentation order is a viewer concern; cell coordinates remain provenance.
+- Put every observed metric in at least one presentation section, even when its source cells are scattered. Keep it unique within a presentation; multiple worksheet views may intentionally reuse it. Presentation order is a viewer concern; cell coordinates remain provenance.
 - Map cross-sheet inputs explicitly. The translator supports mapped cross-sheet arithmetic, comparisons, `IF`/`MOD`, `SUM`, and `AVERAGE` references; an unmapped worksheet is not automatically an opaque formula.
 
 Example:
