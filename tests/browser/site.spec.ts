@@ -219,6 +219,7 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
     sourceArtifactId: "artifact_northstar_workbook",
     locator: { sheet: "Model", cell: "E17" },
     attentionLevel: "action_required",
+    actionOwner: "extraction_agent",
     status: "open",
   });
   imported.extractionRuns.find(
@@ -245,7 +246,7 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
   );
   const inspector = page.getByTestId("detail-panel");
   await expect(inspector.getByRole("button", { name: "Confirm interpretation" })).toHaveCount(0);
-  await expect(inspector).toContainText("Cannot be cleared in the viewer");
+  await expect(inspector).toContainText("No action from you · extraction agent");
 });
 
 test("uses extracted sections for a structurally different bank model", async ({ page }) => {
@@ -288,6 +289,7 @@ test("renders required extraction actions separately from neutral review", async
   await page.goto("./");
   const imported = structuredClone(sample) as ModelDatabase;
   imported.unresolvedItems[0].attentionLevel = "action_required";
+  imported.unresolvedItems[0].actionOwner = "model_owner";
   imported.unresolvedItems[0].locator = { sheet: "Model", cell: "E14" };
   imported.unresolvedItems[0].description =
     "The FY25 provision value needs a source-backed decision before extraction can proceed.";
@@ -302,13 +304,13 @@ test("renders required extraction actions separately from neutral review", async
   )!.locator = { sheet: "Model", cell: "E14" };
 
   await uploadJson(page, "action-required.json", imported);
-  await expect(page.locator(".validation-status")).toHaveText("1 action required");
+  await expect(page.locator(".validation-status")).toHaveText("1 action from you");
   await page.getByLabel("Search metrics").fill("revenue");
   await page.getByTestId("attention-trigger").click();
   const attentionCenter = page.getByTestId("attention-center");
   await expect(attentionCenter).toContainText("What needs attention");
-  await expect(attentionCenter).toContainText("Blocks complete ingestion");
-  await expect(attentionCenter.locator(".attention-overview-action")).toContainText("1");
+  await expect(attentionCenter).toContainText("Decision needed · model owner");
+  await expect(attentionCenter.locator(".attention-overview-human")).toContainText("1");
   await expect(attentionCenter).toContainText("Provision for credit losses");
   await expect(attentionCenter).toContainText("Model!E14");
   await attentionCenter.locator(
@@ -326,7 +328,7 @@ test("renders required extraction actions separately from neutral review", async
   await expect(page.getByTestId("detail-panel")).toContainText("Action required");
   await expect(page.getByTestId("detail-panel")).toContainText("Model!E14");
   await expect(page.getByTestId("detail-panel")).toContainText("Required next step");
-  await expect(page.getByTestId("detail-panel")).toContainText("Cannot be cleared in the viewer");
+  await expect(page.getByTestId("detail-panel")).toContainText("Model decision");
   await expect(
     page.getByTestId("detail-panel").getByRole("button", { name: "Confirm interpretation" }),
   ).toHaveCount(0);

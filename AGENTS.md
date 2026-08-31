@@ -20,7 +20,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
 - `skills/extract-financial-model/`: reusable workbook/model extraction workflow and contract.
 - `skills/extract-financial-model/scripts/ooxml.py`: sparse read-only XLSX package access used by inventory and mapped extraction.
-- `skills/extract-financial-model/scripts/formula_translation.py`: restricted mapped-cell arithmetic, comparisons, IF/IFERROR/MOD, SUM/AVERAGE, and one-criterion SUMIFS/AVERAGEIFS translation with cached-value replay across mapped periods and worksheets.
+- `skills/extract-financial-model/scripts/formula_translation.py`: restricted mapped-cell arithmetic, comparisons, guarded numeric IFERROR, SUM/AVERAGE, equal-length range SUMPRODUCT, and one-criterion SUMIFS/AVERAGEIFS translation with cached-value replay across mapped periods and worksheets.
 - `formula-translation-tasks.json` in a mapped extraction output: machine-readable follow-up queue for formulas that still exceed deterministic translator coverage.
 - `workbook-style-evidence.json` in a mapped extraction output: non-canonical per-cell styles and matches from the fixed Alice convention.
 - `skills/extract-financial-model/scripts/build-preview.mjs`: validates, compiles, and Playwright-reviews a local extraction bundle without changing GitHub Pages.
@@ -39,7 +39,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - Derive dependency edges from parsed transformations. Do not store duplicate `calculated_from` relationships.
 - Expand defensible referenced-cell mappings before preserving a formula as `opaque`; retain its original formula and workbook materialized value, and keep an open `action_required` formula item until canonical translation succeeds.
 - Every extracted canonical object requires provenance, confidence, review status, source artifact, and extraction run.
-- Every attention item in a new extraction package must state `currentTreatment`, `impact`, and `nextAction`. Only open `needs_review` items with all three fields may be confirmed in the viewer; action-required and incomplete legacy items may not be manually cleared.
+- Every attention item in a new extraction package must state `currentTreatment`, `impact`, and `nextAction`; every action must assign `extraction_agent`, `model_owner`, or `source_owner`. Only open `needs_review` items with complete guidance may be confirmed in the viewer; action-required and incomplete legacy items may not be manually cleared.
 - Treat style and position as extraction signals only. Accepted mappings have no open issue; reversible assumptions use `needs_review`; blocked semantic choices or unusable source values use `action_required`.
 - Visualizations consume `ModelDatabaseQueries`; do not assemble pages directly from JSON arrays.
 - Keep the viewer statically buildable and company-agnostic.

@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { actionOwnerCopy } from "../model-db/attention";
 import type { AttentionItemProjection } from "../model-db/queries";
 import type { SourceLocator } from "../model-db/types";
 import { Icon } from "./Icon";
 
-type AttentionFilter = "all" | "action_required" | "needs_review";
+type AttentionFilter =
+  | "all"
+  | "model_owner"
+  | "source_owner"
+  | "extraction_agent"
+  | "unassigned"
+  | "needs_review";
 
 type Props = {
   items: AttentionItemProjection[];
@@ -28,14 +35,28 @@ function categoryLabel(category: AttentionItemProjection["item"]["category"]): s
 export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [filter, setFilter] = useState<AttentionFilter>("all");
-  const actionCount = items.filter(
-    (item) => item.item.attentionLevel === "action_required",
-  ).length;
-  const reviewCount = items.length - actionCount;
+  const countFor = (owner: AttentionFilter) => items.filter(({ item }) => {
+    if (owner === "all") return true;
+    if (owner === "needs_review") return item.attentionLevel === "needs_review";
+    if (item.attentionLevel !== "action_required") return false;
+    if (owner === "unassigned") return item.actionOwner === undefined;
+    return item.actionOwner === owner;
+  }).length;
+  const agentCount = countFor("extraction_agent");
+  const modelOwnerCount = countFor("model_owner");
+  const sourceOwnerCount = countFor("source_owner");
+  const unassignedCount = countFor("unassigned");
+  const humanActionCount = modelOwnerCount + sourceOwnerCount + unassignedCount;
+  const reviewCount = countFor("needs_review");
   const visibleItems = useMemo(
     () => filter === "all"
       ? items
-      : items.filter((item) => item.item.attentionLevel === filter),
+      : items.filter(({ item }) => {
+          if (filter === "needs_review") return item.attentionLevel === "needs_review";
+          if (item.attentionLevel !== "action_required") return false;
+          if (filter === "unassigned") return item.actionOwner === undefined;
+          return item.actionOwner === filter;
+        }),
     [filter, items],
   );
 
@@ -58,9 +79,13 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
 
   const filters: Array<{ id: AttentionFilter; label: string; count: number }> = [
     { id: "all", label: "All", count: items.length },
-    { id: "action_required", label: "Action", count: actionCount },
+    { id: "model_owner", label: "Model decision", count: modelOwnerCount },
+    { id: "source_owner", label: "Source repair", count: sourceOwnerCount },
+    { id: "extraction_agent", label: "Agent follow-up", count: agentCount },
+    { id: "unassigned", label: "Unassigned", count: unassignedCount },
     { id: "needs_review", label: "Review", count: reviewCount },
   ];
+  const visibleFilters = filters.filter((item) => item.id === "all" || item.count > 0);
 
   return (
     <div className="attention-layer">
@@ -81,7 +106,7 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
             <span>Extraction attention</span>
             <h2 id="attention-center-title">What needs attention</h2>
             <p>
-              Action items need a source or extraction change. Review items ask you to confirm an explicit interpretation.
+              Each item names who should handle it. Agent follow-ups require no action from you.
             </p>
           </div>
           <button
@@ -95,9 +120,13 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
         </header>
 
         <div className="attention-overview" aria-label="Open attention counts">
-          <div className="attention-overview-action">
-            <strong>{actionCount}</strong>
-            <span><b>Action required</b><small>Blocks complete ingestion</small></span>
+          <div className="attention-overview-human">
+            <strong>{humanActionCount}</strong>
+            <span><b>Action from you</b><small>Model decision or source repair</small></span>
+          </div>
+          <div className="attention-overview-agent">
+            <strong>{agentCount}</strong>
+            <span><b>Agent follow-up</b><small>No action from you</small></span>
           </div>
           <div className="attention-overview-review">
             <strong>{reviewCount}</strong>
@@ -106,7 +135,7 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
         </div>
 
         <nav className="attention-filters" aria-label="Filter review queue">
-          {filters.map((item) => (
+          {visibleFilters.map((item) => (
             <button
               key={item.id}
               className={filter === item.id ? "active" : ""}
@@ -121,6 +150,7 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
         <div className="attention-list">
           {visibleItems.map((projection, index) => {
             const isAction = projection.item.attentionLevel === "action_required";
+            const owner = isAction ? actionOwnerCopy(projection.item) : null;
             return (
               <button
                 key={projection.item.id}
@@ -134,7 +164,7 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
                 </span>
                 <span className="attention-item-copy">
                   <span className="attention-item-state">
-                    <i /> {isAction ? "Blocking · change required" : "Confirmation needed"}
+                    <i /> {owner?.summary ?? "Confirmation needed"}
                   </span>
                   <strong>{projection.targetLabel}</strong>
                   <small>

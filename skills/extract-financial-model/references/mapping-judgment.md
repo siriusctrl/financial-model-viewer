@@ -79,7 +79,7 @@ Use these three product states:
 | Needs review | Open unresolved item with `attentionLevel: needs_review` | Emit the useful, reversible interpretation and state the assumption. The viewer shows a neutral review cue. |
 | Action required | Open unresolved item with `attentionLevel: action_required` | Do not make the disputed semantic claim or fabricate the missing value. Preserve raw material where safe. The viewer shows a red action cue. |
 
-For either open state, store four separate user-facing facts: `description` for what was found, `currentTreatment` for what the database did, `impact` for the affected scope, and `nextAction` for the exact confirmation or repair. Do not concatenate these into one warning paragraph. The viewer may confirm a `needs_review` interpretation, but it must not dismiss attention or manually clear an `action_required` item.
+For either open state, store four separate user-facing facts: `description` for what was found, `currentTreatment` for what the database did, `impact` for the affected scope, and `nextAction` for the exact confirmation or repair. Every action also names `actionOwner`: `extraction_agent`, `model_owner`, or `source_owner`. Do not concatenate these into one warning paragraph or send a translator/map gap to the analyst. The viewer may confirm a `needs_review` interpretation, but it must not dismiss attention or manually clear an `action_required` item.
 
 Typical `needs_review` cases:
 

@@ -24,6 +24,14 @@ QUALIFIED_AGGREGATE_RANGE = re.compile(
     r"(?P<end>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*\)",
     re.IGNORECASE,
 )
+QUALIFIED_RANGE_REFERENCE = re.compile(
+    r"(?<![A-Z0-9_.!])"
+    r"(?:(?:'(?P<start_quoted>[^']+)'|(?P<start_plain>[A-Za-z_][A-Za-z0-9_. ]*))!)?"
+    r"(?P<start>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*:\s*"
+    r"(?:(?:'(?P<end_quoted>[^']+)'|(?P<end_plain>[A-Za-z_][A-Za-z0-9_. ]*))!)?"
+    r"(?P<end>\$?[A-Z]{1,3}\$?[1-9][0-9]*)(?![A-Z0-9_])",
+    re.IGNORECASE,
+)
 PERCENT_LITERAL = re.compile(
     r"(?<![A-Z0-9_.])(?P<number>(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))%(?![A-Z0-9_])",
     re.IGNORECASE,
@@ -57,6 +65,11 @@ class FormulaBlocker:
     kind: str
     reason: str
     coordinates: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _ResolvedRange:
+    references: tuple[tuple[str, float | int, str | None], ...]
 
 
 def _column_number(label: str) -> int:
@@ -125,6 +138,29 @@ def _excel_mod(value: float | int, divisor: float | int) -> float | int:
     return value - divisor * math.floor(value / divisor)
 
 
+def _excel_criterion_equal(left: Any, right: Any) -> bool:
+    """Compare simple SUMIFS criteria with Excel's numeric-text coercion."""
+    if isinstance(left, bool) or isinstance(right, bool):
+        return left is right
+    numeric_values: list[float] = []
+    for value in (left, right):
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            numeric_values.append(float(value))
+            continue
+        if isinstance(value, str):
+            try:
+                parsed = float(value.strip())
+            except ValueError:
+                break
+            if math.isfinite(parsed):
+                numeric_values.append(parsed)
+                continue
+        break
+    if len(numeric_values) == 2:
+        return numeric_values[0] == numeric_values[1]
+    return left == right
+
+
 class FormulaTranslator:
     """Compile a small Excel subset only through explicitly mapped numeric cells."""
 
@@ -135,12 +171,22 @@ class FormulaTranslator:
         default_sheet: str | None = None,
         strict_grid: bool = True,
         literal_coordinates: set[str] | None = None,
+        available_sheets: set[str] | None = None,
     ):
         self.cells = cells
         self.coordinate_semantics = coordinate_semantics
         self.default_sheet = default_sheet
         self.strict_grid = strict_grid
         self.literal_coordinates = literal_coordinates or set()
+        inferred_sheets = {
+            self._split_key(key)[0]
+            for key in cells
+        }
+        self.available_sheets: set[str | None] = set(available_sheets or inferred_sheets)
+        if default_sheet is not None:
+            self.available_sheets.add(default_sheet)
+        if not any("!" in key for key in cells):
+            self.available_sheets.add(None)
         self.qualified = default_sheet is not None or any(
             "!" in coordinate for coordinate in coordinate_semantics
         )
@@ -153,6 +199,13 @@ class FormulaTranslator:
             self.mapped_sheets.add(sheet)
             self.mapped_columns.setdefault(sheet, set()).add(column)
             self.mapped_rows.setdefault(sheet, set()).add(row)
+
+    def _is_material_blank(self, key: str) -> bool:
+        cell = self.cells.get(key)
+        if cell is not None:
+            return cell.get("value") is None and "formula" not in cell
+        sheet, _coordinate = self._split_key(key)
+        return sheet in self.available_sheets
 
     @staticmethod
     def _split_key(key: str) -> tuple[str | None, str]:
@@ -192,7 +245,7 @@ class FormulaTranslator:
         semantic = self.coordinate_semantics.get(key)
         if not semantic:
             cell = self.cells.get(key)
-            if cell and cell.get("value") is None and "formula" not in cell:
+            if self._is_material_blank(key):
                 # A referenced, materially blank workbook cell is numeric zero in
                 # Excel arithmetic. Preserve that coercion as a literal without
                 # inventing an observation for an empty source cell.
@@ -244,19 +297,26 @@ class FormulaTranslator:
         coordinates = _expand_range(start, end)
         if not coordinates:
             return None
-        references = [
-            self._canonical_cell_reference(
+        references: list[tuple[str, float | int, str | None]] = []
+        for coordinate in coordinates:
+            reference = self._canonical_cell_reference(
                 coordinate,
                 target_coordinate,
                 target_period_id,
                 resolved_start_sheet,
                 target_sheet,
             )
-            for coordinate in coordinates
-        ]
-        if any(reference is None for reference in references):
-            return None
-        resolved = [reference for reference in references if reference is not None]
+            if reference is None:
+                key = self._key(coordinate, resolved_start_sheet, target_sheet)
+                raw_value = self.cells.get(key, {}).get("value") if key else None
+                if not isinstance(raw_value, str):
+                    return None
+                # Excel SUM/AVERAGE ignore text returned by referenced cells.
+                # Preserve the current branch as a literal rather than inventing
+                # a numeric helper observation for values such as "n.a." or "0".
+                reference = ("0", 0, None)
+            references.append(reference)
+        resolved = references
         normalized_function = function_name.lower()
         included = (
             [reference for reference in resolved if reference[2] is not None]
@@ -333,7 +393,9 @@ class FormulaTranslator:
         ):
             criteria_key = self._key(criteria_coordinate, None, target_sheet)
             criteria_cell = self.cells.get(criteria_key) if criteria_key else None
-            if not criteria_cell or criteria_cell.get("value") != criterion:
+            if not criteria_cell or not _excel_criterion_equal(
+                criteria_cell.get("value"), criterion
+            ):
                 continue
             reference = self._canonical_cell_reference(
                 sum_coordinate,
@@ -362,7 +424,7 @@ class FormulaTranslator:
         )
 
     @staticmethod
-    def _iferror_primary_expression(formula_body: str) -> str | None:
+    def _iferror_arguments(formula_body: str) -> tuple[str, str] | None:
         if not formula_body.upper().startswith("IFERROR(") or not formula_body.endswith(")"):
             return None
         inner = formula_body[len("IFERROR("):-1]
@@ -376,7 +438,210 @@ class FormulaTranslator:
             elif not quoted and character == ")":
                 depth -= 1
             elif not quoted and character == "," and depth == 0:
-                return inner[:index].strip()
+                return inner[:index].strip(), inner[index + 1:].strip()
+        return None
+
+    @classmethod
+    def _iferror_primary_expression(cls, formula_body: str) -> str | None:
+        arguments = cls._iferror_arguments(formula_body)
+        return arguments[0] if arguments else None
+
+    def _translate_guarded_iferror(
+        self,
+        formula_body: str,
+        target_coordinate: str,
+        target_period_id: str,
+        target_value: float | int,
+        target_sheet: str | None,
+    ) -> FormulaTranslation | None:
+        """Translate numeric IFERROR by lazily guarding every possible divide-by-zero.
+
+        This intentionally accepts only literal/reference arithmetic. The guarded
+        target uses the restricted language's lazy conditional expression, so a
+        future zero denominator selects the source fallback without evaluating the
+        failing branch.
+        """
+        arguments = self._iferror_arguments(formula_body)
+        if arguments is None or any('"' in argument for argument in arguments):
+            return None
+        primary_body, fallback_body = (
+            PERCENT_LITERAL.sub(_percentage_value, argument)
+            for argument in arguments
+        )
+        if (
+            QUALIFIED_RANGE_REFERENCE.search(primary_body)
+            or QUALIFIED_RANGE_REFERENCE.search(fallback_body)
+            or FUNCTION_CALL.search(primary_body)
+            or FUNCTION_CALL.search(fallback_body)
+        ):
+            return None
+
+        coordinate_by_name: dict[str, tuple[str | None, str]] = {}
+        name_by_coordinate: dict[tuple[str | None, str], str] = {}
+
+        def replace_reference(match: re.Match[str]) -> str:
+            coordinate = match.group("cell").replace("$", "").upper()
+            source = (match.group("quoted") or match.group("plain"), coordinate)
+            name = name_by_coordinate.get(source)
+            if name is None:
+                name = f"cell_{len(name_by_coordinate)}"
+                name_by_coordinate[source] = name
+                coordinate_by_name[name] = source
+            return name
+
+        try:
+            primary_ast = ast.parse(
+                QUALIFIED_CELL_REFERENCE.sub(replace_reference, primary_body),
+                mode="eval",
+            )
+            fallback_ast = ast.parse(
+                QUALIFIED_CELL_REFERENCE.sub(replace_reference, fallback_body),
+                mode="eval",
+            )
+        except SyntaxError:
+            return None
+
+        dependencies: set[str] = set()
+
+        # expression, replay value (None when the source branch errors), guards
+        Compiled = tuple[str, float | int | None, list[str]]
+
+        def compile_node(node: ast.AST) -> Compiled | None:
+            if isinstance(node, ast.Expression):
+                return compile_node(node.body)
+            if isinstance(node, ast.Constant):
+                value = _numeric(node.value)
+                return (repr(value), value, []) if value is not None else None
+            if isinstance(node, ast.Name):
+                source = coordinate_by_name.get(node.id)
+                if source is None:
+                    return None
+                reference_sheet, coordinate = source
+                reference = self._canonical_cell_reference(
+                    coordinate,
+                    target_coordinate,
+                    target_period_id,
+                    reference_sheet,
+                    target_sheet,
+                )
+                if reference is None:
+                    return None
+                if reference[2] is not None:
+                    dependencies.add(reference[2])
+                return reference[0], reference[1], []
+            if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+                operand = compile_node(node.operand)
+                if operand is None:
+                    return None
+                expression, value, guards = operand
+                return (
+                    f"(-{expression})" if isinstance(node.op, ast.USub) else f"(+{expression})",
+                    (-value if isinstance(node.op, ast.USub) else value)
+                    if value is not None
+                    else None,
+                    guards,
+                )
+            if not isinstance(node, ast.BinOp) or not isinstance(
+                node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div)
+            ):
+                return None
+            left = compile_node(node.left)
+            right = compile_node(node.right)
+            if left is None or right is None:
+                return None
+            left_expression, left_value, left_guards = left
+            right_expression, right_value, right_guards = right
+            operator = {
+                ast.Add: "+",
+                ast.Sub: "-",
+                ast.Mult: "*",
+                ast.Div: "/",
+            }[type(node.op)]
+            guards = [*left_guards, *right_guards]
+            if isinstance(node.op, ast.Div) and not (
+                isinstance(node.right, ast.Constant) and right_value not in {None, 0}
+            ):
+                guards.append(f"({right_expression} == 0)")
+            if left_value is None or right_value is None:
+                value = None
+            else:
+                try:
+                    value = {
+                        "+": lambda: left_value + right_value,
+                        "-": lambda: left_value - right_value,
+                        "*": lambda: left_value * right_value,
+                        "/": lambda: left_value / right_value,
+                    }[operator]()
+                except ZeroDivisionError:
+                    value = None
+            return f"({left_expression} {operator} {right_expression})", value, guards
+
+        primary = compile_node(primary_ast)
+        fallback = compile_node(fallback_ast)
+        if primary is None or fallback is None or fallback[1] is None or fallback[2]:
+            return None
+        calculated = primary[1] if primary[1] is not None else fallback[1]
+        if calculated is None or not _values_match(calculated, target_value):
+            return None
+        expression = primary[0]
+        for guard in reversed(primary[2]):
+            expression = f"({guard} ? {fallback[0]} : {expression})"
+        return FormulaTranslation(expression, sorted(dependencies))
+
+    def _translate_text_error_iferror(
+        self,
+        formula_body: str,
+        target_coordinate: str,
+        target_period_id: str,
+        target_value: float | int,
+        target_sheet: str | None,
+    ) -> FormulaTranslation | None:
+        """Use the explicit IFERROR fallback when a numeric branch reads text.
+
+        This is deliberately period-specific. It accepts only arithmetic syntax
+        and only when a referenced workbook cell currently contains nonnumeric
+        text, which deterministically makes Excel select the source fallback.
+        """
+        arguments = self._iferror_arguments(formula_body)
+        if arguments is None:
+            return None
+        primary_body, fallback_body = arguments
+        fallback = self._translate_arithmetic(
+            fallback_body,
+            target_coordinate,
+            target_period_id,
+            target_value,
+            target_sheet,
+        )
+        if fallback is None:
+            return None
+
+        replaced = QUALIFIED_CELL_REFERENCE.sub("1", primary_body)
+        if FUNCTION_CALL.search(replaced) or QUALIFIED_RANGE_REFERENCE.search(replaced):
+            return None
+        try:
+            parsed = ast.parse(PERCENT_LITERAL.sub(_percentage_value, replaced), mode="eval")
+        except SyntaxError:
+            return None
+        if any(
+            not isinstance(node, (
+                ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant,
+                ast.Add, ast.Sub, ast.Mult, ast.Div, ast.UAdd, ast.USub,
+                ast.Load,
+            ))
+            for node in ast.walk(parsed)
+        ):
+            return None
+
+        for match in QUALIFIED_CELL_REFERENCE.finditer(primary_body):
+            key = self._key(
+                match.group("cell"),
+                match.group("quoted") or match.group("plain"),
+                target_sheet,
+            )
+            raw_value = self.cells.get(key, {}).get("value") if key else None
+            if isinstance(raw_value, str) and _numeric(raw_value) is None:
+                return fallback
         return None
 
     def _translate_arithmetic(
@@ -392,6 +657,7 @@ class FormulaTranslator:
         formula_body = PERCENT_LITERAL.sub(_percentage_value, formula_body)
         formula_body = EXCEL_BOOLEAN.sub(_boolean_value, formula_body)
         compiled_names: dict[str, tuple[str, float | int, list[str]]] = {}
+        resolved_ranges: dict[str, _ResolvedRange] = {}
         unsupported_aggregate = False
 
         def replace_aggregate(match: re.Match[str]) -> str:
@@ -414,7 +680,44 @@ class FormulaTranslator:
             return name
 
         formula_body = QUALIFIED_AGGREGATE_RANGE.sub(replace_aggregate, formula_body)
-        if unsupported_aggregate or ":" in formula_body:
+        if unsupported_aggregate:
+            return None
+
+        unsupported_range = False
+
+        def replace_range(match: re.Match[str]) -> str:
+            nonlocal unsupported_range
+            start_sheet = self._sheet_from_match(match, "start")
+            end_sheet = self._sheet_from_match(match, "end") or start_sheet
+            resolved_sheet = start_sheet or target_sheet or self.default_sheet
+            if end_sheet is not None and end_sheet != resolved_sheet:
+                unsupported_range = True
+                return match.group(0)
+            coordinates = _expand_range(match.group("start"), match.group("end"))
+            if not coordinates:
+                unsupported_range = True
+                return match.group(0)
+            references = [
+                self._canonical_cell_reference(
+                    coordinate,
+                    target_coordinate,
+                    target_period_id,
+                    resolved_sheet,
+                    target_sheet,
+                )
+                for coordinate in coordinates
+            ]
+            if any(reference is None for reference in references):
+                unsupported_range = True
+                return match.group(0)
+            name = f"cell_range_{len(resolved_ranges)}"
+            resolved_ranges[name] = _ResolvedRange(tuple(
+                reference for reference in references if reference is not None
+            ))
+            return name
+
+        formula_body = QUALIFIED_RANGE_REFERENCE.sub(replace_range, formula_body)
+        if unsupported_range or ":" in formula_body:
             return None
         coordinate_by_name: dict[str, tuple[str | None, str]] = {}
         name_by_coordinate: dict[tuple[str | None, str], str] = {}
@@ -480,6 +783,35 @@ class FormulaTranslator:
                 )
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
                 normalized_name = node.func.id.upper()
+                if normalized_name == "SUMPRODUCT" and len(node.args) >= 2:
+                    ranges = [
+                        resolved_ranges.get(argument.id)
+                        if isinstance(argument, ast.Name)
+                        else None
+                        for argument in node.args
+                    ]
+                    if any(item is None for item in ranges):
+                        return None
+                    resolved = [item for item in ranges if item is not None]
+                    lengths = {len(item.references) for item in resolved}
+                    if len(lengths) != 1 or not lengths or 0 in lengths:
+                        return None
+                    terms: list[str] = []
+                    products: list[float | int] = []
+                    for references in zip(
+                        *(item.references for item in resolved),
+                        strict=True,
+                    ):
+                        terms.append(
+                            "(" + " * ".join(reference[0] for reference in references) + ")"
+                        )
+                        products.append(math.prod(reference[1] for reference in references))
+                        dependencies.update(
+                            reference[2]
+                            for reference in references
+                            if reference[2] is not None
+                        )
+                    return f"sum({', '.join(terms)})", sum(products)
                 if normalized_name == "MOD" and len(node.args) == 2:
                     left = compile_node(node.args[0])
                     right = compile_node(node.args[1])
@@ -513,45 +845,60 @@ class FormulaTranslator:
                     )
                 if normalized_name not in {"SUM", "AVERAGE"} or not node.args:
                     return None
-                argument_nodes = node.args
-                arguments = [compile_node(argument) for argument in argument_nodes]
-                if any(
-                    argument is None or isinstance(argument[1], bool)
-                    for argument in arguments
-                ):
-                    return None
-                compiled_arguments = [
-                    (argument_node, argument)
-                    for argument_node, argument in zip(argument_nodes, arguments, strict=True)
-                    if argument is not None
-                ]
                 function_name = normalized_name.lower()
-                if function_name == "average":
-                    compiled_arguments = [
-                        (argument_node, argument)
-                        for argument_node, argument in compiled_arguments
-                        if not (
-                            isinstance(argument_node, ast.Name)
-                            and argument_node.id in coordinate_by_name
-                            and self._canonical_cell_reference(
-                                coordinate_by_name[argument_node.id][1],
-                                target_coordinate,
-                                target_period_id,
-                                coordinate_by_name[argument_node.id][0],
-                                target_sheet,
-                            )[2] is None
+                compiled_arguments: list[tuple[str, float | int]] = []
+                for argument_node in node.args:
+                    resolved_range = (
+                        resolved_ranges.get(argument_node.id)
+                        if isinstance(argument_node, ast.Name)
+                        else None
+                    )
+                    if resolved_range is not None:
+                        references = resolved_range.references
+                        if function_name == "average":
+                            references = tuple(
+                                reference
+                                for reference in references
+                                if reference[2] is not None
+                            )
+                        dependencies.update(
+                            reference[2]
+                            for reference in references
+                            if reference[2] is not None
                         )
-                    ]
-                    if not compiled_arguments:
+                        compiled_arguments.extend(
+                            (reference[0], reference[1]) for reference in references
+                        )
+                        continue
+                    argument = compile_node(argument_node)
+                    if argument is None or isinstance(argument[1], bool):
                         return None
-                values = [argument[1] for _node, argument in compiled_arguments]
+                    if (
+                        function_name == "average"
+                        and isinstance(argument_node, ast.Name)
+                        and argument_node.id in coordinate_by_name
+                    ):
+                        reference_sheet, coordinate = coordinate_by_name[argument_node.id]
+                        reference = self._canonical_cell_reference(
+                            coordinate,
+                            target_coordinate,
+                            target_period_id,
+                            reference_sheet,
+                            target_sheet,
+                        )
+                        if reference is not None and reference[2] is None:
+                            continue
+                    compiled_arguments.append((argument[0], argument[1]))
+                if not compiled_arguments:
+                    return None
+                values = [argument[1] for argument in compiled_arguments]
                 calculated = (
                     sum(values) / len(values)
                     if function_name == "average"
                     else sum(values)
                 )
                 return (
-                    f"{function_name}({', '.join(argument[0] for _node, argument in compiled_arguments)})",
+                    f"{function_name}({', '.join(argument[0] for argument in compiled_arguments)})",
                     calculated,
                 )
             if isinstance(node, ast.Compare) and len(node.ops) == 1 and len(node.comparators) == 1:
@@ -637,7 +984,19 @@ class FormulaTranslator:
             return None
         formula_body = original_formula[1:].strip()
         iferror_primary = self._iferror_primary_expression(formula_body)
-        return self._translate_conditional_aggregate(
+        return self._translate_guarded_iferror(
+            formula_body,
+            target_coordinate,
+            target_period_id,
+            cached,
+            target_sheet,
+        ) or self._translate_text_error_iferror(
+            formula_body,
+            target_coordinate,
+            target_period_id,
+            cached,
+            target_sheet,
+        ) or self._translate_conditional_aggregate(
             formula_body,
             target_coordinate,
             target_period_id,
@@ -673,7 +1032,7 @@ class FormulaTranslator:
             match.group("name").upper()
             for match in FUNCTION_CALL.finditer(formula_body)
             if match.group("name").upper() not in {
-                "SUM", "AVERAGE", "SUMIFS", "AVERAGEIFS", "IFERROR", "IF", "MOD"
+                "SUM", "AVERAGE", "SUMIFS", "AVERAGEIFS", "SUMPRODUCT", "IFERROR", "IF", "MOD"
             }
         })
         if unsupported_functions:
@@ -683,7 +1042,7 @@ class FormulaTranslator:
             )
         referenced_coordinates: set[str] = set()
         without_ranges = formula_body
-        for match in QUALIFIED_AGGREGATE_RANGE.finditer(formula_body):
+        for match in QUALIFIED_RANGE_REFERENCE.finditer(formula_body):
             start_sheet = self._sheet_from_match(match, "start")
             end_sheet = self._sheet_from_match(match, "end") or start_sheet
             if start_sheet and end_sheet and start_sheet != end_sheet:
@@ -695,7 +1054,7 @@ class FormulaTranslator:
                 key = self._key(coordinate, start_sheet, target_sheet)
                 if key:
                     referenced_coordinates.add(key)
-        without_ranges = QUALIFIED_AGGREGATE_RANGE.sub("", without_ranges)
+        without_ranges = QUALIFIED_RANGE_REFERENCE.sub("", without_ranges)
         for match in QUALIFIED_CELL_REFERENCE.finditer(without_ranges):
             key = self._key(
                 match.group("cell"),
@@ -709,6 +1068,7 @@ class FormulaTranslator:
             for coordinate in referenced_coordinates
             if coordinate not in self.coordinate_semantics
             and coordinate not in self.literal_coordinates
+            and not self._is_material_blank(coordinate)
         )
         if missing_coordinates:
             missing_sheets = sorted({

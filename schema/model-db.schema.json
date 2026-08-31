@@ -937,6 +937,13 @@
           "targetId": {
             "$ref": "#/$defs/__schema2"
           },
+          "affectedTargetIds": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/__schema2"
+            }
+          },
           "sourceArtifactId": {
             "$ref": "#/$defs/__schema2"
           },
@@ -952,6 +959,14 @@
             "enum": [
               "needs_review",
               "action_required"
+            ]
+          },
+          "actionOwner": {
+            "type": "string",
+            "enum": [
+              "extraction_agent",
+              "model_owner",
+              "source_owner"
             ]
           },
           "status": {

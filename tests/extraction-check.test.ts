@@ -43,6 +43,23 @@ describe("extraction package attention guidance", () => {
     },
   );
 
+  it("rejects an action item without a named owner", () => {
+    const database = structuredClone(sample) as ModelDatabase;
+    database.unresolvedItems[0].attentionLevel = "action_required";
+    const directory = mkdtempSync(join(tmpdir(), "model-db-attention-"));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, "model-db.json");
+    writeFileSync(databasePath, JSON.stringify(database));
+
+    const result = spawnSync("node", [checker, databasePath, report], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("must provide actionOwner");
+  });
+
   it("checks resolved items as part of a newly emitted package", () => {
     const database = structuredClone(sample) as ModelDatabase;
     const item = database.unresolvedItems[0] as UnresolvedItem;

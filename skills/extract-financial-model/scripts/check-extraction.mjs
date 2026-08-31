@@ -162,6 +162,13 @@ function checkAttentionGuidance(databasePath) {
           valid = false;
         }
       }
+      if (
+        item?.attentionLevel === "action_required"
+        && !["extraction_agent", "model_owner", "source_owner"].includes(item?.actionOwner)
+      ) {
+        fail(`${databasePath} action item ${item?.id ?? "<unknown>"} must provide actionOwner as extraction_agent, model_owner, or source_owner.`);
+        valid = false;
+      }
     }
     if (valid) {
       console.log(`VALID ${databasePath} attention guidance`);

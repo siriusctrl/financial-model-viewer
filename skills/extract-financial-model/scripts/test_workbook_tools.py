@@ -199,7 +199,11 @@ class WorkbookToolTests(unittest.TestCase):
             workbook = Path(directory) / "fixture.xlsx"
             write_fixture(workbook)
             with WorkbookPackage(workbook) as package:
-                translator = FormulaTranslator(package.cells("Model"), {
+                source_cells = package.cells("Model")
+                source_cells["E1"] = {
+                    "cell": "E1", "type": "n", "style": 0, "rawValue": "7", "value": 7,
+                }
+                translator = FormulaTranslator(source_cells, {
                     "B1": {
                         "metricId": "metric_test_input",
                         "periodId": "period_fy2024",
@@ -265,6 +269,42 @@ class WorkbookToolTests(unittest.TestCase):
                 '(ref("metric_test_input") - '
                 'sum(period_ref("metric_test_input", "period_fy2024")))',
             )
+            multi_range_sum = translator.translate(
+                "=SUM(B1:C1,C1:C1)", "C2", "period_fy2025", 8,
+            )
+            self.assertIsNotNone(multi_range_sum)
+            self.assertEqual(
+                multi_range_sum.expression,
+                'sum(period_ref("metric_test_input", "period_fy2024"), '
+                'ref("metric_test_input"), ref("metric_test_input"))',
+            )
+            sumproduct = translator.translate(
+                "=SUMPRODUCT(B1:C1,B1:C1)", "C2", "period_fy2025", 13,
+            )
+            self.assertIsNotNone(sumproduct)
+            self.assertEqual(
+                sumproduct.expression,
+                'sum((period_ref("metric_test_input", "period_fy2024") * '
+                'period_ref("metric_test_input", "period_fy2024")), '
+                '(ref("metric_test_input") * ref("metric_test_input")))',
+            )
+            conditional_sum = FormulaTranslator(
+                {
+                    "B1": {"value": 2029}, "C1": {"value": 2029},
+                    "B2": {"value": 2}, "C2": {"value": 3},
+                    "D1": {"value": "2029"},
+                },
+                {
+                    "B2": {"metricId": "metric_a", "periodId": "period_q1", "dataType": "number"},
+                    "C2": {"metricId": "metric_a", "periodId": "period_q2", "dataType": "number"},
+                },
+            ).translate("=SUMIFS(B2:C2,B1:C1,D1)", "D2", "period_year", 5)
+            self.assertIsNotNone(conditional_sum)
+            self.assertEqual(
+                conditional_sum.expression,
+                'sum(period_ref("metric_a", "period_q1"), '
+                'period_ref("metric_a", "period_q2"))',
+            )
             blank_arithmetic = translator.translate(
                 "=C1+D1", "C2", "period_fy2025", 3,
             )
@@ -273,6 +313,11 @@ class WorkbookToolTests(unittest.TestCase):
                 (blank_arithmetic.expression, blank_arithmetic.dependency_metric_ids),
                 ('(ref("metric_test_input") + 0)', ["metric_test_input"]),
             )
+            absent_blank = translator.translate(
+                "=E2+1", "C2", "period_fy2025", 1,
+            )
+            self.assertIsNotNone(absent_blank)
+            self.assertEqual(absent_blank.expression, "(0 + 1)")
             average_translation = translator.translate(
                 "=AVERAGE(B1:D1)", "C2", "period_fy2025", 2.5,
             )
@@ -333,6 +378,51 @@ class WorkbookToolTests(unittest.TestCase):
             period_blocker = translator.blocker_details("=E1")
             self.assertEqual(period_blocker.kind, "unmapped_period")
             self.assertEqual(period_blocker.coordinates, ("E1",))
+
+            guarded_iferror = translator.translate(
+                "=IFERROR(B1/(C1-C1),7)", "C2", "period_fy2025", 7,
+            )
+            self.assertIsNotNone(guarded_iferror)
+            self.assertEqual(
+                guarded_iferror.expression,
+                '(((ref("metric_test_input") - ref("metric_test_input")) == 0) '
+                '? 7 : (period_ref("metric_test_input", "period_fy2024") / '
+                '(ref("metric_test_input") - ref("metric_test_input"))))',
+            )
+            guarded_iferror_nonzero = translator.translate(
+                "=IFERROR(C1/B1,7)", "C2", "period_fy2025", 1.5,
+            )
+            self.assertIsNotNone(guarded_iferror_nonzero)
+            self.assertEqual(
+                guarded_iferror_nonzero.expression,
+                '((period_ref("metric_test_input", "period_fy2024") == 0) '
+                '? 7 : (ref("metric_test_input") / '
+                'period_ref("metric_test_input", "period_fy2024")))',
+            )
+
+            text_error = FormulaTranslator(
+                {"B1": {"value": 3}, "C1": {"value": "n.a."}},
+                {
+                    "B1": {"metricId": "metric_input", "periodId": "period_fy2025", "dataType": "number"},
+                },
+            ).translate("=IFERROR(B1*C1,0)", "D1", "period_fy2025", 0)
+            self.assertIsNotNone(text_error)
+            self.assertEqual((text_error.expression, text_error.dependency_metric_ids), ("0", []))
+
+            aggregate_text = FormulaTranslator(
+                {
+                    "B1": {"value": 4},
+                    "C1": {"value": "0", "formula": '=IF(B1<0,B1,"0")'},
+                },
+                {
+                    "B1": {"metricId": "metric_input", "periodId": "period_fy2025", "dataType": "number"},
+                },
+            ).translate("=SUM(B1:C1)", "D1", "period_fy2025", 4)
+            self.assertIsNotNone(aggregate_text)
+            self.assertEqual(
+                (aggregate_text.expression, aggregate_text.dependency_metric_ids),
+                ('sum(ref("metric_input"), 0)', ["metric_input"]),
+            )
 
             qualified = FormulaTranslator(
                 {"Drivers!B1": {"value": 2, "style": 0}},
@@ -561,6 +651,9 @@ class WorkbookToolTests(unittest.TestCase):
             map_gap_sheet = SHEET_XML.replace(
                 '<f t="shared" si="0" ref="B2:B3">B1*2</f><v>4</v>',
                 '<f>B4*2</f><v>4</v>',
+            ).replace(
+                "</sheetData>",
+                '<row r="4"><c r="B4"><v>2</v></c></row></sheetData>',
             )
             map_gap_workbook = Path(directory) / "map-gap.xlsx"
             write_fixture(map_gap_workbook, map_gap_sheet)

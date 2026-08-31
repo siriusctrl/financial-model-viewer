@@ -758,11 +758,13 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     }
     if (transformation.status === "opaque") {
       const opaqueAction = database.unresolvedItems.find(
-        (item) =>
-          item.category === "formula" &&
-          item.status === "open" &&
-          item.attentionLevel === "action_required" &&
-          (item.targetId === transformation.id || item.targetId === transformation.outputMetricId),
+        (item) => {
+          const targets = new Set([item.targetId, ...(item.affectedTargetIds ?? [])]);
+          return item.category === "formula" &&
+            item.status === "open" &&
+            item.attentionLevel === "action_required" &&
+            (targets.has(transformation.id) || targets.has(transformation.outputMetricId));
+        },
       );
       if (!opaqueAction) {
         errors.push(
@@ -776,14 +778,22 @@ export function validateModelDatabase(input: unknown): ValidationResult {
         );
       } else {
         specificallyReportedUnresolvedIds.add(opaqueAction.id);
+        const actionOwner = opaqueAction.actionOwner === "model_owner"
+          ? "model owner"
+          : opaqueAction.actionOwner === "source_owner"
+            ? "source owner"
+            : opaqueAction.actionOwner === "extraction_agent"
+              ? "extraction agent"
+              : "unspecified owner";
         warnings.push(
           warning(
             "action_required",
             "transformation.opaque",
             transformation.id,
             "status",
-            `Formula translation remains blocked and is tracked by ${opaqueAction.id}`,
-            "Process the formula translation task, rerun extraction, and replace the opaque transformation with a replay-checked supported expression",
+            `Canonical recalculation is blocked and tracked by ${opaqueAction.id} (${actionOwner})`,
+            opaqueAction.nextAction
+              ?? "Resolve the named action, rerun extraction, and replace the opaque transformation with a replay-checked supported expression",
           ),
         );
       }
@@ -896,6 +906,16 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   for (const unresolved of database.unresolvedItems) {
     pushMissingReference(errors, unresolved.id, "modelId", unresolved.modelId, new Set(models.keys()), "Model");
     pushMissingReference(errors, unresolved.id, "targetId", unresolved.targetId, relationshipTargetIds, "Canonical object");
+    unresolved.affectedTargetIds?.forEach((targetId, index) =>
+      pushMissingReference(
+        errors,
+        unresolved.id,
+        `affectedTargetIds.${index}`,
+        targetId,
+        relationshipTargetIds,
+        "Canonical object",
+      ),
+    );
     pushMissingReference(errors, unresolved.id, "sourceArtifactId", unresolved.sourceArtifactId, sourceArtifactIds, "Source artifact");
     if (unresolved.status === "open") {
       for (const provenance of provenanceByTarget.get(unresolved.id) ?? []) {

@@ -39,7 +39,7 @@ The primary model table supports:
 Open attention is grouped into two explicit states:
 
 - `needs_review`: the extraction contains a stated, reversible interpretation. It can be confirmed only when `currentTreatment`, `impact`, and `nextAction` are present.
-- `action_required`: canonical ingestion is incomplete or blocked. It cannot be cleared in the viewer; fix the source or extraction and import the corrected database.
+- `action_required`: canonical ingestion is incomplete or blocked. The viewer says whether the extraction agent, model owner, or source owner must handle it; only model/source-owned actions require user coordination. It cannot be cleared in the viewer—fix the named cause and import the corrected database.
 
 Older JSON files with incomplete guidance remain inspectable, but their review items cannot be confirmed.
 

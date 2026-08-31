@@ -7,6 +7,7 @@ test-results/
 artifacts/verification/
 artifacts/extraction-preview/
 artifacts/meta-stress-test/
+artifacts/lite-model-extraction/
 __pycache__/
 .DS_Store
 *.local

@@ -528,7 +528,9 @@ function ObjectDetail({
       "currentTreatment",
       "impact",
       "nextAction",
+      "affectedTargetIds",
       "attentionLevel",
+      "actionOwner",
       "status",
     ].includes(key) && value !== undefined,
   );

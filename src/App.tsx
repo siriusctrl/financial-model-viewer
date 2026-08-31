@@ -92,14 +92,27 @@ function initialTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function attentionSummary(items: Array<{ attentionLevel: "needs_review" | "action_required" }>): string {
-  const actionRequired = items.filter(
-    (item) => item.attentionLevel === "action_required",
+function attentionSummary(items: Array<{
+  attentionLevel: "needs_review" | "action_required";
+  actionOwner?: "extraction_agent" | "model_owner" | "source_owner";
+}>): string {
+  const actionsFromYou = items.filter(
+    (item) => item.attentionLevel === "action_required"
+      && item.actionOwner !== "extraction_agent",
   ).length;
-  const needsReview = items.length - actionRequired;
+  const agentFollowUps = items.filter(
+    (item) => item.attentionLevel === "action_required"
+      && item.actionOwner === "extraction_agent",
+  ).length;
+  const needsReview = items.filter(
+    (item) => item.attentionLevel === "needs_review",
+  ).length;
   return [
-    actionRequired > 0
-      ? `${actionRequired} action${actionRequired === 1 ? "" : "s"} required`
+    actionsFromYou > 0
+      ? `${actionsFromYou} action${actionsFromYou === 1 ? "" : "s"} from you`
+      : null,
+    agentFollowUps > 0
+      ? `${agentFollowUps} agent follow-up${agentFollowUps === 1 ? "" : "s"}`
       : null,
     needsReview > 0
       ? `${needsReview} item${needsReview === 1 ? "" : "s"} to review`

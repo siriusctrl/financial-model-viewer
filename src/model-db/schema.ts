@@ -301,10 +301,12 @@ export const UnresolvedItemSchema = z
     impact: z.string().min(1).optional(),
     nextAction: z.string().min(1).optional(),
     targetId: IdSchema.optional(),
+    affectedTargetIds: z.array(IdSchema).min(1).optional(),
     sourceArtifactId: IdSchema.optional(),
     locator: SourceLocatorSchema.optional(),
     confidence: ConfidenceSchema.optional(),
     attentionLevel: z.enum(["needs_review", "action_required"]).default("needs_review"),
+    actionOwner: z.enum(["extraction_agent", "model_owner", "source_owner"]).optional(),
     status: z.enum(["open", "resolved", "dismissed"]),
   })
   .strict();

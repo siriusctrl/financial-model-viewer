@@ -282,6 +282,13 @@ class MappedWorkbookExtractor:
                     f"Attention item {canonical.get('id', '<unknown>')} must provide non-empty {field}"
                 )
         canonical.setdefault("attentionLevel", "needs_review")
+        if canonical["attentionLevel"] == "action_required" and canonical.get("actionOwner") not in {
+            "extraction_agent", "model_owner", "source_owner"
+        }:
+            raise ValueError(
+                f"Action item {canonical.get('id', '<unknown>')} must provide actionOwner as "
+                "extraction_agent, model_owner, or source_owner"
+            )
         self.database["unresolvedItems"].append(canonical)
         self._provenance(
             canonical["id"],
@@ -496,6 +503,7 @@ class MappedWorkbookExtractor:
             default_sheet=self.sheet_name,
             strict_grid=strict_grid,
             literal_coordinates=literal_coordinates,
+            available_sheets=set(selected_sheets),
         )
 
         comments_used: set[str] = set()
@@ -760,6 +768,7 @@ class MappedWorkbookExtractor:
                 "locator": _locator_from_key(coordinates[0]),
                 "confidence": 0.72,
                 "attentionLevel": "action_required",
+                "actionOwner": "extraction_agent",
                 "status": "open",
                 "nextAction": _opaque_next_action(blocker_kinds),
             })
@@ -1018,6 +1027,7 @@ class MappedWorkbookExtractor:
             "locator": _locator(sheet, cell=coordinate),
             "confidence": 0.2,
             "attentionLevel": "action_required",
+            "actionOwner": "source_owner",
             "status": "open",
             "nextAction": f"Recalculate `{sheet}!{coordinate}` in the source workbook, or explicitly omit it from `{metric_id}`.",
         })
@@ -1045,6 +1055,7 @@ class MappedWorkbookExtractor:
             "locator": _locator(sheet, cell=coordinate),
             "confidence": 0.2,
             "attentionLevel": "action_required",
+            "actionOwner": "source_owner",
             "status": "open",
             "nextAction": f"Provide the valid source value or corrected metric type at `{sheet}!{coordinate}` for `{metric_id}`.",
         })

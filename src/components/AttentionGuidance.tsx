@@ -1,4 +1,4 @@
-import { hasCompleteAttentionGuidance } from "../model-db/attention";
+import { actionOwnerCopy, hasCompleteAttentionGuidance } from "../model-db/attention";
 import type { UnresolvedItem } from "../model-db/types";
 import { Icon } from "./Icon";
 
@@ -18,6 +18,7 @@ export function AttentionGuidance({ item, onConfirmReview }: Props) {
       || "Re-run extraction with current treatment, impact, and a concrete next step.",
   };
   const isAction = item.attentionLevel === "action_required";
+  const owner = isAction ? actionOwnerCopy(item) : null;
 
   return (
     <div
@@ -25,6 +26,12 @@ export function AttentionGuidance({ item, onConfirmReview }: Props) {
       data-testid="attention-guidance"
       data-guidance-complete={guidance.complete}
     >
+      {owner && (
+        <div className={`attention-owner attention-owner--${item.actionOwner ?? "unassigned"}`}>
+          <strong>{owner.summary}</strong>
+          <span>{owner.detail}</span>
+        </div>
+      )}
       <dl>
         <div>
           <dt>Current treatment</dt>
@@ -42,8 +49,8 @@ export function AttentionGuidance({ item, onConfirmReview }: Props) {
 
       {isAction ? (
         <DecisionLock
-          title="Cannot be cleared in the viewer"
-          detail="Complete the step above and re-import the extraction."
+          title={owner?.title ?? "Cannot be cleared in the viewer"}
+          detail="Complete the required step above, then re-run and re-import the extraction."
         />
       ) : guidance.complete ? (
         <div className="attention-confirmation">
