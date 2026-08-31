@@ -100,7 +100,7 @@ function attentionSummary(items: Array<{
     (item) => item.attentionLevel === "action_required"
       && item.actionOwner !== "extraction_agent",
   ).length;
-  const agentFollowUps = items.filter(
+  const toolingIssues = items.filter(
     (item) => item.attentionLevel === "action_required"
       && item.actionOwner === "extraction_agent",
   ).length;
@@ -111,8 +111,8 @@ function attentionSummary(items: Array<{
     actionsFromYou > 0
       ? `${actionsFromYou} action${actionsFromYou === 1 ? "" : "s"} from you`
       : null,
-    agentFollowUps > 0
-      ? `${agentFollowUps} agent follow-up${agentFollowUps === 1 ? "" : "s"}`
+    toolingIssues > 0
+      ? `${toolingIssues} tooling issue${toolingIssues === 1 ? "" : "s"}`
       : null,
     needsReview > 0
       ? `${needsReview} item${needsReview === 1 ? "" : "s"} to review`

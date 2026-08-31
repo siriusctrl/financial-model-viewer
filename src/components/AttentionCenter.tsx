@@ -81,7 +81,7 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
     { id: "all", label: "All", count: items.length },
     { id: "model_owner", label: "Model decision", count: modelOwnerCount },
     { id: "source_owner", label: "Source repair", count: sourceOwnerCount },
-    { id: "extraction_agent", label: "Agent follow-up", count: agentCount },
+    { id: "extraction_agent", label: "Tooling issue", count: agentCount },
     { id: "unassigned", label: "Unassigned", count: unassignedCount },
     { id: "needs_review", label: "Review", count: reviewCount },
   ];
@@ -106,7 +106,7 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
             <span>Extraction attention</span>
             <h2 id="attention-center-title">What needs attention</h2>
             <p>
-              Each item names who should handle it. Agent follow-ups require no action from you.
+              Each item distinguishes a user decision from an extraction tooling limitation.
             </p>
           </div>
           <button
@@ -126,7 +126,7 @@ export function AttentionCenter({ items, open, onClose, onNavigate }: Props) {
           </div>
           <div className="attention-overview-agent">
             <strong>{agentCount}</strong>
-            <span><b>Agent follow-up</b><small>No action from you</small></span>
+            <span><b>Tooling issue</b><small>No action from you</small></span>
           </div>
           <div className="attention-overview-review">
             <strong>{reviewCount}</strong>

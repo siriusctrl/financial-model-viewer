@@ -1152,7 +1152,7 @@ class MappedWorkbookExtractor:
             "", "## Formula coverage", "",
             f"- {statuses['supported']} supported, {statuses['opaque']} opaque, and {statuses['unresolved']} unresolved transformations.",
             f"- {self._auto_translated_count} formulas were auto-translated from mapped cells and accepted only after cached-value replay matched the XLSX result.",
-            f"- {statuses['opaque']} engineering follow-up tasks were written to `formula-translation-tasks.json`; each opaque transformation must have exactly one task.",
+            f"- {statuses['opaque']} extraction tooling tasks were written to `formula-translation-tasks.json`; each opaque transformation must have exactly one task.",
             f"- {len(comments_used)} comments on selected observation cells were preserved as evidence and linked to those observations.",
             (
                 f"- {len(unmapped_comments)} comments outside the selected observation graph remain preserved "

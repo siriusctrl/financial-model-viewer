@@ -14,9 +14,9 @@ export const ACTION_OWNER_COPY: Record<ActionOwner, {
   detail: string;
 }> = {
   extraction_agent: {
-    title: "Agent follow-up",
-    summary: "No action from you · extraction agent",
-    detail: "The extraction agent must update the map or translator, replay the formula, and re-import the dataset.",
+    title: "Extraction tooling issue",
+    summary: "No action from you · tooling issue",
+    detail: "The extractor or map does not yet cover this case. Improve it only as an explicit code task, then replay and re-import the dataset.",
   },
   model_owner: {
     title: "Model decision",

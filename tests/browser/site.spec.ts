@@ -246,7 +246,7 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
   );
   const inspector = page.getByTestId("detail-panel");
   await expect(inspector.getByRole("button", { name: "Confirm interpretation" })).toHaveCount(0);
-  await expect(inspector).toContainText("No action from you · extraction agent");
+  await expect(inspector).toContainText("No action from you · tooling issue");
 });
 
 test("uses extracted sections for a structurally different bank model", async ({ page }) => {

@@ -16,11 +16,11 @@ Do not call a workbook concept ambiguous merely because the current map or trans
 Classify a failure first:
 
 - **Map coverage gap:** referenced cells have clear labels, periods, units, or formula roles, but are absent from the semantic map. Extend the map and rerun without asking an analyst.
-- **Translator coverage gap:** every referenced cell has semantics, but the deterministic translator does not yet cover the Excel syntax. Process its `formula-translation-tasks.json` item, prefer a reusable restricted-translator extension with replay tests, and rerun. Preserve the exact formula and cached value as `opaque` only if the safe-language blocker remains after that engineering pass; record an open `action_required` formula item because canonical ingestion is incomplete.
+- **Translator coverage gap:** every referenced cell has semantics, but the deterministic translator does not yet cover the Excel syntax. Inspect its `formula-translation-tasks.json` item and preserve the exact formula and cached value as `opaque` with an open `extraction_agent` action. Extend the reusable translator with replay tests only when tooling work is explicitly authorized, then rerun.
 - **Source ambiguity:** the workbook lacks enough evidence to name a metric, choose a period, determine actuality, or resolve conflicting meanings. Do not invent the answer; create an `action_required` item.
 - **Source defect:** a required cached value is missing, a cell contains an incompatible value, or a reference is broken. Do not fabricate a value; create an `action_required` item.
 
-An extractor limitation is an engineering task. A source ambiguity is an analyst task. Never turn the former into the latter.
+An extractor limitation is a tooling task. A source ambiguity is a model/source-owner task. Never turn the former into the latter, and never silently patch shared extraction code unless tooling changes are explicitly in scope.
 
 ## 2. Build the semantic cell graph
 
@@ -30,7 +30,7 @@ Start from the values the user wants to inspect, then follow formula references 
 2. Parse its references without executing or recalculating the workbook.
 3. For every referenced cell, determine whether it already maps to a metric-period point.
 4. Extend the map for high-confidence drivers, helper calculations, and copied values.
-5. Process every generated formula-translation task and repeat until every selected formula reference is mapped, deliberately opaque after an engineering pass, or explicitly action-required.
+5. Inspect every generated formula-translation task and repeat until every selected formula reference is mapped, deliberately opaque as a named tooling limitation, or explicitly action-required.
 6. Run cached-value replay after every expansion.
 
 Do not limit this closure to visible table rows. Inputs may live above the table, below it, in a vertical chain, in a driver block, in hidden rows, or on another worksheet.
@@ -111,9 +111,9 @@ Before accepting an opaque formula:
 3. Retry translation and cached-value replay.
 4. Open its generated `formula-translation-tasks.json` item. Extend the reusable restricted translator and tests when the syntax has defensible general semantics, then rerun extraction.
 5. Use a reviewed canonical expression only when it matches the source formula's meaning for that specific period type.
-6. Keep the formula opaque only when syntax remains outside `model-expression@0.1` after the engineering pass or source meaning is genuinely unresolved.
+6. Keep the formula opaque when syntax remains outside `model-expression@0.1` and tooling improvement is not in scope, or source meaning is genuinely unresolved.
 
-An opaque formula is always `action_required`: its cached value may support an honest preview, but its calculation did not enter the canonical graph. If only translator syntax is missing, name the engineering follow-up and do not ask the analyst to decide whether the formula should be translated. Do not resolve or dismiss the action while the transformation remains opaque. Missing values, broken references, or unknown business meaning are also `action_required`.
+An opaque formula is always `action_required`: its cached value may support an honest preview, but its calculation did not enter the canonical graph. If only translator syntax is missing, name the extraction tooling limitation and do not ask the analyst to decide whether the formula should be translated. Do not silently expand the shared translator during an ordinary extraction; preserve the task for an explicitly authorized optimization pass. Do not resolve or dismiss the action while the transformation remains opaque. Missing values, broken references, or unknown business meaning are also `action_required`.
 
 ## 6. Stop conditions
 
