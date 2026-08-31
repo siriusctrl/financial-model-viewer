@@ -521,6 +521,29 @@ class WorkbookToolTests(unittest.TestCase):
             self.assertTrue(opaque_action["impact"])
             self.assertIn("extend the restricted translator", opaque_action["nextAction"])
 
+            map_gap_sheet = SHEET_XML.replace(
+                '<f t="shared" si="0" ref="B2:B3">B1*2</f><v>4</v>',
+                '<f>B4*2</f><v>4</v>',
+            )
+            map_gap_workbook = Path(directory) / "map-gap.xlsx"
+            write_fixture(map_gap_workbook, map_gap_sheet)
+            map_gap_mapping = deepcopy(mapping())
+            map_gap_metric = map_gap_mapping["sections"][0]["metrics"][1]
+            del map_gap_metric["canonicalExpression"]
+            del map_gap_metric["dependencyMetricIds"]
+            map_gap = MappedWorkbookExtractor(map_gap_workbook, map_gap_mapping).extract()
+            map_gap_action = next(
+                item
+                for item in map_gap.database["unresolvedItems"]
+                if item["category"] == "formula"
+            )
+            self.assertIn("map-coverage item", map_gap_action["nextAction"])
+            self.assertIn("extend the private semantic map", map_gap_action["nextAction"])
+            self.assertIn(
+                "Expand the private semantic map",
+                map_gap.formula_translation_tasks["items"][0]["acceptance"][3],
+            )
+
             alternate_actuality_mapping = deepcopy(mapping())
             alternate_actuality_mapping["periods"][1]["actuality"] = "actual"
             alternate_actuality = MappedWorkbookExtractor(

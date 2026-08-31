@@ -45,6 +45,49 @@ STYLE_SEMANTICS = {
         "adjustable": False,
     },
 }
+MAP_COVERAGE_BLOCKERS = frozenset({
+    "unmapped_cells",
+    "unmapped_metric",
+    "unmapped_sheet",
+})
+
+
+def _formula_task_acceptance(blocker_kind: str) -> list[str]:
+    coverage_step = (
+        "Expand the private semantic map for defensible referenced cells; "
+        "do not ask an analyst to fix map coverage."
+        if blocker_kind in MAP_COVERAGE_BLOCKERS
+        else "Prefer a reusable deterministic translator extension over a one-cell exception."
+    )
+    return [
+        "Use only approved restricted-expression syntax; never emit executable TypeScript or JavaScript.",
+        "Preserve the original Excel formula and source-cell provenance.",
+        "Rerun extraction and accept the translation only when cached-value replay matches.",
+        coverage_step,
+        "Keep the linked action_required item open while the transformation remains opaque.",
+    ]
+
+
+def _opaque_next_action(blocker_kinds: set[str]) -> str:
+    if blocker_kinds and blocker_kinds <= MAP_COVERAGE_BLOCKERS:
+        return (
+            "No analyst decision is required for this map-coverage item. Engineering follow-up: "
+            "extend the private semantic map for the named worksheet cells, then rerun extraction "
+            "and cached-value replay."
+        )
+    if blocker_kinds.isdisjoint(MAP_COVERAGE_BLOCKERS):
+        return (
+            "No analyst decision is required for this translator-coverage item. Engineering follow-up: "
+            "extend the restricted translator for the named function or syntax/replay case, then rerun "
+            "cached-value replay."
+        )
+    return (
+        "No analyst decision is required. Engineering follow-up: inspect each formula task, extend the "
+        "private semantic map for unmapped cells, extend the restricted translator only for remaining "
+        "syntax/replay gaps, then rerun cached-value replay."
+    )
+
+
 def _without_prefix(value: str, prefix: str) -> str:
     return value[len(prefix):] if value.startswith(prefix) else value
 
@@ -552,13 +595,7 @@ class MappedWorkbookExtractor:
                                     "coordinates": list(blocker.coordinates),
                                 },
                                 "targetLanguage": "model-expression@0.1",
-                                "acceptance": [
-                                    "Use only approved restricted-expression syntax; never emit executable TypeScript or JavaScript.",
-                                    "Preserve the original Excel formula and source-cell provenance.",
-                                    "Rerun extraction and accept the translation only when cached-value replay matches.",
-                                    "Prefer a reusable deterministic translator extension over a one-cell exception.",
-                                    "Keep the linked action_required item open while the transformation remains opaque.",
-                                ],
+                                "acceptance": _formula_task_acceptance(blocker.kind),
                             })
                     elif style_record.get("semantic", {}).get("valueType"):
                         observation["valueType"] = style_record["semantic"]["valueType"]
@@ -642,6 +679,11 @@ class MappedWorkbookExtractor:
                 f"{count} formula{'s' if count != 1 else ''}: {reason}"
                 for reason, count in sorted(blocker_counts.items())
             )
+            blocker_kinds = {
+                item["blocker"]["kind"]
+                for item in formula_translation_items
+                if item["metricId"] == metric_id
+            }
             self._unresolved({
                 "id": f"unresolved_opaque_formula_{suffix}",
                 "modelId": model["id"],
@@ -670,11 +712,7 @@ class MappedWorkbookExtractor:
                 "confidence": 0.72,
                 "attentionLevel": "action_required",
                 "status": "open",
-                "nextAction": (
-                    "No analyst decision is required for this translator-coverage item. "
-                    "Engineering follow-up: extend the restricted translator for the named function(s), "
-                    "then rerun cached-value replay."
-                ),
+                "nextAction": _opaque_next_action(blocker_kinds),
             })
         unmapped_comments = sorted(set(comments) - comments_used)
         for item in self.mapping.get("unresolvedItems", []):
@@ -691,7 +729,8 @@ class MappedWorkbookExtractor:
             "extractionRunId": run["id"],
             "targetLanguage": "model-expression@0.1",
             "instructions": (
-                "The extraction agent must resolve reusable translator-coverage items, rerun extraction, "
+                "The extraction agent must resolve map-coverage and reusable translator-coverage "
+                "items, rerun extraction, "
                 "and require cached-value replay before treating this bundle as complete. "
                 "Do not execute source formulas or emit arbitrary TypeScript/JavaScript."
             ),
