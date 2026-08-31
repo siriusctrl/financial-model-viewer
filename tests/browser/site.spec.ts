@@ -26,6 +26,12 @@ test("opens on the extracted model table and inspects a sourced cell", async ({ 
   await expect(page.getByTestId("financial-table-view")).toBeVisible();
   await expect(page.getByText("Revenue build", { exact: true })).toBeVisible();
   await expect(page.getByText("Gross profit", { exact: true }).first()).toBeVisible();
+  const valueTypeKey = page.getByTestId("value-type-key");
+  await expect(valueTypeKey).toContainText("Reported");
+  await expect(valueTypeKey).toContainText("Assumption");
+  await expect(
+    page.getByTitle(/Reported · obs_northstar_subscription_revenue_fy2022/),
+  ).toHaveClass(/reported/);
   const inspector = page.getByTestId("detail-panel");
   await expect(inspector).not.toBeVisible();
 

@@ -79,6 +79,16 @@ export function FinancialTable({
     [normalizedSearch, projection.sections],
   );
   const shownRows = sections.flatMap((section) => section.rows);
+  const displayedValueTypes = useMemo(
+    () => new Set(
+      projection.rows.flatMap((row) =>
+        Object.values(row.observations)
+          .filter((observation): observation is Observation => Boolean(observation))
+          .map((observation) => observation.valueType),
+      ),
+    ),
+    [projection.rows],
+  );
   const visibleLineageInputCount = shownRows.reduce(
     (count, row) => count + Object.values(row.observations).filter(
       (observation) => observation && lineageInputIds.has(observation.id),
@@ -131,6 +141,24 @@ export function FinancialTable({
           )}
         </label>
         <div className="table-context">
+          {(displayedValueTypes.has("reported") || displayedValueTypes.has("assumption")) && (
+            <span
+              className="value-type-key"
+              data-testid="value-type-key"
+              aria-label="Value type legend"
+            >
+              {displayedValueTypes.has("reported") && (
+                <b className="value-type-key__item value-type-key__item--reported">
+                  <i aria-hidden="true" /> Reported
+                </b>
+              )}
+              {displayedValueTypes.has("assumption") && (
+                <b className="value-type-key__item value-type-key__item--assumption">
+                  <i aria-hidden="true" /> Assumption
+                </b>
+              )}
+            </span>
+          )}
           <span>{shownRows.length} metrics</span>
           <span>{projection.periods.length} periods</span>
           <span>{projection.presentation ? "Extracted layout" : "Source-order fallback"}</span>
