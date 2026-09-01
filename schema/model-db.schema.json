@@ -1,5 +1,5 @@
 {
-  "$id": "https://siriusctrl.github.io/financial-model-viewer/schema/model-db.schema.json",
+  "$id": "https://siriusctrl.github.io/ledgerglass/schema/model-db.schema.json",
   "title": "Financial Model Semantic Database",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",

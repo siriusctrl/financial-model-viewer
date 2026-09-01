@@ -13,7 +13,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `src/model-db/queries.ts`: visualization-neutral query layer. UI code consumes projections from here.
 - `src/model-db/attention.ts`: shared domain guard for complete attention guidance.
 - `tablePresentations` in `src/model-db/schema.ts`: optional non-canonical table sections and metric order captured during extraction.
-- `src/visualizations/`: table-first financial model viewer and optional dependency graph projection.
+- `src/visualizations/`: Ledgerglass table view and optional dependency graph projection.
 - `src/components/ObjectDetailPanel.tsx`: dismissible slide-over for object/property inspection, local value edits, and reverse lineage.
 - `src/components/AttentionGuidance.tsx`: action/review explanation and guarded review confirmation.
 - `src/components/AttentionCenter.tsx`: global open-attention queue and model/source navigation.

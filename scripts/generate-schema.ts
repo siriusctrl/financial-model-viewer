@@ -5,7 +5,7 @@ import { ModelDatabaseJsonSchema } from "../src/model-db/schema";
 const outputPath = resolve("schema/model-db.schema.json");
 const output = `${JSON.stringify(
   {
-    $id: "https://siriusctrl.github.io/financial-model-viewer/schema/model-db.schema.json",
+    $id: "https://siriusctrl.github.io/ledgerglass/schema/model-db.schema.json",
     title: "Financial Model Semantic Database",
     ...ModelDatabaseJsonSchema,
   },

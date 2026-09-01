@@ -5,8 +5,8 @@ import { createServer } from "node:http";
 import { extname, join, normalize, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const PREVIEW_FORMAT = "financial-model-viewer-preview@0.1";
-const MARKER_FILENAME = ".financial-model-viewer-preview.json";
+const PREVIEW_FORMAT = "ledgerglass-preview@0.1";
+const MARKER_FILENAME = ".ledgerglass-preview.json";
 const CONTENT_TYPES = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
@@ -29,7 +29,7 @@ The server binds to 127.0.0.1 only. Stop it with Ctrl-C.`);
 function readMarker(viewerDirectory) {
   const markerPath = join(viewerDirectory, MARKER_FILENAME);
   if (!existsSync(markerPath)) {
-    throw new Error(`Not a generated financial-model preview: missing ${markerPath}`);
+    throw new Error(`Not a generated Ledgerglass preview: missing ${markerPath}`);
   }
   const marker = JSON.parse(readFileSync(markerPath, "utf8"));
   if (marker.format !== PREVIEW_FORMAT) {

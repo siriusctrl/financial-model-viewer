@@ -82,13 +82,13 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - Write `model-db.json`, `extraction-report.md`, and `formula-translation-tasks.json` next to the requested output.
    - While iterating on the database, run `npm run validate -- path/to/model-db.json` for fast object-level repair output.
    - Before reporting completion, run `npm run extraction:check -- path/to/output-directory`. This loads `model-db.json` through the viewer's runtime contract and checks that `extraction-report.md` has every required, non-empty section in contract order.
-   - The checker resolves repository code relative to itself, so an agent outside the repository root may run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/check-extraction.mjs path/to/output-directory`.
+   - The checker resolves repository code relative to itself, so an agent outside the repository root may run `node /path/to/ledgerglass/skills/extract-financial-model/scripts/check-extraction.mjs path/to/output-directory`.
    - From the repository root, run `npm run check` after changing schema, fixtures, expressions, validator, or query code.
    - Label every open report item `NEEDS REVIEW` or `ACTION REQUIRED`, and include the action owner for every required action. The strict package checker rejects any emitted attention item without `currentTreatment`, `impact`, or `nextAction`, and rejects an action without `actionOwner`. Keep the extraction run `completed_with_issues` while either kind remains open. Do not report success while validator errors, silent presentation fallbacks, or missing-lineage objects remain.
 
 8. Compile and visually review.
    - Run `npm run extraction:preview -- path/to/output-directory`. This reruns the strict extraction checker, builds a local static viewer, exercises it with Playwright, and writes `viewer/review/` screenshots plus `review.json`.
-   - From outside the repository, run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/build-preview.mjs path/to/output-directory`; the script resolves the repository toolchain itself.
+   - From outside the repository, run `node /path/to/ledgerglass/skills/extract-financial-model/scripts/build-preview.mjs path/to/output-directory`; the script resolves the repository toolchain itself.
    - Inspect `viewer/review/contact-sheet.png` and the individual desktop/mobile table, inspector, and dependency-graph screenshots with an image-viewing tool. An automated pass is not visual acceptance.
    - Fix extraction data when the UI faithfully exposes wrong grouping, order, period, unit, source, or lineage. Fix repository query/UI code only when correct data is projected incorrectly; then run the repository checks and rebuild the preview.
    - Rerun until both the extraction checker and visual review pass. Never edit compiled `viewer/` files by hand.

@@ -95,7 +95,7 @@ function periodTypeLabel(type: Period["type"]): string {
 
 function initialTheme(): Theme {
   try {
-    const saved = window.localStorage.getItem("financial-model-viewer-theme");
+    const saved = window.localStorage.getItem("ledgerglass-theme");
     if (saved === "light" || saved === "dark") return saved;
   } catch {
     // Storage can be unavailable in hardened browser contexts; system preference still works.
@@ -218,7 +218,7 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
     try {
-      window.localStorage.setItem("financial-model-viewer-theme", theme);
+      window.localStorage.setItem("ledgerglass-theme", theme);
     } catch {
       // The active theme remains valid for this tab when storage is unavailable.
     }
@@ -477,10 +477,10 @@ export default function App() {
     <div className="app-shell">
       <header className="viewer-header">
         <div className="product-lockup">
-          <span className="product-monogram">FM</span>
+          <span className="product-monogram">LG</span>
           <span>
-            <strong>Financial model viewer</strong>
-            <small>Semantic database inspector</small>
+            <strong>Ledgerglass</strong>
+            <small>Financial model inspection</small>
           </span>
         </div>
 

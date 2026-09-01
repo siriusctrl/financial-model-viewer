@@ -1,8 +1,8 @@
-# Financial Model Semantic Database & Viewer
+# Ledgerglass
 
 A dedicated viewer for turning analyst financial models into a validated semantic database, then inspecting the result as a compact financial table with formulas, lineage, provenance, and explicit review items.
 
-**Public viewer:** <https://siriusctrl.github.io/financial-model-viewer/>
+**Public viewer:** <https://siriusctrl.github.io/ledgerglass/>
 
 The project is intentionally narrower than Excel: it does not execute macros, provide full Excel calculation compatibility, or act as a collaborative production database.
 

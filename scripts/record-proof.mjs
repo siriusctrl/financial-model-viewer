@@ -6,7 +6,7 @@ import sharp from "sharp";
 
 const root = resolve(".");
 const outputDirectory = resolve("artifacts/verification");
-const baseUrl = "http://127.0.0.1:4173/financial-model-viewer/";
+const baseUrl = "http://127.0.0.1:4173/ledgerglass/";
 
 await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });

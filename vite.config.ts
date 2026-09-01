@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/financial-model-viewer/",
+  base: "/ledgerglass/",
   build: {
     sourcemap: true,
   },
