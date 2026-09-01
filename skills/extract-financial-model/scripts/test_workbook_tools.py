@@ -14,6 +14,14 @@ from mapped_workbook import MappedWorkbookExtractor, _is_specific_blue_font
 from ooxml import WorkbookPackage, translate_shared_formula
 
 
+def observations(database):
+    return [
+        {**{key: value for key, value in series.items() if key != "points"}, **point}
+        for series in database["observationSeries"]
+        for point in series["points"]
+    ]
+
+
 WORKBOOK_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
@@ -94,7 +102,7 @@ def write_fixture(path: Path, sheet_xml: str = SHEET_XML) -> None:
 
 def mapping() -> dict:
     return {
-        "format": "financial-model-workbook-map@0.1",
+        "format": "financial-model-workbook-map@0.2",
         "dataset": {
             "id": "dataset_test",
             "name": "Test",
@@ -513,7 +521,7 @@ class WorkbookToolTests(unittest.TestCase):
 
             result = MappedWorkbookExtractor(workbook, explicit_mapping).extract()
 
-            self.assertEqual(len(result.database["observations"]), 4)
+            self.assertEqual(len(observations(result.database)), 4)
             self.assertEqual(
                 result.database["transformations"][1]["expression"],
                 '(period_ref("metric_test_output", "period_fy2024") * 2)',
@@ -575,9 +583,10 @@ class WorkbookToolTests(unittest.TestCase):
             self.assertEqual(style_inventory["sheets"][0]["cells"][2], {"cell": "C1", "styleId": 2})
 
             result = MappedWorkbookExtractor(workbook, mapping()).extract()
-            self.assertEqual(len(result.database["observations"]), 4)
-            self.assertEqual(result.database["observations"][3]["value"], 6)
-            self.assertEqual(result.database["transformations"][0]["originalExpression"], "=B1*2")
+            extracted_observations = observations(result.database)
+            self.assertEqual(len(extracted_observations), 4)
+            self.assertEqual(extracted_observations[3]["value"], 6)
+            self.assertEqual(result.database["transformations"][0]["sourceExpressions"]["period_fy2024"], "=B1*2")
             self.assertEqual(result.database["transformations"][0]["status"], "supported")
             self.assertEqual(result.database["evidence"][0]["excerpt"], "Reviewed output")
             self.assertEqual(result.database["unresolvedItems"], [])
@@ -610,11 +619,15 @@ class WorkbookToolTests(unittest.TestCase):
             automatic = MappedWorkbookExtractor(workbook, automatic_mapping).extract()
             self.assertEqual(
                 [item["status"] for item in automatic.database["transformations"]],
-                ["supported", "supported"],
+                ["supported"],
             )
             self.assertEqual(
                 automatic.database["transformations"][0]["expression"],
                 '(ref("metric_test_input") * 2)',
+            )
+            self.assertEqual(
+                set(automatic.database["transformations"][0]["sourceExpressions"]),
+                {"period_fy2024", "period_fy2025"},
             )
             self.assertIn("2 formulas were auto-translated", automatic.report)
 
@@ -734,7 +747,7 @@ class WorkbookToolTests(unittest.TestCase):
                 "status": "open",
                 "attentionLevel": "needs_review",
             }]
-            with self.assertRaisesRegex(ValueError, "conflicting nextAction"):
+            with self.assertRaisesRegex(ValueError, "analystQuestion is not part"):
                 MappedWorkbookExtractor(workbook, conflicting_attention_mapping).extract()
 
             invalid_mapping = deepcopy(mapping())

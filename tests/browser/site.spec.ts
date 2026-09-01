@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { gzipSync } from "node:zlib";
 import sample from "../../examples/sample-model-db.json" with { type: "json" };
+import { findObservationPoint, observations } from "../../src/model-db/access";
 import type { ModelDatabase } from "../../src/model-db/types";
 
 async function uploadJson(
@@ -13,6 +15,22 @@ async function uploadJson(
       const input = element as HTMLInputElement;
       const transfer = new DataTransfer();
       transfer.items.add(new File([file.contents], file.name, { type: "application/json" }));
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    { name, contents },
+  );
+}
+
+async function uploadGzip(page: Page, name: string, value: unknown) {
+  const contents = gzipSync(JSON.stringify(value)).toString("base64");
+  await page.getByTestId("json-file-input").evaluate(
+    (element, file) => {
+      const binary = atob(file.contents);
+      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+      const input = element as HTMLInputElement;
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], file.name, { type: "application/gzip" }));
       input.files = transfer.files;
       input.dispatchEvent(new Event("change", { bubbles: true }));
     },
@@ -107,9 +125,10 @@ test("sizes table columns from the active model content", async ({ page }) => {
   const metric = imported.metrics.find(
     (candidate) => candidate.id === "metric_northstar_subscription_revenue",
   );
-  const observation = imported.observations.find(
-    (candidate) => candidate.id === "obs_northstar_subscription_revenue_fy2022",
-  );
+  const observation = findObservationPoint(
+    imported,
+    "obs_northstar_subscription_revenue_fy2022",
+  )?.point;
   expect(metric).toBeDefined();
   expect(observation).toBeDefined();
   metric!.name = "Enterprise subscription revenue retention bridge";
@@ -163,7 +182,7 @@ test("edits an input, propagates formulas, and exports the local draft", async (
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: /Export draft/ }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("model-db.edited.json");
+  expect(download.suggestedFilename()).toBe("model-db.edited.json.gz");
 });
 
 test("shows actual workbook inputs for a derived cell", async ({ page }) => {
@@ -194,7 +213,7 @@ test("shows actual workbook inputs for a derived cell", async ({ page }) => {
   await expect(lineage).toContainText("Model!E10");
   await expect(lineage).toContainText("Cost of revenue");
   await expect(lineage).toContainText("Model!E16");
-  await expect(lineage.getByText("=B10-B16", { exact: true })).toBeVisible();
+  await expect(lineage.getByText("=E10-E16", { exact: true })).toBeVisible();
 });
 
 test("labels a literal source formula as a formula constant", async ({ page }) => {
@@ -203,9 +222,9 @@ test("labels a literal source formula as a formula constant", async ({ page }) =
   const transformation = imported.transformations.find(
     (item) => item.id === "transformation_northstar_gross_profit",
   )!;
-  transformation.originalExpression = "=-974.6";
+  if (transformation.status !== "supported") throw new Error("Expected supported fixture");
+  transformation.sourceExpressions.period_fy2025 = "=-974.6";
   transformation.expression = "(-974.6)";
-  transformation.dependencyMetricIds = [];
 
   await uploadJson(page, "formula-constant.json", imported);
   await page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/).click();
@@ -218,13 +237,17 @@ test("labels a literal source formula as a formula constant", async ({ page }) =
 test("labels opaque formulas without inventing canonical lineage", async ({ page }) => {
   await page.goto("./");
   const imported = structuredClone(sample) as ModelDatabase;
-  const transformation = imported.transformations.find(
+  const transformationIndex = imported.transformations.findIndex(
     (item) => item.id === "transformation_northstar_gross_profit",
   );
-  if (!transformation) throw new Error("Missing representative transformation");
-  transformation.status = "opaque";
-  transformation.expression = "0";
-  transformation.dependencyMetricIds = [];
+  if (transformationIndex < 0) throw new Error("Missing representative transformation");
+  const transformation = imported.transformations[transformationIndex];
+  imported.transformations[transformationIndex] = {
+    id: transformation.id,
+    outputMetricId: transformation.outputMetricId,
+    sourceExpressions: transformation.sourceExpressions,
+    status: "opaque",
+  };
   imported.unresolvedItems.push({
     id: "unresolved_northstar_gross_profit_formula",
     modelId: "model_northstar_cloud",
@@ -244,13 +267,9 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
     (run) => run.id === "run_northstar_2025_03_15",
   )!.status = "completed_with_issues";
   imported.provenanceRecords.push({
-    id: "provenance_unresolved_northstar_gross_profit_formula",
     targetId: "unresolved_northstar_gross_profit_formula",
-    sourceArtifactId: "artifact_northstar_workbook",
+    contextId: imported.provenanceContexts[0].id,
     locator: { sheet: "Model", cell: "E17" },
-    extractionRunId: "run_northstar_2025_03_15",
-    confidence: 0.72,
-    reviewStatus: "unreviewed",
   });
 
   await uploadJson(page, "opaque-formula.json", imported);
@@ -419,8 +438,11 @@ test("separates annual and quarterly periods in a mixed-frequency model", async 
     startDate: "2024-10-01",
     endDate: "2024-12-31",
   });
-  imported.observations.push({
-    ...imported.observations.find((item) => item.id === "obs_northstar_revenue_fy2024")!,
+  const revenueSeries = imported.observationSeries.find(
+    (series) => series.metricId === "metric_northstar_revenue",
+  )!;
+  revenueSeries.points.push({
+    ...revenueSeries.points.find((item) => item.id === "obs_northstar_revenue_fy2024")!,
     id: "obs_northstar_revenue_q4_2024",
     periodId: "period_q4_2024",
     value: 360,
@@ -428,29 +450,20 @@ test("separates annual and quarterly periods in a mixed-frequency model", async 
   const transformation = imported.transformations.find(
     (item) => item.id === "transformation_northstar_gross_profit",
   );
-  if (!transformation) throw new Error("Missing representative transformation");
+  if (!transformation || transformation.status !== "supported") throw new Error("Missing representative transformation");
   transformation.expression =
     'period_ref("metric_northstar_revenue", "period_q4_2024")';
-  transformation.dependencyMetricIds = ["metric_northstar_revenue"];
-  transformation.originalExpression = "=D10";
+  transformation.sourceExpressions.period_fy2025 = "=D10";
   imported.provenanceRecords.push(
     {
-      id: "provenance_period_q4_2024",
       targetId: "period_q4_2024",
-      sourceArtifactId: "artifact_northstar_workbook",
+      contextId: imported.provenanceContexts[0].id,
       locator: { sheet: "Model", cell: "D3" },
-      extractionRunId: "run_northstar_2025_03_15",
-      confidence: 0.99,
-      reviewStatus: "unreviewed",
     },
     {
-      id: "provenance_obs_northstar_revenue_q4_2024",
       targetId: "obs_northstar_revenue_q4_2024",
-      sourceArtifactId: "artifact_northstar_workbook",
+      contextId: imported.provenanceContexts[0].id,
       locator: { sheet: "Model", cell: "D10" },
-      extractionRunId: "run_northstar_2025_03_15",
-      confidence: 0.99,
-      reviewStatus: "unreviewed",
     },
   );
 
@@ -501,7 +514,7 @@ test("navigates lineage across worksheet views and returns through inspector his
     sections: profitSections,
   });
   const revenueObservationIds = new Set(
-    imported.observations
+    observations(imported)
       .filter((item) => item.metricId === "metric_northstar_revenue")
       .map((item) => item.id),
   );
@@ -572,6 +585,9 @@ test("surfaces an explicitly acknowledged presentation fallback", async ({ page 
     modelId: "model_northstar_cloud",
     category: "presentation",
     description: "The workbook does not expose defensible table sections.",
+    currentTreatment: "Metrics use deterministic source-row order without worksheet sections.",
+    impact: "The fallback preserves data but may not match the analyst's intended grouping.",
+    nextAction: "Confirm that source-row order is acceptable for this model.",
     sourceArtifactId: "artifact_northstar_workbook",
     attentionLevel: "needs_review",
     status: "open",
@@ -580,13 +596,9 @@ test("surfaces an explicitly acknowledged presentation fallback", async ({ page 
     (run) => run.id === "run_northstar_2025_03_15",
   )!.status = "completed_with_issues";
   imported.provenanceRecords.push({
-    id: "provenance_unresolved_northstar_table_presentation",
     targetId: "unresolved_northstar_table_presentation",
-    sourceArtifactId: "artifact_northstar_workbook",
+    contextId: imported.provenanceContexts[0].id,
     locator: { sheet: "Model" },
-    extractionRunId: "run_northstar_2025_03_15",
-    confidence: 0.4,
-    reviewStatus: "unreviewed",
   });
 
   await uploadJson(page, "fallback-model.json", imported);
@@ -597,9 +609,8 @@ test("surfaces an explicitly acknowledged presentation fallback", async ({ page 
   await page.getByTestId("attention-trigger").click();
   await page.locator('[data-attention-id="unresolved_northstar_table_presentation"]').click();
   const inspector = page.getByTestId("detail-panel");
-  await expect(inspector).toContainText("Confirmation unavailable");
-  await expect(inspector).toContainText("This older dataset does not state how the item is currently treated.");
-  await expect(inspector.getByRole("button", { name: "Confirm interpretation" })).toHaveCount(0);
+  await expect(inspector).toContainText("Metrics use deterministic source-row order");
+  await expect(inspector.getByRole("button", { name: "Confirm interpretation" })).toBeVisible();
 });
 
 test("keeps the current preview when an uploaded file is malformed", async ({ page }) => {
@@ -611,16 +622,28 @@ test("keeps the current preview when an uploaded file is malformed", async ({ pa
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
 });
 
+test("opens a gzip-compressed 0.2 database entirely in the browser", async ({ page }) => {
+  await page.goto("./");
+  const imported = structuredClone(sample);
+  imported.dataset.name = "Compressed analyst model";
+  await uploadGzip(page, "compressed-model.json.gz", imported);
+
+  await expect(page.getByTestId("import-notice")).toContainText(
+    "Loaded compressed-model.json.gz",
+  );
+  await expect(page.locator(".dataset-breadcrumb")).toContainText("Compressed analyst model");
+});
+
 test("shows semantic errors before replacing the preview", async ({ page }) => {
   await page.goto("./");
   const invalid = structuredClone(sample);
-  invalid.observations[0].metricId = "metric_missing_reference";
+  invalid.observationSeries[0].metricId = "metric_missing_reference";
 
   await uploadJson(page, "broken-reference.json", invalid);
 
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("Dataset did not validate");
-  await expect(alert).toContainText(`${invalid.observations[0].id}.metricId`);
+  await expect(alert).toContainText(`${invalid.observationSeries[0].points[0].id}.metricId`);
   await expect(alert).toContainText("Metric metric_missing_reference does not exist");
   await expect(page.locator(".dataset-breadcrumb")).toContainText(sample.dataset.name);
 });

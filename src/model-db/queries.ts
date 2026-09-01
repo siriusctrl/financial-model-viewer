@@ -7,7 +7,7 @@ import type {
   ModelDatabase,
   Observation,
   Period,
-  ProvenanceRecord,
+  ResolvedProvenanceRecord,
   Relationship,
   Scenario,
   SourceArtifact,
@@ -17,6 +17,12 @@ import type {
   UnresolvedItem,
 } from "./types";
 import { ModelCalculator } from "./calculation";
+import {
+  observations,
+  resolveProvenanceRecord,
+  sourceExpressionFor,
+  transformationDependencyMetricIds,
+} from "./access";
 
 export type MetricSeriesQuery = {
   modelId: string;
@@ -75,12 +81,12 @@ export type DependencyGraphProjection = {
   focusMetric: Metric;
   nodes: Metric[];
   edges: DependencyEdge[];
-  transformations: Transformation[];
+  transformations: Array<Extract<Transformation, { status: "supported" }>>;
 };
 
 export type ProvenanceProjection = {
   records: Array<{
-    provenance: ProvenanceRecord;
+    provenance: ResolvedProvenanceRecord;
     source: SourceArtifact;
     extractionRun: ExtractionRun;
   }>;
@@ -119,21 +125,28 @@ export type ObservationDetailProjection = {
 
 const SOURCE_FORMULA_NUMBER = /(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?%?/gi;
 
-function isSourceFormulaConstant(originalExpression: string | undefined): boolean {
-  if (!originalExpression?.trimStart().startsWith("=")) return false;
-  const body = originalExpression.trimStart().slice(1);
+function isSourceFormulaConstant(sourceExpression: string | undefined): boolean {
+  if (!sourceExpression?.trimStart().startsWith("=")) return false;
+  const body = sourceExpression.trimStart().slice(1);
   const remainder = body
     .replace(SOURCE_FORMULA_NUMBER, "")
     .replace(/[()+\-*/^\s]/g, "");
   return body.length > 0 && remainder.length === 0;
 }
 
-function formulaKind(transformation: Transformation): "constant" | "expression" {
-  if (transformation.status !== "supported" || transformation.dependencyMetricIds.length > 0) {
+function formulaKind(
+  transformation: Transformation,
+  periodId: string,
+): "constant" | "expression" {
+  if (
+    transformation.status !== "supported"
+    || transformationDependencyMetricIds(transformation).length > 0
+  ) {
     return "expression";
   }
-  if (transformation.originalExpression) {
-    return isSourceFormulaConstant(transformation.originalExpression)
+  const sourceExpression = sourceExpressionFor(transformation, periodId);
+  if (sourceExpression) {
+    return isSourceFormulaConstant(sourceExpression)
       ? "constant"
       : "expression";
   }
@@ -211,6 +224,7 @@ export class ModelDatabaseQueries {
   private readonly periods: Map<string, Period>;
   private readonly scenarios: Map<string, Scenario>;
   private readonly observations: Map<string, Observation>;
+  private readonly observationList: Observation[];
   private readonly transformations: Map<string, Transformation>;
   private readonly relationships: Relationship[];
   private readonly objects: Map<string, CanonicalObject | SourceArtifact | ExtractionRun>;
@@ -223,7 +237,8 @@ export class ModelDatabaseQueries {
     this.metrics = new Map(database.metrics.map((item) => [item.id, item]));
     this.periods = new Map(database.periods.map((item) => [item.id, item]));
     this.scenarios = new Map(database.scenarios.map((item) => [item.id, item]));
-    this.observations = new Map(database.observations.map((item) => [item.id, item]));
+    this.observationList = observations(database);
+    this.observations = new Map(this.observationList.map((item) => [item.id, item]));
     this.transformations = new Map(
       database.transformations.map((item) => [item.id, item]),
     );
@@ -236,7 +251,7 @@ export class ModelDatabaseQueries {
       database.metrics,
       database.periods,
       database.scenarios,
-      database.observations,
+      this.observationList,
       database.transformations,
       database.relationships,
       database.sourceArtifacts,
@@ -257,7 +272,7 @@ export class ModelDatabaseQueries {
 
   getEntities(modelId: string): Entity[] {
     const entityIds = new Set(
-      this.database.observations
+      this.observationList
         .filter((item) => item.modelId === modelId)
         .map((item) => item.entityId),
     );
@@ -284,18 +299,22 @@ export class ModelDatabaseQueries {
     return this.objects.get(targetId);
   }
 
+  getObservation(observationId: string): Observation | undefined {
+    return this.observations.get(observationId);
+  }
+
   getModelOverview(modelId: string): ModelOverviewProjection {
     const model = this.getModel(modelId);
     const entity = this.entities.get(model.primaryEntityId);
     if (!entity) throw new Error(`Model ${modelId} has no primary entity`);
-    const observations = this.database.observations.filter(
+    const observations = this.observationList.filter(
       (item) => item.modelId === modelId,
     );
     const metricIds = new Set(observations.map((item) => item.metricId));
     const transformations = this.database.transformations.filter(
       (item) =>
         metricIds.has(item.outputMetricId) ||
-        item.dependencyMetricIds.some((metricId) => metricIds.has(metricId)),
+        transformationDependencyMetricIds(item).some((metricId) => metricIds.has(metricId)),
     );
     const targetIds = new Set([
       modelId,
@@ -329,7 +348,8 @@ export class ModelDatabaseQueries {
           item.attentionLevel === "action_required",
       ).length,
       unreviewedCount: this.database.provenanceRecords.filter(
-        (item) => targetIds.has(item.targetId) && item.reviewStatus === "unreviewed",
+        (item) => targetIds.has(item.targetId)
+          && resolveProvenanceRecord(this.database, item).reviewStatus === "unreviewed",
       ).length,
     };
   }
@@ -375,7 +395,7 @@ export class ModelDatabaseQueries {
           ?? targetObservation?.modelId
           ?? (item.targetId && this.models.has(item.targetId) ? item.targetId : undefined)
           ?? (metric
-            ? this.database.observations.find(
+            ? this.observationList.find(
                 (observation) => observation.metricId === metric.id,
               )?.modelId
             : undefined);
@@ -429,7 +449,7 @@ export class ModelDatabaseQueries {
     const model = this.getModel(query.modelId);
     const entityId = query.entityId ?? model.primaryEntityId;
     const asOf = query.asOf ?? model.asOf;
-    const observations = this.database.observations.filter(
+    const observations = this.observationList.filter(
       (item) =>
         item.modelId === query.modelId &&
         item.metricId === query.metricId &&
@@ -468,7 +488,7 @@ export class ModelDatabaseQueries {
       ? new Set(presentation.sections.flatMap((section) => section.metricIds))
       : undefined;
     const types = new Map<Period["type"], Period>();
-    for (const observation of this.database.observations) {
+    for (const observation of this.observationList) {
       if (observation.modelId !== modelId) continue;
       if (entityId && observation.entityId !== entityId) continue;
       if (metricIds && !metricIds.has(observation.metricId)) continue;
@@ -484,7 +504,7 @@ export class ModelDatabaseQueries {
 
   private visibleMetricIds(modelId: string): Set<string> {
     return new Set(
-      this.database.observations
+      this.observationList
         .filter((item) => item.modelId === modelId)
         .map((item) => item.metricId),
     );
@@ -737,7 +757,7 @@ export class ModelDatabaseQueries {
         ? this.scenarios.get(observation.scenarioId)
         : undefined,
       transformation,
-      formulaKind: transformation ? formulaKind(transformation) : undefined,
+      formulaKind: transformation ? formulaKind(transformation, observation.periodId) : undefined,
       provenance: this.getProvenance(observation.id),
       inputs,
       dependents,
@@ -777,7 +797,7 @@ export class ModelDatabaseQueries {
           (item) => item.status === "supported" && item.outputMetricId === current.metricId,
         )) {
           transformationIds.add(transformation.id);
-          for (const dependencyMetricId of transformation.dependencyMetricIds) {
+          for (const dependencyMetricId of transformationDependencyMetricIds(transformation)) {
             if (dependencyMetricId === transformation.outputMetricId) continue;
             edges.push({
               fromId: dependencyMetricId,
@@ -792,7 +812,8 @@ export class ModelDatabaseQueries {
 
       if (direction === "downstream" || direction === "both") {
         for (const transformation of this.database.transformations.filter((item) =>
-          item.status === "supported" && item.dependencyMetricIds.includes(current.metricId),
+          item.status === "supported"
+            && transformationDependencyMetricIds(item).includes(current.metricId),
         )) {
           transformationIds.add(transformation.id);
           if (current.metricId === transformation.outputMetricId) continue;
@@ -816,9 +837,11 @@ export class ModelDatabaseQueries {
     const uniqueTransformations = [...new Map(
       [...transformationIds]
         .map((id) => this.transformations.get(id))
-        .filter((item): item is Transformation => Boolean(item))
+        .filter((item): item is Extract<Transformation, { status: "supported" }> =>
+          item?.status === "supported"
+        )
         .map((item) => [
-          `${item.outputMetricId}|${item.expression}|${[...item.dependencyMetricIds].sort().join(",")}`,
+          `${item.outputMetricId}|${item.expression}`,
           item,
         ]),
     ).values()];
@@ -833,7 +856,8 @@ export class ModelDatabaseQueries {
   getProvenance(targetId: string): ProvenanceProjection {
     const records = this.database.provenanceRecords
       .filter((item) => item.targetId === targetId)
-      .map((provenance) => {
+      .map((record) => {
+        const provenance = resolveProvenanceRecord(this.database, record);
         const source = this.database.sourceArtifacts.find(
           (item) => item.id === provenance.sourceArtifactId,
         );
@@ -841,7 +865,7 @@ export class ModelDatabaseQueries {
           (item) => item.id === provenance.extractionRunId,
         );
         if (!source || !extractionRun) {
-          throw new Error(`Broken provenance record ${provenance.id}`);
+          throw new Error(`Broken provenance for ${provenance.targetId}`);
         }
         return { provenance, source, extractionRun };
       });

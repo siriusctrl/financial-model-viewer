@@ -7,6 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import hashlib
 import json
 
 from formula_translation import FormulaTranslation, FormulaTranslator, expand_cell_range
@@ -14,10 +15,6 @@ from ooxml import WorkbookPackage
 
 
 MAP_FORMAT = "financial-model-workbook-map@0.2"
-SUPPORTED_MAP_FORMATS = {
-    "financial-model-workbook-map@0.1",
-    MAP_FORMAT,
-}
 STYLE_CONVENTION = "alice-blue-yellow@0.1"
 BLUE_FONT_SOURCE_COLORS = (
     {"type": "theme", "theme": 4},
@@ -203,16 +200,13 @@ class MappedWorkbookExtractor:
     """Extract only concepts explicitly declared in a semantic mapping file."""
 
     def __init__(self, workbook: Path, mapping: dict[str, Any]):
-        if mapping.get("format") not in SUPPORTED_MAP_FORMATS:
-            raise ValueError(
-                f"Mapping must declare one of {', '.join(sorted(SUPPORTED_MAP_FORMATS))}"
-            )
+        if mapping.get("format") != MAP_FORMAT:
+            raise ValueError(f"Mapping must declare {MAP_FORMAT}")
         self.workbook = workbook.resolve()
         self.mapping = mapping
         self.sheet_name = mapping["sheet"]
         self.map_format = mapping["format"]
         self.database: dict[str, Any] = {
-            "schemaVersion": "0.1.0",
             "dataset": {},
             "models": [],
             "entities": [],
@@ -263,18 +257,8 @@ class MappedWorkbookExtractor:
 
     def _unresolved(self, item: dict[str, Any]) -> None:
         canonical = deepcopy(item)
-        legacy_next_action = canonical.pop("analystQuestion", None)
-        if (
-            legacy_next_action is not None
-            and canonical.get("nextAction") is not None
-            and canonical["nextAction"] != legacy_next_action
-        ):
-            raise ValueError(
-                f"Attention item {canonical.get('id', '<unknown>')} provides conflicting "
-                "nextAction and legacy analystQuestion values"
-            )
-        if legacy_next_action is not None:
-            canonical.setdefault("nextAction", legacy_next_action)
+        if "analystQuestion" in canonical:
+            raise ValueError("analystQuestion is not part of the 0.2 attention contract; use nextAction")
         for field in ("currentTreatment", "impact", "nextAction"):
             value = canonical.get(field)
             if not isinstance(value, str) or not value.strip():
@@ -477,7 +461,7 @@ class MappedWorkbookExtractor:
             for metric_id, assignments in self._assignments_by_metric.items()
             for assignment in assignments
         }
-        strict_grid = self.map_format.endswith("@0.1") and all(
+        strict_grid = all(
             "cells" not in metric
             for metric in metrics_by_id.values()
         )
@@ -797,6 +781,7 @@ class MappedWorkbookExtractor:
             ),
             "items": formula_translation_items,
         }
+        self._finalize_database(formula_translation_items)
         return ExtractionResult(
             self.database,
             self._report(
@@ -810,6 +795,119 @@ class MappedWorkbookExtractor:
             style_evidence,
             formula_translation_tasks,
         )
+
+    def _finalize_database(self, formula_translation_items: list[dict[str, Any]]) -> None:
+        """Collapse cell-level builder records into the canonical model-db@0.2 contract."""
+        old_transformations = self.database["transformations"]
+        grouped_transformations: dict[tuple[str, str, str | None], dict[str, Any]] = {}
+        old_to_new: dict[str, str] = {}
+        for transformation in old_transformations:
+            expression = transformation["expression"] if transformation["status"] == "supported" else None
+            key = (transformation["outputMetricId"], transformation["status"], expression)
+            canonical = grouped_transformations.get(key)
+            if canonical is None:
+                digest = hashlib.sha256(
+                    "\0".join(value or "" for value in key).encode("utf-8")
+                ).hexdigest()[:8]
+                canonical = {
+                    "id": f"transformation_{_without_prefix(key[0], 'metric_')}_{digest}",
+                    "outputMetricId": key[0],
+                    "sourceExpressions": {},
+                    "status": key[1],
+                }
+                if expression is not None:
+                    canonical["expression"] = expression
+                grouped_transformations[key] = canonical
+            period_ids = transformation.get("appliesWhen", {}).get("periodIds", [])
+            if len(period_ids) != 1:
+                raise ValueError(
+                    f"Builder transformation {transformation['id']} must apply to exactly one period"
+                )
+            period_id = period_ids[0]
+            existing = canonical["sourceExpressions"].get(period_id)
+            source_expression = transformation["originalExpression"]
+            if existing is not None and existing != source_expression:
+                raise ValueError(
+                    f"Conflicting source formulas for {key[0]} in {period_id}: "
+                    f"{existing!r} versus {source_expression!r}"
+                )
+            canonical["sourceExpressions"][period_id] = source_expression
+            old_to_new[transformation["id"]] = canonical["id"]
+
+        for observation in self.database["observations"]:
+            if "transformationId" in observation:
+                observation["transformationId"] = old_to_new[observation["transformationId"]]
+        for task in formula_translation_items:
+            task["transformationId"] = old_to_new[task["transformationId"]]
+            task["id"] = f"formula_translation_task_{task['transformationId']}_{task['periodId']}"
+        for unresolved in self.database["unresolvedItems"]:
+            if unresolved.get("targetId") in old_to_new:
+                unresolved["targetId"] = old_to_new[unresolved["targetId"]]
+            if "affectedTargetIds" in unresolved:
+                unresolved["affectedTargetIds"] = [
+                    old_to_new.get(target_id, target_id)
+                    for target_id in unresolved["affectedTargetIds"]
+                ]
+
+        series_by_key: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+        for observation in self.database.pop("observations"):
+            key = tuple(observation[field] for field in (
+                "modelId", "metricId", "entityId", "asOf", "versionId"
+            ))
+            series = series_by_key.setdefault(key, {
+                "modelId": key[0],
+                "metricId": key[1],
+                "entityId": key[2],
+                "asOf": key[3],
+                "versionId": key[4],
+                "points": [],
+            })
+            point = {
+                field: value
+                for field, value in observation.items()
+                if field not in {"modelId", "metricId", "entityId", "asOf", "versionId", "unit"}
+            }
+            series["points"].append(point)
+
+        raw_provenance = self.database["provenanceRecords"]
+        contexts: list[dict[str, Any]] = []
+        context_by_key: dict[tuple[str, str, float, str], str] = {}
+        provenance_records: list[dict[str, Any]] = []
+        provenance_keys: set[str] = set()
+        for record in raw_provenance:
+            target_id = old_to_new.get(record["targetId"], record["targetId"])
+            context_key = (
+                record["sourceArtifactId"],
+                record["extractionRunId"],
+                record["confidence"],
+                record["reviewStatus"],
+            )
+            context_id = context_by_key.get(context_key)
+            if context_id is None:
+                context_id = f"provenance_context_{len(contexts) + 1}"
+                context_by_key[context_key] = context_id
+                contexts.append({
+                    "id": context_id,
+                    "sourceArtifactId": context_key[0],
+                    "extractionRunId": context_key[1],
+                    "confidence": context_key[2],
+                    "reviewStatus": context_key[3],
+                })
+            canonical = {
+                "targetId": target_id,
+                "contextId": context_id,
+                **({"locator": record["locator"]} if record.get("locator") else {}),
+            }
+            key = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+            if key not in provenance_keys:
+                provenance_keys.add(key)
+                provenance_records.append(canonical)
+
+        self.database["schemaVersion"] = "0.2.0"
+        self.database["observationSeries"] = list(series_by_key.values())
+        self.database["transformations"] = list(grouped_transformations.values())
+        self.database["provenanceContexts"] = contexts
+        self.database["provenanceRecords"] = provenance_records
 
     def _matching_style_semantic(
         self,
@@ -1126,9 +1224,12 @@ class MappedWorkbookExtractor:
         style_evidence: dict[str, Any],
     ) -> str:
         counts = {key: len(self.database[key]) for key in (
-            "entities", "metrics", "observations", "transformations", "relationships",
+            "entities", "metrics", "transformations", "relationships",
             "assumptions", "decisions", "unresolvedItems",
         )}
+        counts["observations"] = sum(
+            len(series["points"]) for series in self.database["observationSeries"]
+        )
         statuses = Counter(item["status"] for item in self.database["transformations"])
         attention = Counter(
             item["attentionLevel"]

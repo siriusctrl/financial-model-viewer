@@ -5,6 +5,7 @@ import {
   editObservationValue,
 } from "../src/model-db/calculation";
 import { ModelDatabaseQueries } from "../src/model-db/queries";
+import { findObservationPoint, observations } from "../src/model-db/access";
 import type { ModelDatabase } from "../src/model-db/types";
 import { assertValidModelDatabase } from "../src/model-db/validate";
 
@@ -17,8 +18,8 @@ describe("local model editing", () => {
       "obs_northstar_subscription_revenue_fy2025",
       1400,
     );
-    const observations = new Map(
-      result.database.observations.map((observation) => [observation.id, observation]),
+    const observationById = new Map(
+      observations(result.database).map((observation) => [observation.id, observation]),
     );
 
     expect(result.propagatedChanges.map((change) => change.observationId)).toEqual([
@@ -26,9 +27,9 @@ describe("local model editing", () => {
       "obs_northstar_gross_profit_fy2025",
       "obs_northstar_gross_margin_fy2025",
     ]);
-    expect(observations.get("obs_northstar_revenue_fy2025")?.value).toBe(1620);
-    expect(observations.get("obs_northstar_gross_profit_fy2025")?.value).toBe(1140);
-    expect(observations.get("obs_northstar_gross_margin_fy2025")?.value).toBeCloseTo(
+    expect(observationById.get("obs_northstar_revenue_fy2025")?.value).toBe(1620);
+    expect(observationById.get("obs_northstar_gross_profit_fy2025")?.value).toBe(1140);
+    expect(observationById.get("obs_northstar_gross_margin_fy2025")?.value).toBeCloseTo(
       1140 / 1620,
     );
     expect(
@@ -58,21 +59,27 @@ describe("local model editing", () => {
 
   it("does not overwrite an opaque workbook formula", () => {
     const database = structuredClone(sample) as ModelDatabase;
-    const observation = database.observations.find(
-      (candidate) => candidate.id === "obs_northstar_subscription_revenue_fy2025",
+    const located = findObservationPoint(
+      database,
+      "obs_northstar_subscription_revenue_fy2025",
     );
-    const opaque = database.transformations.find(
+    const transformationIndex = database.transformations.findIndex(
       (candidate) => candidate.id === "transformation_northstar_revenue",
     );
-    expect(observation).toBeDefined();
-    expect(opaque).toBeDefined();
-    opaque!.id = "transformation_test_opaque_input";
-    opaque!.status = "opaque";
-    observation!.transformationId = opaque!.id;
+    expect(located).toBeDefined();
+    expect(transformationIndex).toBeGreaterThanOrEqual(0);
+    const supported = database.transformations[transformationIndex];
+    database.transformations[transformationIndex] = {
+      id: "transformation_test_opaque_input",
+      outputMetricId: supported.outputMetricId,
+      sourceExpressions: supported.sourceExpressions,
+      status: "opaque",
+    };
+    located!.point.transformationId = "transformation_test_opaque_input";
 
     expect(() => editObservationValue(
       database,
-      observation!.id,
+      located!.point.id,
       1400,
     )).toThrow("Formula cells are read-only");
   });
@@ -108,7 +115,7 @@ describe("local model editing", () => {
     )).toThrow("Only open needs-review items");
 
     const legacy = structuredClone(sample) as ModelDatabase;
-    delete legacy.unresolvedItems[0].currentTreatment;
+    delete (legacy.unresolvedItems[0] as Partial<typeof legacy.unresolvedItems[number]>).currentTreatment;
     expect(() => confirmReviewItem(
       legacy,
       "unresolved_harbor_provision_label",

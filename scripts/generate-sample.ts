@@ -12,6 +12,7 @@ import type {
   ModelDatabase,
   Observation,
   Period,
+  ProvenanceContext,
   ProvenanceRecord,
   Relationship,
   Scenario,
@@ -21,6 +22,7 @@ import type {
   Transformation,
   UnresolvedItem,
 } from "../src/model-db/types";
+import { groupObservationSeries } from "../src/model-db/access";
 import { validateModelDatabase } from "../src/model-db/validate";
 
 type Context = "northstar" | "harbor";
@@ -160,51 +162,51 @@ const transformations: Transformation[] = [
   {
     id: "transformation_northstar_revenue",
     outputMetricId: "metric_northstar_revenue",
-    language: "model-expression@0.1",
     expression: "sum(ref(\"metric_northstar_subscription_revenue\"), ref(\"metric_northstar_services_revenue\"))",
-    dependencyMetricIds: ["metric_northstar_subscription_revenue", "metric_northstar_services_revenue"],
-    appliesWhen: { modelId: "model_northstar_cloud" },
-    originalExpression: "=SUM(B11:B12)",
+    sourceExpressions: Object.fromEntries(periods.map((period, index) => {
+      const column = ["B", "C", "D", "E", "F"][index];
+      return [period.id, `=SUM(${column}11:${column}12)`];
+    })),
     status: "supported",
   },
   {
     id: "transformation_northstar_gross_profit",
     outputMetricId: "metric_northstar_gross_profit",
-    language: "model-expression@0.1",
     expression: "ref(\"metric_northstar_revenue\") - ref(\"metric_northstar_cost_of_revenue\")",
-    dependencyMetricIds: ["metric_northstar_revenue", "metric_northstar_cost_of_revenue"],
-    appliesWhen: { modelId: "model_northstar_cloud" },
-    originalExpression: "=B10-B16",
+    sourceExpressions: Object.fromEntries(periods.map((period, index) => {
+      const column = ["B", "C", "D", "E", "F"][index];
+      return [period.id, `=${column}10-${column}16`];
+    })),
     status: "supported",
   },
   {
     id: "transformation_northstar_gross_margin",
     outputMetricId: "metric_northstar_gross_margin",
-    language: "model-expression@0.1",
     expression: "when(ref(\"metric_northstar_revenue\") == 0, null, ref(\"metric_northstar_gross_profit\") / ref(\"metric_northstar_revenue\"))",
-    dependencyMetricIds: ["metric_northstar_revenue", "metric_northstar_gross_profit"],
-    appliesWhen: { modelId: "model_northstar_cloud" },
-    originalExpression: "=IFERROR(B18/B10,0)",
+    sourceExpressions: Object.fromEntries(periods.map((period, index) => {
+      const column = ["B", "C", "D", "E", "F"][index];
+      return [period.id, `=IFERROR(${column}18/${column}10,0)`];
+    })),
     status: "supported",
   },
   {
     id: "transformation_harbor_operating_income",
     outputMetricId: "metric_harbor_operating_income",
-    language: "model-expression@0.1",
     expression: "sum(ref(\"metric_harbor_net_interest_income\"), ref(\"metric_harbor_non_interest_income\"))",
-    dependencyMetricIds: ["metric_harbor_net_interest_income", "metric_harbor_non_interest_income"],
-    appliesWhen: { modelId: "model_harbor_national" },
-    originalExpression: "=SUM(B9:B10)",
+    sourceExpressions: Object.fromEntries(periods.map((period, index) => {
+      const column = ["B", "C", "D", "E", "F"][index];
+      return [period.id, `=SUM(${column}9:${column}10)`];
+    })),
     status: "supported",
   },
   {
     id: "transformation_harbor_pre_tax_income",
     outputMetricId: "metric_harbor_pre_tax_income",
-    language: "model-expression@0.1",
     expression: "ref(\"metric_harbor_operating_income\") - ref(\"metric_harbor_provision\") - ref(\"metric_harbor_non_interest_expense\")",
-    dependencyMetricIds: ["metric_harbor_operating_income", "metric_harbor_provision", "metric_harbor_non_interest_expense"],
-    appliesWhen: { modelId: "model_harbor_national" },
-    originalExpression: "=B8-B14-B18",
+    sourceExpressions: Object.fromEntries(periods.map((period, index) => {
+      const column = ["B", "C", "D", "E", "F"][index];
+      return [period.id, `=${column}8-${column}14-${column}18`];
+    })),
     status: "supported",
   },
 ];
@@ -315,7 +317,6 @@ function createObservations(
         scenarioId: isActual ? "scenario_actual" : "scenario_base",
         actuality: isActual ? "actual" : "estimate",
         value,
-        unit: fixture.unit,
         asOf: model.asOf,
         versionId: model.currentVersionId,
         valueType: fixture.transformationId
@@ -466,27 +467,47 @@ const requiredTargets = [
   ...unresolvedItems,
 ];
 
+const provenanceContexts: ProvenanceContext[] = [];
+const provenanceContextIdByKey = new Map<string, string>();
 const provenanceRecords: ProvenanceRecord[] = requiredTargets.map((target) => {
   const context = contextByTarget.get(target.id);
   if (!context) throw new Error(`No fixture context for ${target.id}`);
+  const sourceArtifactId =
+    target.id.startsWith("evidence_") ||
+    target.id.startsWith("assumption_") ||
+    target.id.startsWith("decision_")
+      ? `artifact_${context}_notes`
+      : `artifact_${context}_workbook`;
+  const extractionRunId = `run_${context}_2025_03_15`;
+  const confidence = confidenceByTarget.get(target.id) ?? 0.9;
+  const reviewStatus = reviewByTarget.get(target.id) ?? "unreviewed";
+  const contextKey = JSON.stringify([
+    sourceArtifactId,
+    extractionRunId,
+    confidence,
+    reviewStatus,
+  ]);
+  let contextId = provenanceContextIdByKey.get(contextKey);
+  if (!contextId) {
+    contextId = `provenance_context_${provenanceContexts.length + 1}`;
+    provenanceContextIdByKey.set(contextKey, contextId);
+    provenanceContexts.push({
+      id: contextId,
+      sourceArtifactId,
+      extractionRunId,
+      confidence,
+      reviewStatus,
+    });
+  }
   return {
-    id: `provenance_${target.id}`,
     targetId: target.id,
-    sourceArtifactId:
-      target.id.startsWith("evidence_") ||
-      target.id.startsWith("assumption_") ||
-      target.id.startsWith("decision_")
-        ? `artifact_${context}_notes`
-        : `artifact_${context}_workbook`,
+    contextId,
     locator: locatorByTarget.get(target.id),
-    extractionRunId: `run_${context}_2025_03_15`,
-    confidence: confidenceByTarget.get(target.id) ?? 0.9,
-    reviewStatus: reviewByTarget.get(target.id) ?? "unreviewed",
   };
 });
 
 const database: ModelDatabase = {
-  schemaVersion: "0.1.0",
+  schemaVersion: "0.2.0",
   dataset: {
     id: "dataset_representative_models",
     name: "Representative cross-sector financial models",
@@ -500,10 +521,11 @@ const database: ModelDatabase = {
   metrics,
   periods,
   scenarios,
-  observations,
+  observationSeries: groupObservationSeries(observations),
   transformations,
   relationships,
   sourceArtifacts: sources,
+  provenanceContexts,
   provenanceRecords,
   evidence,
   assumptions,

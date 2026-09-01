@@ -65,7 +65,17 @@ export async function reviewPreview(viewerDirectory, extraction) {
   const periods = new Map(
     extraction.database.periods.map((period) => [period.id, period]),
   );
-  const derivedObservations = extraction.database.observations
+  const observations = extraction.database.observationSeries.flatMap((series) =>
+    series.points.map((point) => ({
+      modelId: series.modelId,
+      metricId: series.metricId,
+      entityId: series.entityId,
+      asOf: series.asOf,
+      versionId: series.versionId,
+      ...point,
+    })),
+  );
+  const derivedObservations = observations
     .map((observation) => ({
       observation,
       transformation: observation.transformationId
@@ -92,9 +102,8 @@ export async function reviewPreview(viewerDirectory, extraction) {
       (left.expression.match(/period_ref\(/g)?.length ?? 0),
     )[0];
   const graphLineage = derivedObservations.find(({ transformation }) =>
-    transformation.dependencyMetricIds.some(
-      (metricId) => metricId !== transformation.outputMetricId,
-    ),
+    [...transformation.expression.matchAll(/\b(?:period_)?ref\(\s*["']([^"']+)["']/g)]
+      .some((match) => match[1] !== transformation.outputMetricId),
   );
 
   try {

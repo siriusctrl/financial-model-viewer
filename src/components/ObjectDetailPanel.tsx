@@ -14,6 +14,10 @@ import type {
   UnresolvedItem,
 } from "../model-db/types";
 import { AttentionGuidance } from "./AttentionGuidance";
+import {
+  sourceExpressionFor,
+  transformationDependencyMetricIds,
+} from "../model-db/access";
 
 type Props = {
   targetId: string | null;
@@ -176,7 +180,7 @@ export function ObjectDetailPanel({
   }, [onClose, targetId]);
 
   const observation = displayTargetId
-    ? queries.database.observations.find((item) => item.id === displayTargetId)
+    ? queries.getObservation(displayTargetId)
     : undefined;
 
   return (
@@ -396,7 +400,7 @@ function CellDetail({
       <div className="inspector-body">
         <section className="cell-value-block">
           <strong>{formatValue(detail.observation.value, detail.metric)}</strong>
-          <span>{detail.observation.unit ?? detail.metric.unit ?? detail.metric.dataType}</span>
+          <span>{detail.metric.unit ?? detail.metric.dataType}</span>
           <div className="cell-state-line">
             <span className={`value-kind value-kind--${detail.observation.valueType}`}>
               {detail.observation.valueType.replaceAll("_", " ")}
@@ -462,7 +466,7 @@ function CellDetail({
                     : `Derived from ${detail.inputs.length} input${detail.inputs.length === 1 ? "" : "s"}`
                   : "Opaque workbook formula"}
               </h3>
-              {detail.transformation.dependencyMetricIds.length > 0 && (
+              {transformationDependencyMetricIds(detail.transformation).length > 0 && (
                 <button className="text-button" onClick={() => onFocusGraph(detail.metric.id)}>
                   Open map <Icon name="arrow" size={13} />
                 </button>
@@ -500,7 +504,9 @@ function CellDetail({
 
             <div className="formula-block">
               <span>Workbook formula</span>
-              <code>{detail.transformation.originalExpression ?? "Not supplied"}</code>
+              <code>
+                {sourceExpressionFor(detail.transformation, detail.period.id) ?? "Not supplied"}
+              </code>
               <span>Canonical translation</span>
               <code>
                 {detail.transformation.status === "supported"
@@ -528,7 +534,7 @@ function SourceSection({ provenance }: { provenance: ProvenanceProjection }) {
       ) : (
         <div className="source-records">
           {provenance.records.map(({ provenance: item, source, extractionRun }) => (
-            <article key={item.id}>
+            <article key={`${item.targetId}:${item.contextId}:${formatLocator(item.locator)}`}>
               <div className="source-record-heading">
                 <span className="source-icon"><Icon name="source" size={16} /></span>
                 <span><strong>{formatLocator(item.locator)}</strong><small>{source.title}</small></span>

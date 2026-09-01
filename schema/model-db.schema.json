@@ -25,41 +25,44 @@
     "scenarios": {
       "$ref": "#/$defs/__schema14"
     },
-    "observations": {
+    "observationSeries": {
       "$ref": "#/$defs/__schema15"
     },
     "transformations": {
-      "$ref": "#/$defs/__schema17"
-    },
-    "relationships": {
       "$ref": "#/$defs/__schema18"
     },
-    "sourceArtifacts": {
-      "$ref": "#/$defs/__schema19"
-    },
-    "provenanceRecords": {
+    "relationships": {
       "$ref": "#/$defs/__schema21"
     },
-    "evidence": {
+    "sourceArtifacts": {
+      "$ref": "#/$defs/__schema22"
+    },
+    "provenanceContexts": {
       "$ref": "#/$defs/__schema24"
     },
-    "assumptions": {
-      "$ref": "#/$defs/__schema25"
-    },
-    "decisions": {
-      "$ref": "#/$defs/__schema26"
-    },
-    "decisionChanges": {
+    "provenanceRecords": {
       "$ref": "#/$defs/__schema27"
     },
-    "extractionRuns": {
-      "$ref": "#/$defs/__schema28"
+    "evidence": {
+      "$ref": "#/$defs/__schema29"
     },
-    "unresolvedItems": {
+    "assumptions": {
       "$ref": "#/$defs/__schema30"
     },
-    "tablePresentations": {
+    "decisions": {
       "$ref": "#/$defs/__schema31"
+    },
+    "decisionChanges": {
+      "$ref": "#/$defs/__schema32"
+    },
+    "extractionRuns": {
+      "$ref": "#/$defs/__schema33"
+    },
+    "unresolvedItems": {
+      "$ref": "#/$defs/__schema35"
+    },
+    "tablePresentations": {
+      "$ref": "#/$defs/__schema50"
     }
   },
   "required": [
@@ -70,10 +73,11 @@
     "metrics",
     "periods",
     "scenarios",
-    "observations",
+    "observationSeries",
     "transformations",
     "relationships",
     "sourceArtifacts",
+    "provenanceContexts",
     "provenanceRecords",
     "evidence",
     "assumptions",
@@ -84,11 +88,11 @@
     "tablePresentations"
   ],
   "additionalProperties": false,
-  "description": "Semantic financial-model database with a canonical object core and optional non-canonical table grouping metadata. Spreadsheet row, column, and cell identity are excluded from business objects.",
+  "description": "Deduplicated semantic financial-model database with point-preserving observation series, reusable transformation rules, shared provenance contexts, and optional non-canonical table grouping metadata.",
   "$defs": {
     "__schema0": {
       "type": "string",
-      "const": "0.1.0"
+      "const": "0.2.0"
     },
     "__schema1": {
       "type": "object",
@@ -381,9 +385,6 @@
       "items": {
         "type": "object",
         "properties": {
-          "id": {
-            "$ref": "#/$defs/__schema2"
-          },
           "modelId": {
             "$ref": "#/$defs/__schema2"
           },
@@ -393,60 +394,76 @@
           "entityId": {
             "$ref": "#/$defs/__schema2"
           },
-          "periodId": {
-            "$ref": "#/$defs/__schema2"
-          },
-          "scenarioId": {
-            "$ref": "#/$defs/__schema2"
-          },
-          "actuality": {
-            "type": "string",
-            "enum": [
-              "actual",
-              "estimate"
-            ]
-          },
-          "value": {
-            "$ref": "#/$defs/__schema16"
-          },
-          "unit": {
-            "type": "string"
-          },
           "asOf": {
             "$ref": "#/$defs/__schema6"
           },
           "versionId": {
             "$ref": "#/$defs/__schema2"
           },
-          "valueType": {
-            "type": "string",
-            "enum": [
-              "reported",
-              "assumption",
-              "derived",
-              "external_estimate"
-            ]
-          },
-          "transformationId": {
-            "$ref": "#/$defs/__schema2"
+          "points": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/__schema16"
+            }
           }
         },
         "required": [
-          "id",
           "modelId",
           "metricId",
           "entityId",
-          "periodId",
-          "actuality",
-          "value",
           "asOf",
           "versionId",
-          "valueType"
+          "points"
         ],
         "additionalProperties": false
       }
     },
     "__schema16": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "periodId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "scenarioId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "actuality": {
+          "type": "string",
+          "enum": [
+            "actual",
+            "estimate"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/__schema17"
+        },
+        "valueType": {
+          "type": "string",
+          "enum": [
+            "reported",
+            "assumption",
+            "derived",
+            "external_estimate"
+          ]
+        },
+        "transformationId": {
+          "$ref": "#/$defs/__schema2"
+        }
+      },
+      "required": [
+        "id",
+        "periodId",
+        "actuality",
+        "value",
+        "valueType"
+      ],
+      "additionalProperties": false
+    },
+    "__schema17": {
       "anyOf": [
         {
           "type": "number"
@@ -462,74 +479,107 @@
         }
       ]
     },
-    "__schema17": {
+    "__schema18": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/$defs/__schema2"
-          },
-          "outputMetricId": {
-            "$ref": "#/$defs/__schema2"
-          },
-          "language": {
-            "type": "string",
-            "const": "model-expression@0.1"
-          },
-          "expression": {
-            "type": "string",
-            "minLength": 1
-          },
-          "dependencyMetricIds": {
-            "type": "array",
-            "items": {
-              "$ref": "#/$defs/__schema2"
-            }
-          },
-          "appliesWhen": {
+        "oneOf": [
+          {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "outputMetricId": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "sourceExpressions": {
+                "$ref": "#/$defs/__schema19"
+              },
+              "status": {
+                "type": "string",
+                "const": "supported"
+              },
+              "expression": {
+                "type": "string",
+                "minLength": 1
+              }
             },
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              ]
-            }
+            "required": [
+              "id",
+              "outputMetricId",
+              "sourceExpressions",
+              "status",
+              "expression"
+            ],
+            "additionalProperties": false
           },
-          "originalExpression": {
-            "type": "string"
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "outputMetricId": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "sourceExpressions": {
+                "$ref": "#/$defs/__schema19"
+              },
+              "status": {
+                "type": "string",
+                "const": "opaque"
+              }
+            },
+            "required": [
+              "id",
+              "outputMetricId",
+              "sourceExpressions",
+              "status"
+            ],
+            "additionalProperties": false
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "supported",
-              "opaque",
-              "unresolved"
-            ]
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "outputMetricId": {
+                "$ref": "#/$defs/__schema2"
+              },
+              "sourceExpressions": {
+                "$ref": "#/$defs/__schema19"
+              },
+              "status": {
+                "type": "string",
+                "const": "unresolved"
+              }
+            },
+            "required": [
+              "id",
+              "outputMetricId",
+              "sourceExpressions",
+              "status"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "id",
-          "outputMetricId",
-          "language",
-          "expression",
-          "dependencyMetricIds",
-          "status"
-        ],
-        "additionalProperties": false
+        ]
       }
     },
-    "__schema18": {
+    "__schema19": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/__schema2"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/__schema20"
+      }
+    },
+    "__schema20": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema21": {
       "type": "array",
       "items": {
         "type": "object",
@@ -568,14 +618,14 @@
         "additionalProperties": false
       }
     },
-    "__schema19": {
+    "__schema22": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema20"
+        "$ref": "#/$defs/__schema23"
       }
     },
-    "__schema20": {
+    "__schema23": {
       "type": "object",
       "properties": {
         "id": {
@@ -617,28 +667,68 @@
       ],
       "additionalProperties": false
     },
-    "__schema21": {
+    "__schema24": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema25"
+      }
+    },
+    "__schema25": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "sourceArtifactId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "extractionRunId": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "confidence": {
+          "$ref": "#/$defs/__schema26"
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": [
+            "unreviewed",
+            "confirmed",
+            "corrected",
+            "rejected"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "sourceArtifactId",
+        "extractionRunId",
+        "confidence",
+        "reviewStatus"
+      ],
+      "additionalProperties": false
+    },
+    "__schema26": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "__schema27": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "id": {
-            "$ref": "#/$defs/__schema2"
-          },
           "targetId": {
             "$ref": "#/$defs/__schema2"
           },
-          "sourceArtifactId": {
+          "contextId": {
             "$ref": "#/$defs/__schema2"
           },
           "locator": {
-            "$ref": "#/$defs/__schema22"
-          },
-          "extractionRunId": {
-            "$ref": "#/$defs/__schema2"
+            "$ref": "#/$defs/__schema28"
           },
           "confidence": {
-            "$ref": "#/$defs/__schema23"
+            "$ref": "#/$defs/__schema26"
           },
           "reviewStatus": {
             "type": "string",
@@ -651,17 +741,13 @@
           }
         },
         "required": [
-          "id",
           "targetId",
-          "sourceArtifactId",
-          "extractionRunId",
-          "confidence",
-          "reviewStatus"
+          "contextId"
         ],
         "additionalProperties": false
       }
     },
-    "__schema22": {
+    "__schema28": {
       "type": "object",
       "properties": {
         "sheet": {
@@ -687,12 +773,7 @@
       },
       "additionalProperties": false
     },
-    "__schema23": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1
-    },
-    "__schema24": {
+    "__schema29": {
       "type": "array",
       "items": {
         "type": "object",
@@ -717,7 +798,7 @@
         "additionalProperties": false
       }
     },
-    "__schema25": {
+    "__schema30": {
       "type": "array",
       "items": {
         "type": "object",
@@ -745,7 +826,7 @@
             "$ref": "#/$defs/__schema2"
           },
           "confidence": {
-            "$ref": "#/$defs/__schema23"
+            "$ref": "#/$defs/__schema26"
           },
           "status": {
             "type": "string",
@@ -766,7 +847,7 @@
         "additionalProperties": false
       }
     },
-    "__schema26": {
+    "__schema31": {
       "type": "array",
       "items": {
         "type": "object",
@@ -798,7 +879,7 @@
         "additionalProperties": false
       }
     },
-    "__schema27": {
+    "__schema32": {
       "type": "array",
       "items": {
         "type": "object",
@@ -822,10 +903,10 @@
             "$ref": "#/$defs/__schema2"
           },
           "before": {
-            "$ref": "#/$defs/__schema16"
+            "$ref": "#/$defs/__schema17"
           },
           "after": {
-            "$ref": "#/$defs/__schema16"
+            "$ref": "#/$defs/__schema17"
           }
         },
         "required": [
@@ -839,14 +920,14 @@
         "additionalProperties": false
       }
     },
-    "__schema28": {
+    "__schema33": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema29"
+        "$ref": "#/$defs/__schema34"
       }
     },
-    "__schema29": {
+    "__schema34": {
       "type": "object",
       "properties": {
         "id": {
@@ -895,7 +976,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema30": {
+    "__schema35": {
       "type": "array",
       "items": {
         "type": "object",
@@ -904,95 +985,138 @@
             "$ref": "#/$defs/__schema2"
           },
           "modelId": {
-            "$ref": "#/$defs/__schema2"
+            "$ref": "#/$defs/__schema36"
           },
           "category": {
-            "type": "string",
-            "enum": [
-              "metric_mapping",
-              "formula",
-              "hierarchy",
-              "lineage",
-              "actuality_boundary",
-              "presentation",
-              "source_error",
-              "source_update",
-              "model_inconsistency",
-              "other"
-            ]
+            "$ref": "#/$defs/__schema37"
           },
           "description": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/__schema38"
           },
           "currentTreatment": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/__schema39"
           },
           "impact": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/__schema40"
           },
           "nextAction": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/__schema41"
           },
           "targetId": {
-            "$ref": "#/$defs/__schema2"
+            "$ref": "#/$defs/__schema42"
           },
           "affectedTargetIds": {
-            "minItems": 1,
-            "type": "array",
-            "items": {
-              "$ref": "#/$defs/__schema2"
-            }
+            "$ref": "#/$defs/__schema43"
           },
           "sourceArtifactId": {
-            "$ref": "#/$defs/__schema2"
+            "$ref": "#/$defs/__schema44"
           },
           "locator": {
-            "$ref": "#/$defs/__schema22"
+            "$ref": "#/$defs/__schema45"
           },
           "confidence": {
-            "$ref": "#/$defs/__schema23"
+            "$ref": "#/$defs/__schema46"
           },
           "attentionLevel": {
-            "default": "needs_review",
-            "type": "string",
-            "enum": [
-              "needs_review",
-              "action_required"
-            ]
+            "$ref": "#/$defs/__schema47"
           },
           "actionOwner": {
-            "type": "string",
-            "enum": [
-              "extraction_agent",
-              "model_owner",
-              "source_owner"
-            ]
+            "$ref": "#/$defs/__schema48"
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "open",
-              "resolved",
-              "dismissed"
-            ]
+            "$ref": "#/$defs/__schema49"
           }
         },
         "required": [
           "id",
           "category",
           "description",
+          "currentTreatment",
+          "impact",
+          "nextAction",
           "attentionLevel",
           "status"
         ],
         "additionalProperties": false
       }
     },
-    "__schema31": {
-      "default": [],
+    "__schema36": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "__schema37": {
+      "type": "string",
+      "enum": [
+        "metric_mapping",
+        "formula",
+        "hierarchy",
+        "lineage",
+        "actuality_boundary",
+        "presentation",
+        "source_error",
+        "source_update",
+        "model_inconsistency",
+        "other"
+      ]
+    },
+    "__schema38": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema39": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema40": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema41": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema42": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "__schema43": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/__schema2"
+      }
+    },
+    "__schema44": {
+      "$ref": "#/$defs/__schema2"
+    },
+    "__schema45": {
+      "$ref": "#/$defs/__schema28"
+    },
+    "__schema46": {
+      "$ref": "#/$defs/__schema26"
+    },
+    "__schema47": {
+      "type": "string",
+      "enum": [
+        "needs_review",
+        "action_required"
+      ]
+    },
+    "__schema48": {
+      "type": "string",
+      "enum": [
+        "extraction_agent",
+        "model_owner",
+        "source_owner"
+      ]
+    },
+    "__schema49": {
+      "type": "string",
+      "enum": [
+        "open",
+        "resolved",
+        "dismissed"
+      ]
+    },
+    "__schema50": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1011,13 +1135,13 @@
             "$ref": "#/$defs/__schema2"
           },
           "sourceLocator": {
-            "$ref": "#/$defs/__schema22"
+            "$ref": "#/$defs/__schema28"
           },
           "sections": {
             "minItems": 1,
             "type": "array",
             "items": {
-              "$ref": "#/$defs/__schema32"
+              "$ref": "#/$defs/__schema51"
             }
           }
         },
@@ -1028,7 +1152,7 @@
         "additionalProperties": false
       }
     },
-    "__schema32": {
+    "__schema51": {
       "type": "object",
       "properties": {
         "id": {
@@ -1046,7 +1170,7 @@
           }
         },
         "sourceLocator": {
-          "$ref": "#/$defs/__schema22"
+          "$ref": "#/$defs/__schema28"
         }
       },
       "required": [

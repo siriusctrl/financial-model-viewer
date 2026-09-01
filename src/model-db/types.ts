@@ -10,8 +10,10 @@ import type {
   MetricSchema,
   ModelDatabaseSchema,
   ModelSchema,
-  ObservationSchema,
+  ObservationPointSchema,
+  ObservationSeriesSchema,
   PeriodSchema,
+  ProvenanceContextSchema,
   ProvenanceRecordSchema,
   RelationshipSchema,
   ScenarioSchema,
@@ -29,7 +31,9 @@ export type Entity = z.infer<typeof EntitySchema>;
 export type Metric = z.infer<typeof MetricSchema>;
 export type Period = z.infer<typeof PeriodSchema>;
 export type Scenario = z.infer<typeof ScenarioSchema>;
-export type Observation = z.infer<typeof ObservationSchema>;
+export type ObservationPoint = z.infer<typeof ObservationPointSchema>;
+export type ObservationSeries = z.infer<typeof ObservationSeriesSchema>;
+export type Observation = ObservationPoint & Omit<ObservationSeries, "points">;
 export type Transformation = z.infer<typeof TransformationSchema>;
 export type Relationship = z.infer<typeof RelationshipSchema>;
 export type SourceArtifact = z.infer<typeof SourceArtifactSchema>;
@@ -37,6 +41,11 @@ export type SourceLocator = z.infer<typeof SourceLocatorSchema>;
 export type TableSection = z.infer<typeof TableSectionSchema>;
 export type TablePresentation = z.infer<typeof TablePresentationSchema>;
 export type ProvenanceRecord = z.infer<typeof ProvenanceRecordSchema>;
+export type ProvenanceContext = z.infer<typeof ProvenanceContextSchema>;
+export type ResolvedProvenanceRecord = ProvenanceRecord & Pick<
+  ProvenanceContext,
+  "sourceArtifactId" | "extractionRunId" | "confidence" | "reviewStatus"
+>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type Assumption = z.infer<typeof AssumptionSchema>;
 export type Decision = z.infer<typeof DecisionSchema>;

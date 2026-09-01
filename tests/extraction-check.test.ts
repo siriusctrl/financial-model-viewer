@@ -89,7 +89,7 @@ describe("extraction package attention guidance", () => {
     const database = structuredClone(sample) as ModelDatabase;
     const item = database.unresolvedItems[0] as UnresolvedItem;
     item.status = "resolved";
-    delete item.impact;
+    delete (item as Partial<UnresolvedItem>).impact;
     const directory = mkdtempSync(join(tmpdir(), "model-db-attention-"));
     temporaryDirectories.push(directory);
     const databasePath = join(directory, "model-db.json");

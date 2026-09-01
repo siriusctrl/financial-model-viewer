@@ -51,11 +51,11 @@ Map input concepts as follows:
 | Row label or named financial concept | `Metric` | Define meaning and unit once; do not embed period values. |
 | Header date or fiscal label | `Period` | Preserve fiscal/calendar type and dates when known. |
 | Actual/base/bull/bear column or sheet | `Scenario` | Do not infer a scenario from color alone. |
-| Value at metric + entity + period context | `Observation` | Preserve raw precision, as-of, version, actuality, and value type. |
+| Value at metric + entity + period context | `ObservationSeries` point | Store model/metric/entity/as-of/version once per series; preserve each point's stable ID, period, scenario, actuality, raw precision, value type, and transformation link. |
 | Formula producing a reusable metric | `Transformation` | Translate when supported and retain the source formula. |
 | Indented child, subtotal component | `Relationship` | Use `component_of` only when meaning is supported. |
 | Workbook, filing, note, transcript | `SourceArtifact` | Record URI and content hash when available. |
-| Source location for an extracted object | `ProvenanceRecord` | Include extraction run, confidence, and review status. |
+| Source location for an extracted object | `ProvenanceRecord` | Link the target and locator to a reusable `ProvenanceContext` containing source, extraction run, confidence, and review status. |
 | Source passage supporting a view | `Evidence` | Preserve a short excerpt or locator, subject to source policy. |
 | Forward-looking analyst belief | `Assumption` | Require evidence; formulas alone are insufficient. |
 | Deliberate forecast change | `Decision` + `DecisionChange` | Record rationale only when present in an input source. |
@@ -117,7 +117,7 @@ Excel aggregate functions ignore text references; the translator may therefore o
 For an unsupported formula:
 
 - set `status` to `opaque`;
-- preserve `originalExpression`;
+- preserve every exact period formula in `sourceExpressions`;
 - use the workbook's materialized value in the observation;
 - add an open `action_required` formula item targeting the transformation or its output metric; it must remain open until canonical translation succeeds.
 - add a structured `formula-translation-tasks.json` item and process it before final handoff.
@@ -140,6 +140,8 @@ If the boundary cannot be confirmed, preserve the likely mapping with reduced co
 ## 6. Provenance and review
 
 Create at least one provenance record for every extracted model, entity, metric, period, scenario, observation, transformation, relationship, evidence item, assumption, decision, decision change, and unresolved item.
+
+Deduplicate identical source/run/confidence/review tuples into `provenanceContexts` and reference them by `contextId`. Put a confidence or review override on an individual record only when that target differs from its shared context. Provenance records have no synthetic record ID; `(targetId, contextId, locator)` is the unique link.
 
 Use the narrowest available locator:
 

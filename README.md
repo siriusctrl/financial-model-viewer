@@ -23,7 +23,7 @@ npm run build
 
 ## Use the viewer
 
-Select **Open JSON** in the public or local viewer and choose a validated `model-db@0.1.0` file. The file is read in the browser and is not uploaded, persisted, or placed in the URL. Invalid files do not replace the current model.
+Select **Open JSON** in the public or local viewer and choose a validated `model-db@0.2.0` `.json` or `.json.gz` file. Both contain the same contract; gzip only reduces transfer and storage size. The browser decompresses and validates locally, without uploading, persisting, or placing the model in the URL. Invalid files do not replace the current model. Pre-0.2 files are rejected rather than migrated implicitly.
 
 The primary model table supports:
 
@@ -34,7 +34,7 @@ The primary model table supports:
 - direct and reverse formula lineage with automatic cross-view cell navigation and inspector back history;
 - browser-local input edits with deterministic downstream recalculation;
 - dark and light appearances;
-- validated JSON export of the local working copy.
+- compact gzip JSON export of the local working copy.
 
 Open attention is grouped into two explicit states:
 
@@ -42,8 +42,6 @@ Open attention is grouped into two explicit states:
 - `action_required`: canonical ingestion is incomplete or blocked. The viewer says whether the extraction agent, model owner, or source owner must handle it; only model/source-owned actions require user coordination. It cannot be cleared in the viewer—fix the named cause and import the corrected database.
 
 Possible workbook/model errors and required source updates are always `action_required` until repaired and re-extracted. Confidence describes the supporting evidence only; it does not set priority or downgrade repair work.
-
-Older JSON files with incomplete guidance remain inspectable, but their review items cannot be confirmed.
 
 ## Extract and preview a workbook
 

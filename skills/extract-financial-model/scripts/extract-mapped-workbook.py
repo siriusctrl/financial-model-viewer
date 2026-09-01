@@ -65,8 +65,11 @@ def main() -> int:
     report_path.write_text(report, encoding="utf-8")
 
     print(f"EXTRACTED {output}")
+    observation_count = sum(
+        len(series["points"]) for series in result.database["observationSeries"]
+    )
     print(
-        f"metrics={len(result.database['metrics'])} observations={len(result.database['observations'])} "
+        f"metrics={len(result.database['metrics'])} observations={observation_count} "
         f"transformations={len(result.database['transformations'])} unresolved={len(result.database['unresolvedItems'])}"
         f" formulaTranslationTasks={len(result.formula_translation_tasks['items'])}"
     )

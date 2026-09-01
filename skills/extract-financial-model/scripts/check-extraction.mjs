@@ -109,6 +109,7 @@ function checkFormulaTranslationTasks(tasksPath, databasePath) {
 
     const opaqueById = new Map(opaque.map((item) => [item.id, item]));
     const taskIds = new Set();
+    const coveredPeriods = new Set();
     let valid = true;
     for (const item of bundle.items) {
       if (!item || typeof item.transformationId !== "string") {
@@ -116,24 +117,29 @@ function checkFormulaTranslationTasks(tasksPath, databasePath) {
         valid = false;
         continue;
       }
-      if (taskIds.has(item.transformationId)) {
-        fail(`${tasksPath} contains duplicate task ${item.transformationId}.`);
+      const taskKey = `${item.transformationId}|${item.periodId}`;
+      if (taskIds.has(taskKey)) {
+        fail(`${tasksPath} contains duplicate task ${taskKey}.`);
         valid = false;
       }
-      taskIds.add(item.transformationId);
+      taskIds.add(taskKey);
       const transformation = opaqueById.get(item.transformationId);
       if (!transformation) {
         fail(`${tasksPath} task ${item.transformationId} does not target an opaque transformation.`);
         valid = false;
-      } else if (item.originalFormula !== transformation.originalExpression) {
+      } else if (item.originalFormula !== transformation.sourceExpressions?.[item.periodId]) {
         fail(`${tasksPath} task ${item.transformationId} does not preserve its original formula.`);
         valid = false;
+      } else {
+        coveredPeriods.add(taskKey);
       }
     }
-    for (const transformationId of opaqueById.keys()) {
-      if (!taskIds.has(transformationId)) {
-        fail(`${tasksPath} is missing opaque transformation ${transformationId}.`);
-        valid = false;
+    for (const [transformationId, transformation] of opaqueById) {
+      for (const periodId of Object.keys(transformation.sourceExpressions ?? {})) {
+        if (!coveredPeriods.has(`${transformationId}|${periodId}`)) {
+          fail(`${tasksPath} is missing opaque transformation ${transformationId} for ${periodId}.`);
+          valid = false;
+        }
       }
     }
     if (valid) {

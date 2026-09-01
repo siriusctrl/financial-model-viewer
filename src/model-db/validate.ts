@@ -1,6 +1,10 @@
 import type { z } from "zod";
 import { validateExpression } from "./expressions";
 import { ModelDatabaseSchema } from "./schema";
+import {
+  observations,
+  transformationDependencyMetricIds,
+} from "./access";
 import type {
   Metric,
   ModelDatabase,
@@ -60,7 +64,6 @@ const PROVENANCE_REQUIRED_COLLECTIONS = [
   "metrics",
   "periods",
   "scenarios",
-  "observations",
   "transformations",
   "relationships",
   "evidence",
@@ -101,6 +104,17 @@ function objectIdForSchemaIssue(
     const collection = (input as Record<string, unknown>)[path[0]];
     if (Array.isArray(collection)) {
       const candidate = collection[path[1]];
+      if (
+        path[0] === "observationSeries"
+        && candidate && typeof candidate === "object"
+        && path[2] === "points" && typeof path[3] === "number"
+      ) {
+        const points = (candidate as { points?: unknown }).points;
+        const point = Array.isArray(points) ? points[path[3]] : undefined;
+        if (point && typeof point === "object" && "id" in point) {
+          return String((point as { id: unknown }).id);
+        }
+      }
       if (candidate && typeof candidate === "object" && "id" in candidate) {
         return String((candidate as { id: unknown }).id);
       }
@@ -145,11 +159,11 @@ function canonicalCollections(database: ModelDatabase): [string, { id: string }[
     ["metrics", database.metrics],
     ["periods", database.periods],
     ["scenarios", database.scenarios],
-    ["observations", database.observations],
+    ["observations", observations(database)],
     ["transformations", database.transformations],
     ["relationships", database.relationships],
     ["sourceArtifacts", database.sourceArtifacts],
-    ["provenanceRecords", database.provenanceRecords],
+    ["provenanceContexts", database.provenanceContexts],
     ["evidence", database.evidence],
     ["assumptions", database.assumptions],
     ["decisions", database.decisions],
@@ -164,17 +178,13 @@ type FormulaCycle = {
   path: string[];
 };
 
-function conditionValues(value: string | string[] | undefined): string[] {
-  if (typeof value === "string") return [value];
-  return value ?? [];
-}
-
 function detectCycles(database: ModelDatabase): FormulaCycle[] {
+  const allObservations = observations(database);
   const graph = new Map<string, string[]>();
   const nodeLabels = new Map<string, { metricId: string; periodId?: string }>();
   const periods = new Map(database.periods.map((period) => [period.id, period]));
   const observedPeriodIdsByModel = new Map<string, Set<string>>();
-  for (const observation of database.observations) {
+  for (const observation of allObservations) {
     const observed = observedPeriodIdsByModel.get(observation.modelId) ?? new Set<string>();
     observed.add(observation.periodId);
     observedPeriodIdsByModel.set(observation.modelId, observed);
@@ -212,27 +222,15 @@ function detectCycles(database: ModelDatabase): FormulaCycle[] {
   for (const transformation of database.transformations) {
     if (transformation.status !== "supported") continue;
     const expression = validateExpression(transformation.expression);
-    const modelIds = new Set(conditionValues(transformation.appliesWhen?.modelId));
-    const periodIds = new Set(conditionValues(transformation.appliesWhen?.periodIds));
-    const linkedOutputs = database.observations.filter(
-      (observation) =>
-        observation.transformationId === transformation.id &&
-        (modelIds.size === 0 || modelIds.has(observation.modelId)) &&
-        (periodIds.size === 0 || periodIds.has(observation.periodId)),
+    const outputs = allObservations.filter(
+      (observation) => observation.transformationId === transformation.id,
     );
-    const inferredOutputs = database.observations.filter(
-      (observation) =>
-        observation.metricId === transformation.outputMetricId &&
-        (modelIds.size === 0 || modelIds.has(observation.modelId)) &&
-        (periodIds.size === 0 || periodIds.has(observation.periodId)),
-    );
-    const outputs = linkedOutputs.length > 0 ? linkedOutputs : inferredOutputs;
 
     if (outputs.length === 0) {
       const outputNode = metricNode(transformation.outputMetricId);
       graph.set(outputNode, [
         ...(graph.get(outputNode) ?? []),
-        ...transformation.dependencyMetricIds.map(metricNode),
+        ...transformationDependencyMetricIds(transformation).map(metricNode),
       ]);
       continue;
     }
@@ -319,7 +317,6 @@ function pushMissingReference(
 
 function validateObservation(
   observation: Observation,
-  database: ModelDatabase,
   indexes: {
     models: Map<string, ModelDatabase["models"][number]>;
     metrics: Map<string, Metric>;
@@ -381,15 +378,15 @@ function validateObservation(
       ),
     );
   }
-
-  void database;
 }
 
 function statsFor(database: ModelDatabase): ValidationStats {
+  const allObservations = observations(database);
+  const contexts = new Map(database.provenanceContexts.map((context) => [context.id, context]));
   return {
     models: database.models.length,
     metrics: database.metrics.length,
-    observations: database.observations.length,
+    observations: allObservations.length,
     transformations: database.transformations.length,
     unresolved: database.unresolvedItems.filter((item) => item.status === "open").length,
     needsReview: database.unresolvedItems.filter(
@@ -398,8 +395,8 @@ function statsFor(database: ModelDatabase): ValidationStats {
     actionRequired: database.unresolvedItems.filter(
       (item) => item.status === "open" && item.attentionLevel === "action_required",
     ).length,
-    unreviewed: database.provenanceRecords.filter(
-      (record) => record.reviewStatus === "unreviewed",
+    unreviewed: database.provenanceRecords.filter((record) =>
+      (record.reviewStatus ?? contexts.get(record.contextId)?.reviewStatus) === "unreviewed"
     ).length,
   };
 }
@@ -415,6 +412,7 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   }
 
   const database = parsed.data;
+  const allObservations = observations(database);
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
   const specificallyReportedUnresolvedIds = new Set<string>();
@@ -427,7 +425,8 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   const sourceArtifactIds = new Set(database.sourceArtifacts.map((item) => item.id));
   const extractionRuns = new Map(database.extractionRuns.map((item) => [item.id, item]));
   const extractionRunIds = new Set(database.extractionRuns.map((item) => item.id));
-  const observationIds = new Set(database.observations.map((item) => item.id));
+  const provenanceContextIds = new Set(database.provenanceContexts.map((item) => item.id));
+  const observationIds = new Set(allObservations.map((item) => item.id));
   const decisionIds = new Set(database.decisions.map((item) => item.id));
   const evidenceIds = new Set(database.evidence.map((item) => item.id));
   const assumptionIds = new Set(database.assumptions.map((item) => item.id));
@@ -472,7 +471,7 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     presentationModels.add(presentation.modelId);
 
     const visibleMetricIds = new Set(
-      database.observations
+      allObservations
         .filter((observation) => observation.modelId === presentation.modelId)
         .map((observation) => observation.metricId),
     );
@@ -565,7 +564,7 @@ export function validateModelDatabase(input: unknown): ValidationResult {
 
   for (const modelId of presentationModels) {
     const visibleMetricIds = new Set(
-      database.observations
+      allObservations
         .filter((observation) => observation.modelId === modelId)
         .map((observation) => observation.metricId),
     );
@@ -661,10 +660,33 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     pushMissingReference(errors, period.id, "parentPeriodId", period.parentPeriodId, periodIds, "Period");
   }
 
-  for (const observation of database.observations) {
+  const seriesKeys = new Map<string, string>();
+  for (const series of database.observationSeries) {
+    const key = [
+      series.modelId,
+      series.metricId,
+      series.entityId,
+      series.asOf,
+      series.versionId,
+    ].join("|");
+    const firstPointId = series.points[0]?.id ?? series.metricId;
+    const previous = seriesKeys.get(key);
+    if (previous) {
+      errors.push(error(
+        "observation_series.duplicate",
+        firstPointId,
+        "observationSeries",
+        `Series context duplicates the series containing ${previous}`,
+        "Merge points with the same model, metric, entity, as-of, and version into one series",
+      ));
+    } else {
+      seriesKeys.set(key, firstPointId);
+    }
+  }
+
+  for (const observation of allObservations) {
     validateObservation(
       observation,
-      database,
       {
         models,
         metrics,
@@ -678,7 +700,7 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   }
 
   const observationKeys = new Map<string, string>();
-  for (const observation of database.observations) {
+  for (const observation of allObservations) {
     const key = [
       observation.modelId,
       observation.metricId,
@@ -704,11 +726,99 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     }
   }
 
+  const transformationSignatures = new Map<string, string>();
   for (const transformation of database.transformations) {
+    const signature = JSON.stringify([
+      transformation.outputMetricId,
+      transformation.status,
+      transformation.status === "supported" ? transformation.expression : null,
+    ]);
+    const duplicateTransformation = transformationSignatures.get(signature);
+    if (duplicateTransformation) {
+      errors.push(error(
+        "transformation.duplicate",
+        transformation.id,
+        "transformations",
+        `Canonical calculation duplicates ${duplicateTransformation}`,
+        "Merge their sourceExpressions and point links into one transformation",
+      ));
+    } else {
+      transformationSignatures.set(signature, transformation.id);
+    }
     pushMissingReference(errors, transformation.id, "outputMetricId", transformation.outputMetricId, new Set(metrics.keys()), "Metric");
-    transformation.dependencyMetricIds.forEach((metricId, index) =>
-      pushMissingReference(errors, transformation.id, `dependencyMetricIds.${index}`, metricId, new Set(metrics.keys()), "Metric"),
+    const sourcePeriodIds = Object.keys(transformation.sourceExpressions);
+    sourcePeriodIds.forEach((periodId) =>
+      pushMissingReference(
+        errors,
+        transformation.id,
+        `sourceExpressions.${periodId}`,
+        periodId,
+        periodIds,
+        "Period",
+      ),
     );
+    for (const [periodId, sourceExpression] of Object.entries(transformation.sourceExpressions)) {
+      if (!sourceExpression.trimStart().startsWith("=")) {
+        errors.push(error(
+          "transformation.source_expression",
+          transformation.id,
+          `sourceExpressions.${periodId}`,
+          "Workbook source formula must begin with =",
+          "Preserve the exact Excel formula text, including its leading equals sign",
+        ));
+      }
+    }
+    const linkedOutputs = allObservations.filter(
+      (observation) => observation.transformationId === transformation.id,
+    );
+    if (linkedOutputs.length === 0) {
+      errors.push(
+        error(
+          "transformation.unused",
+          transformation.id,
+          "id",
+          "Transformation is not used by any observation point",
+          "Remove the transformation or link the output points that use it",
+        ),
+      );
+    }
+    for (const output of linkedOutputs) {
+      if (output.metricId !== transformation.outputMetricId) {
+        errors.push(
+          error(
+            "transformation.output_metric",
+            output.id,
+            "transformationId",
+            `Transformation ${transformation.id} outputs ${transformation.outputMetricId}, not ${output.metricId}`,
+            "Link the point to a transformation for the same output metric",
+          ),
+        );
+      }
+      if (!(output.periodId in transformation.sourceExpressions)) {
+        errors.push(
+          error(
+            "transformation.source_period",
+            output.id,
+            "transformationId",
+            `Transformation ${transformation.id} has no source formula for ${output.periodId}`,
+            "Add the exact source formula under sourceExpressions for this period",
+          ),
+        );
+      }
+    }
+    for (const periodId of sourcePeriodIds) {
+      if (!linkedOutputs.some((output) => output.periodId === periodId)) {
+        errors.push(
+          error(
+            "transformation.source_without_output",
+            transformation.id,
+            `sourceExpressions.${periodId}`,
+            `Source formula for ${periodId} has no linked observation point`,
+            "Remove the unused source formula or link its output point",
+          ),
+        );
+      }
+    }
 
     if (transformation.status === "supported") {
       const expression = validateExpression(transformation.expression);
@@ -723,18 +833,16 @@ export function validateModelDatabase(input: unknown): ValidationResult {
           ),
         );
       }
-      const declared = [...new Set(transformation.dependencyMetricIds)].sort();
-      if (declared.join("|") !== expression.dependencies.join("|")) {
-        errors.push(
-          error(
-            "transformation.dependencies",
-            transformation.id,
-            "dependencyMetricIds",
-            `Declared dependencies [${declared.join(", ")}] do not match expression dependencies [${expression.dependencies.join(", ")}]`,
-            "Regenerate dependencyMetricIds from the parsed canonical expression",
-          ),
-        );
-      }
+      expression.dependencies.forEach((metricId, index) =>
+        pushMissingReference(
+          errors,
+          transformation.id,
+          `expression.dependencies.${index}`,
+          metricId,
+          new Set(metrics.keys()),
+          "Metric",
+        ),
+      );
       for (const reference of expression.references) {
         pushMissingReference(
           errors,
@@ -745,16 +853,6 @@ export function validateModelDatabase(input: unknown): ValidationResult {
           "Period",
         );
       }
-    } else if (!transformation.originalExpression) {
-      errors.push(
-        error(
-          "transformation.original_expression",
-          transformation.id,
-          "originalExpression",
-          `${transformation.status} transformations must preserve the original formula`,
-          "Add originalExpression from the source workbook",
-        ),
-      );
     }
     if (transformation.status === "opaque") {
       const opaqueAction = database.unresolvedItems.find(
@@ -805,7 +903,7 @@ export function validateModelDatabase(input: unknown): ValidationResult {
       error(
         "transformation.cycle",
         cycle.objectId,
-        "dependencyMetricIds",
+        "expression",
         `Dependency cycle detected: ${cycle.path.join(" -> ")}`,
         "Break the cycle or mark an unsupported transformation as opaque",
       ),
@@ -840,16 +938,69 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   }
 
   const validProvenanceTargets = new Set(
-    PROVENANCE_REQUIRED_COLLECTIONS.flatMap((collection) =>
-      database[collection].map((object) => object.id),
-    ),
+    [
+      ...PROVENANCE_REQUIRED_COLLECTIONS.flatMap((collection) =>
+        database[collection].map((object) => object.id),
+      ),
+      ...allObservations.map((observation) => observation.id),
+    ],
   );
+  const provenanceContextKeys = new Map<string, string>();
+  for (const context of database.provenanceContexts) {
+    const key = JSON.stringify([
+      context.sourceArtifactId,
+      context.extractionRunId,
+      context.confidence,
+      context.reviewStatus,
+    ]);
+    const duplicate = provenanceContextKeys.get(key);
+    if (duplicate) {
+      errors.push(error(
+        "provenance_context.duplicate",
+        context.id,
+        "provenanceContexts",
+        `Provenance context duplicates ${duplicate}`,
+        "Reuse the existing contextId instead of repeating source, run, confidence, and review state",
+      ));
+    } else {
+      provenanceContextKeys.set(key, context.id);
+    }
+    pushMissingReference(
+      errors,
+      context.id,
+      "sourceArtifactId",
+      context.sourceArtifactId,
+      sourceArtifactIds,
+      "Source artifact",
+    );
+    pushMissingReference(
+      errors,
+      context.id,
+      "extractionRunId",
+      context.extractionRunId,
+      extractionRunIds,
+      "Extraction run",
+    );
+  }
   const targetsWithProvenance = new Set<string>();
   const provenanceByTarget = new Map<string, ModelDatabase["provenanceRecords"]>();
+  const provenanceKeys = new Set<string>();
   for (const provenance of database.provenanceRecords) {
-    pushMissingReference(errors, provenance.id, "targetId", provenance.targetId, validProvenanceTargets, "Provenance target");
-    pushMissingReference(errors, provenance.id, "sourceArtifactId", provenance.sourceArtifactId, sourceArtifactIds, "Source artifact");
-    pushMissingReference(errors, provenance.id, "extractionRunId", provenance.extractionRunId, extractionRunIds, "Extraction run");
+    pushMissingReference(errors, provenance.targetId, "targetId", provenance.targetId, validProvenanceTargets, "Provenance target");
+    pushMissingReference(errors, provenance.targetId, "contextId", provenance.contextId, provenanceContextIds, "Provenance context");
+    const key = JSON.stringify([provenance.targetId, provenance.contextId, provenance.locator]);
+    if (provenanceKeys.has(key)) {
+      errors.push(
+        error(
+          "provenance.duplicate",
+          provenance.targetId,
+          "provenanceRecords",
+          "The same target, context, and locator are repeated",
+          "Keep one provenance link for this source location",
+        ),
+      );
+    }
+    provenanceKeys.add(key);
     targetsWithProvenance.add(provenance.targetId);
     provenanceByTarget.set(
       provenance.targetId,
@@ -933,7 +1084,10 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     }
     if (unresolved.status === "open") {
       for (const provenance of provenanceByTarget.get(unresolved.id) ?? []) {
-        const run = extractionRuns.get(provenance.extractionRunId);
+        const context = database.provenanceContexts.find(
+          (candidate) => candidate.id === provenance.contextId,
+        );
+        const run = context ? extractionRuns.get(context.extractionRunId) : undefined;
         if (run?.status === "completed") {
           errors.push(
             error(

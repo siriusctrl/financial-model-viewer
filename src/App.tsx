@@ -8,7 +8,8 @@ import {
   editObservationValue,
   type ObservationEditResult,
 } from "./model-db/calculation";
-import { parseModelDatabaseJson } from "./model-db/import";
+import { modelDatabaseGzip, readModelDatabaseFile } from "./model-db/import";
+import { observations } from "./model-db/access";
 import {
   ModelDatabaseQueries,
   type AttentionItemProjection,
@@ -55,7 +56,7 @@ function defaultModelId(database: ModelDatabase): string {
 
 function initialGraphMetric(database: ModelDatabase, modelId: string): string | null {
   const metricIds = new Set(
-    database.observations
+    observations(database)
       .filter((observation) => observation.modelId === modelId)
       .map((observation) => observation.metricId),
   );
@@ -199,9 +200,10 @@ export default function App() {
   const actionRequiredCount = attentionItems.filter(
     (item) => item.item.attentionLevel === "action_required",
   ).length;
+  const observationList = useMemo(() => observations(database), [database]);
   const selectedLineageInputIds = useMemo(() => {
     if (!selectedTargetId) return new Set<string>();
-    const observation = database.observations.find(
+    const observation = observationList.find(
       (candidate) => candidate.id === selectedTargetId,
     );
     if (!observation) return new Set<string>();
@@ -210,7 +212,7 @@ export default function App() {
         (input) => input.observation ? [input.observation.id] : [],
       ),
     );
-  }, [database.observations, queries, selectedTargetId]);
+  }, [observationList, queries, selectedTargetId]);
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -312,7 +314,7 @@ export default function App() {
     setInspectorHistory([]);
     if (projection.model) {
       const targetObservation = projection.item.targetId
-        ? database.observations.find((item) => item.id === projection.item.targetId)
+        ? observationList.find((item) => item.id === projection.item.targetId)
         : undefined;
       const entityId = targetObservation?.entityId ?? projection.model.primaryEntityId;
       const presentationId = projection.metric
@@ -378,14 +380,14 @@ export default function App() {
       setImportNotice({
         kind: "error",
         title: "File is too large",
-        message: "Choose a model database JSON file smaller than 20 MB.",
+        message: "Choose a model database JSON or JSON.GZ file smaller than 100 MB.",
       });
       input.value = "";
       return;
     }
 
     try {
-      const result = parseModelDatabaseJson(await file.text());
+      const result = await readModelDatabaseFile(file, MAX_JSON_BYTES);
       if (!result.success) {
         setImportNotice({
           kind: "error",
@@ -455,17 +457,15 @@ export default function App() {
     }
   };
 
-  const exportDraft = () => {
+  const exportDraft = async () => {
     const sourceName = datasetSource.kind === "file"
-      ? datasetSource.filename.replace(/\.json$/i, "")
+      ? datasetSource.filename.replace(/\.json(?:\.gz)?$/i, "")
       : "model-db";
-    const blob = new Blob([`${JSON.stringify(database, null, 2)}\n`], {
-      type: "application/json",
-    });
+    const blob = await modelDatabaseGzip(database);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${sourceName}.edited.json`;
+    anchor.download = `${sourceName}.edited.json.gz`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -536,7 +536,7 @@ export default function App() {
             className="json-file-input"
             data-testid="json-file-input"
             type="file"
-            accept="application/json,.json"
+            accept="application/json,application/gzip,.json,.json.gz"
             onChange={handleDatabaseFile}
           />
           <button

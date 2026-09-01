@@ -100,19 +100,13 @@ export const ScenarioSchema = z
   })
   .strict();
 
-export const ObservationSchema = z
+export const ObservationPointSchema = z
   .object({
     id: IdSchema,
-    modelId: IdSchema,
-    metricId: IdSchema,
-    entityId: IdSchema,
     periodId: IdSchema,
     scenarioId: IdSchema.optional(),
     actuality: z.enum(["actual", "estimate"]),
     value: ScalarValueSchema,
-    unit: z.string().optional(),
-    asOf: DateSchema,
-    versionId: IdSchema,
     valueType: z.enum([
       "reported",
       "assumption",
@@ -123,20 +117,41 @@ export const ObservationSchema = z
   })
   .strict();
 
-export const TransformationSchema = z
+export const ObservationSeriesSchema = z
   .object({
-    id: IdSchema,
-    outputMetricId: IdSchema,
-    language: z.literal("model-expression@0.1"),
-    expression: z.string().min(1),
-    dependencyMetricIds: z.array(IdSchema),
-    appliesWhen: z
-      .record(z.string(), z.union([z.string(), z.array(z.string())]))
-      .optional(),
-    originalExpression: z.string().optional(),
-    status: z.enum(["supported", "opaque", "unresolved"]),
+    modelId: IdSchema,
+    metricId: IdSchema,
+    entityId: IdSchema,
+    asOf: DateSchema,
+    versionId: IdSchema,
+    points: z.array(ObservationPointSchema).min(1),
   })
   .strict();
+
+const SourceExpressionsSchema = z
+  .record(IdSchema, z.string().min(1))
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "sourceExpressions must contain at least one period formula",
+  });
+
+const TransformationBaseSchema = z.object({
+    id: IdSchema,
+    outputMetricId: IdSchema,
+    sourceExpressions: SourceExpressionsSchema,
+});
+
+export const TransformationSchema = z.discriminatedUnion("status", [
+  TransformationBaseSchema.extend({
+    status: z.literal("supported"),
+    expression: z.string().min(1),
+  }).strict(),
+  TransformationBaseSchema.extend({
+    status: z.literal("opaque"),
+  }).strict(),
+  TransformationBaseSchema.extend({
+    status: z.literal("unresolved"),
+  }).strict(),
+]);
 
 export const RelationshipSchema = z
   .object({
@@ -209,10 +224,23 @@ export const TablePresentationSchema = z
 
 export const ProvenanceRecordSchema = z
   .object({
-    id: IdSchema,
     targetId: IdSchema,
-    sourceArtifactId: IdSchema,
+    contextId: IdSchema,
     locator: SourceLocatorSchema.optional(),
+    confidence: ConfidenceSchema.optional(),
+    reviewStatus: z.enum([
+      "unreviewed",
+      "confirmed",
+      "corrected",
+      "rejected",
+    ]).optional(),
+  })
+  .strict();
+
+export const ProvenanceContextSchema = z
+  .object({
+    id: IdSchema,
+    sourceArtifactId: IdSchema,
     extractionRunId: IdSchema,
     confidence: ConfidenceSchema,
     reviewStatus: z.enum([
@@ -300,33 +328,43 @@ export const UnresolvedItemSchema = z
       "other",
     ]),
     description: z.string().min(1),
-    currentTreatment: z.string().min(1).optional(),
-    impact: z.string().min(1).optional(),
-    nextAction: z.string().min(1).optional(),
+    currentTreatment: z.string().min(1),
+    impact: z.string().min(1),
+    nextAction: z.string().min(1),
     targetId: IdSchema.optional(),
     affectedTargetIds: z.array(IdSchema).min(1).optional(),
     sourceArtifactId: IdSchema.optional(),
     locator: SourceLocatorSchema.optional(),
     confidence: ConfidenceSchema.optional(),
-    attentionLevel: z.enum(["needs_review", "action_required"]).default("needs_review"),
+    attentionLevel: z.enum(["needs_review", "action_required"]),
     actionOwner: z.enum(["extraction_agent", "model_owner", "source_owner"]).optional(),
     status: z.enum(["open", "resolved", "dismissed"]),
   })
-  .strict();
+  .strict()
+  .superRefine((item, context) => {
+    if (item.attentionLevel === "action_required" && !item.actionOwner) {
+      context.addIssue({
+        code: "custom",
+        path: ["actionOwner"],
+        message: "Action-required items must assign extraction_agent, model_owner, or source_owner",
+      });
+    }
+  });
 
 export const ModelDatabaseSchema = z
   .object({
-    schemaVersion: z.literal("0.1.0"),
+    schemaVersion: z.literal("0.2.0"),
     dataset: DatasetMetadataSchema,
     models: z.array(ModelSchema).min(1),
     entities: z.array(EntitySchema).min(1),
     metrics: z.array(MetricSchema).min(1),
     periods: z.array(PeriodSchema).min(1),
     scenarios: z.array(ScenarioSchema),
-    observations: z.array(ObservationSchema),
+    observationSeries: z.array(ObservationSeriesSchema),
     transformations: z.array(TransformationSchema),
     relationships: z.array(RelationshipSchema),
     sourceArtifacts: z.array(SourceArtifactSchema).min(1),
+    provenanceContexts: z.array(ProvenanceContextSchema).min(1),
     provenanceRecords: z.array(ProvenanceRecordSchema),
     evidence: z.array(EvidenceSchema),
     assumptions: z.array(AssumptionSchema),
@@ -334,11 +372,11 @@ export const ModelDatabaseSchema = z
     decisionChanges: z.array(DecisionChangeSchema),
     extractionRuns: z.array(ExtractionRunSchema).min(1),
     unresolvedItems: z.array(UnresolvedItemSchema),
-    tablePresentations: z.array(TablePresentationSchema).default([]),
+    tablePresentations: z.array(TablePresentationSchema),
   })
   .strict()
   .describe(
-    "Semantic financial-model database with a canonical object core and optional non-canonical table grouping metadata. Spreadsheet row, column, and cell identity are excluded from business objects.",
+    "Deduplicated semantic financial-model database with point-preserving observation series, reusable transformation rules, shared provenance contexts, and optional non-canonical table grouping metadata.",
   );
 
 export const ModelDatabaseJsonSchema = z.toJSONSchema(ModelDatabaseSchema, {

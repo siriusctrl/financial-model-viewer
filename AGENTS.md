@@ -6,6 +6,7 @@ This file is the operating map for agents working in this repository. Keep produ
 
 - `src/model-db/schema.ts`: the only hand-maintained canonical data contract.
 - `src/model-db/types.ts`: TypeScript types inferred from the runtime schema.
+- `src/model-db/access.ts`: canonical observation-series flattening, transformation reference derivation, and provenance-context resolution.
 - `src/model-db/expressions.ts`: restricted `model-expression@0.1` parser validation and interpreter.
 - `src/model-db/calculation.ts`: exact observation input/reverse-dependency resolution, local value mutation, and deterministic downstream formula propagation.
 - `src/model-db/validate.ts`: deterministic schema, reference, type, cycle, uniqueness, and provenance checks.

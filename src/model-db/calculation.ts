@@ -1,13 +1,19 @@
 import {
   evaluateExpression,
-  validateExpression,
   type ExpressionReference,
 } from "./expressions";
 import {
-  ObservationSchema,
+  ObservationPointSchema,
   ProvenanceRecordSchema,
   UnresolvedItemSchema,
 } from "./schema";
+import {
+  findObservationPoint,
+  observations,
+  resolveObservation,
+  transformationDependencyMetricIds,
+  transformationReferences,
+} from "./access";
 import { hasCompleteAttentionGuidance } from "./attention";
 import type {
   Metric,
@@ -95,9 +101,10 @@ function assertValidChangedObservations(
   observationIds: Set<string>,
 ): void {
   const metrics = new Map(database.metrics.map((metric) => [metric.id, metric]));
-  for (const observation of database.observations) {
+  for (const observation of observations(database)) {
     if (!observationIds.has(observation.id)) continue;
-    const parsed = ObservationSchema.safeParse(observation);
+    const located = findObservationPoint(database, observation.id);
+    const parsed = ObservationPointSchema.safeParse(located?.point);
     if (!parsed.success) {
       throw new Error(`${observation.id}: ${parsed.error.issues[0]?.message ?? "invalid observation"}`);
     }
@@ -112,7 +119,7 @@ function assertValidChangedObservations(
     if (!observationIds.has(provenance.targetId)) continue;
     const parsed = ProvenanceRecordSchema.safeParse(provenance);
     if (!parsed.success) {
-      throw new Error(`${provenance.id}: ${parsed.error.issues[0]?.message ?? "invalid provenance"}`);
+      throw new Error(`${provenance.targetId}: ${parsed.error.issues[0]?.message ?? "invalid provenance"}`);
     }
   }
 }
@@ -128,8 +135,9 @@ export class ModelCalculator {
   private readonly observedPeriodsCache = new Map<string, Period[]>();
 
   constructor(private readonly database: ModelDatabase) {
+    const observationList = observations(database);
     this.observations = new Map(
-      database.observations.map((observation) => [observation.id, observation]),
+      observationList.map((observation) => [observation.id, observation]),
     );
     this.periods = new Map(database.periods.map((period) => [period.id, period]));
     this.transformations = new Map(
@@ -140,7 +148,7 @@ export class ModelCalculator {
     this.transformationIdsByDependency = new Map();
     this.referencesByTransformation = new Map();
 
-    for (const observation of database.observations) {
+    for (const observation of observationList) {
       const key = observationIndexKey(observation);
       this.observationsByPoint.set(
         key,
@@ -159,7 +167,7 @@ export class ModelCalculator {
 
     for (const transformation of database.transformations) {
       if (transformation.status !== "supported") continue;
-      for (const metricId of transformation.dependencyMetricIds) {
+      for (const metricId of transformationDependencyMetricIds(transformation)) {
         const ids = this.transformationIdsByDependency.get(metricId) ?? new Set<string>();
         ids.add(transformation.id);
         this.transformationIdsByDependency.set(metricId, ids);
@@ -170,7 +178,7 @@ export class ModelCalculator {
   private transformationReferences(transformation: Transformation): ExpressionReference[] {
     const cached = this.referencesByTransformation.get(transformation.id);
     if (cached) return cached;
-    const references = validateExpression(transformation.expression).references;
+    const references = transformationReferences(transformation);
     this.referencesByTransformation.set(transformation.id, references);
     return references;
   }
@@ -200,7 +208,7 @@ export class ModelCalculator {
     if (cached) return cached;
 
     const periodIds = new Set(
-      this.database.observations
+      observations(this.database)
         .filter(
           (candidate) =>
             candidate.modelId === output.modelId
@@ -338,8 +346,9 @@ export function editObservationValue(
   value: ScalarValue,
 ): ObservationEditResult {
   const next = structuredClone(database) as ModelDatabase;
-  const observation = next.observations.find((item) => item.id === observationId);
-  if (!observation) throw new Error(`Unknown observation ${observationId}`);
+  const located = findObservationPoint(next, observationId);
+  if (!located) throw new Error(`Unknown observation ${observationId}`);
+  const observation = resolveObservation(located.series, located.point);
   const transformation = observation.transformationId
     ? next.transformations.find((item) => item.id === observation.transformationId)
     : undefined;
@@ -352,6 +361,7 @@ export function editObservationValue(
 
   const before = observation.value;
   observation.value = value;
+  located.point.value = value;
   const directMetric = next.metrics.find((metric) => metric.id === observation.metricId);
   if (!directMetric || !valueMatchesMetric(value, directMetric)) {
     throw new Error(
@@ -387,6 +397,9 @@ export function editObservationValue(
     const previous = target.value;
     const calculated = calculator.evaluateObservation(targetId);
     target.value = calculated;
+    const targetPoint = findObservationPoint(next, targetId)?.point;
+    if (!targetPoint) throw new Error(`Unknown observation ${targetId}`);
+    targetPoint.value = calculated;
     if (!Object.is(previous, calculated)) {
       propagatedChanges.push(changeFor(target, previous, calculated));
     }
@@ -441,7 +454,7 @@ export function confirmReviewItem(
     if (provenance.targetId !== itemId) continue;
     const parsed = ProvenanceRecordSchema.safeParse(provenance);
     if (!parsed.success) {
-      throw new Error(`${provenance.id}: ${parsed.error.issues[0]?.message ?? "invalid provenance"}`);
+      throw new Error(`${provenance.targetId}: ${parsed.error.issues[0]?.message ?? "invalid provenance"}`);
     }
   }
   return next;
