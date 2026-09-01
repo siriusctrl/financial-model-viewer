@@ -402,6 +402,9 @@ export default function App() {
         result.data,
         { kind: "file", filename: file.name },
       );
+      const importedAttention = new ModelDatabaseQueries(result.data)
+        .getAttentionItems()
+        .map(({ item }) => item);
       setImportNotice({
         kind: result.stats.actionRequired > 0
           ? "action"
@@ -409,7 +412,7 @@ export default function App() {
             ? "review"
             : "success",
         title: result.warnings.length > 0
-          ? `Loaded ${file.name} · ${attentionSummary(result.warnings)}`
+          ? `Loaded ${file.name} · ${attentionSummary(importedAttention)}`
           : `Loaded ${file.name}`,
         message: result.stats.actionRequired > 0
           ? `${result.stats.models} model${result.stats.models === 1 ? "" : "s"}, ${result.stats.metrics} metrics, and ${result.stats.observations} observations validated locally. The model is available, but action items need a source or extraction change before they can be cleared.`

@@ -273,6 +273,7 @@ test("labels opaque formulas without inventing canonical lineage", async ({ page
   });
 
   await uploadJson(page, "opaque-formula.json", imported);
+  await expect(page.getByTestId("import-notice")).toContainText("1 tooling issue");
   await page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/).click();
   const lineage = page.getByTestId("formula-lineage");
   await expect(lineage).toContainText("Opaque workbook formula");
