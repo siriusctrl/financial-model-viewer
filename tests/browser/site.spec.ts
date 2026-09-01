@@ -441,12 +441,15 @@ test("separates annual and quarterly periods in a mixed-frequency model", async 
   const revenueSeries = imported.observationSeries.find(
     (series) => series.metricId === "metric_northstar_revenue",
   )!;
-  revenueSeries.points.push({
+  const quarterlyPoint = {
     ...revenueSeries.points.find((item) => item.id === "obs_northstar_revenue_fy2024")!,
     id: "obs_northstar_revenue_q4_2024",
     periodId: "period_q4_2024",
     value: 360,
-  });
+    valueType: "reported" as const,
+  };
+  delete quarterlyPoint.transformationId;
+  revenueSeries.points.push(quarterlyPoint);
   const transformation = imported.transformations.find(
     (item) => item.id === "transformation_northstar_gross_profit",
   );
