@@ -492,9 +492,9 @@ export default function App() {
           <button
             className="upload-button"
             onClick={() => fileInputRef.current?.click()}
-            title="Open a model-db JSON file locally in this browser"
+            title="Upload a model-db JSON file for local preview"
           >
-            <Icon name="upload" size={15} /> Open JSON
+            <Icon name="upload" size={15} /> Upload JSON
           </button>
           {datasetSource.kind === "file" && (
             <button className="text-button" onClick={restoreBundledDatabase}>Restore bundled</button>

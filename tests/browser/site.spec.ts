@@ -40,6 +40,7 @@ async function uploadGzip(page: Page, name: string, value: unknown) {
 
 test("opens on the extracted model table and inspects a sourced cell", async ({ page }) => {
   await page.goto("./");
+  await expect(page.getByRole("button", { name: "Upload JSON" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
   await expect(page.getByTestId("financial-table-view")).toBeVisible();
   await expect(page.getByText("Revenue build", { exact: true })).toBeVisible();
