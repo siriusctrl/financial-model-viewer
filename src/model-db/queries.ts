@@ -110,11 +110,35 @@ export type ObservationDetailProjection = {
   entity: Entity;
   scenario?: Scenario;
   transformation?: Transformation;
+  formulaKind?: "constant" | "expression";
   provenance: ProvenanceProjection;
   inputs: ObservationLineageInput[];
   dependents: ObservationLineageDependent[];
   unresolvedItems: UnresolvedItem[];
 };
+
+const SOURCE_FORMULA_NUMBER = /(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?%?/gi;
+
+function isSourceFormulaConstant(originalExpression: string | undefined): boolean {
+  if (!originalExpression?.trimStart().startsWith("=")) return false;
+  const body = originalExpression.trimStart().slice(1);
+  const remainder = body
+    .replace(SOURCE_FORMULA_NUMBER, "")
+    .replace(/[()+\-*/^\s]/g, "");
+  return body.length > 0 && remainder.length === 0;
+}
+
+function formulaKind(transformation: Transformation): "constant" | "expression" {
+  if (transformation.status !== "supported" || transformation.dependencyMetricIds.length > 0) {
+    return "expression";
+  }
+  if (transformation.originalExpression) {
+    return isSourceFormulaConstant(transformation.originalExpression)
+      ? "constant"
+      : "expression";
+  }
+  return "constant";
+}
 
 export type ObservationNavigationTarget = {
   observation: Observation;
@@ -713,6 +737,7 @@ export class ModelDatabaseQueries {
         ? this.scenarios.get(observation.scenarioId)
         : undefined,
       transformation,
+      formulaKind: transformation ? formulaKind(transformation) : undefined,
       provenance: this.getProvenance(observation.id),
       inputs,
       dependents,

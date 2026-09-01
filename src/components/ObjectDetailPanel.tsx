@@ -457,7 +457,9 @@ function CellDetail({
             <div className="inspector-section-heading">
               <h3>
                 {detail.transformation.status === "supported"
-                  ? `Derived from ${detail.inputs.length} input${detail.inputs.length === 1 ? "" : "s"}`
+                  ? detail.formulaKind === "constant"
+                    ? "Formula constant"
+                    : `Derived from ${detail.inputs.length} input${detail.inputs.length === 1 ? "" : "s"}`
                   : "Opaque workbook formula"}
               </h3>
               {detail.transformation.dependencyMetricIds.length > 0 && (

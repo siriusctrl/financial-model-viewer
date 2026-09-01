@@ -205,6 +205,28 @@ describe("query projections", () => {
     ]);
   });
 
+  it("distinguishes literal formula constants from expressions that currently fold to zero", () => {
+    const constantFormula = structuredClone(sample) as ModelDatabase;
+    const transformation = constantFormula.transformations.find(
+      (item) => item.id === "transformation_northstar_gross_profit",
+    )!;
+    transformation.originalExpression = "=2.4*12%+4*88%";
+    transformation.expression = "((2.4 * 0.12) + (4 * 0.88))";
+    transformation.dependencyMetricIds = [];
+
+    const constantDetail = new ModelDatabaseQueries(
+      assertValidModelDatabase(constantFormula),
+    ).getObservationDetail("obs_northstar_gross_profit_fy2025");
+    expect(constantDetail.formulaKind).toBe("constant");
+
+    transformation.originalExpression = "=IFERROR(E10*E16,0)";
+    transformation.expression = "0";
+    const foldedDetail = new ModelDatabaseQueries(
+      assertValidModelDatabase(constantFormula),
+    ).getObservationDetail("obs_northstar_gross_profit_fy2025");
+    expect(foldedDetail.formulaKind).toBe("expression");
+  });
+
   it("resolves lagged formulas to the prior-period source cell", () => {
     const lagged = structuredClone(sample);
     lagged.periods.push({

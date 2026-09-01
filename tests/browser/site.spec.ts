@@ -197,6 +197,24 @@ test("shows actual workbook inputs for a derived cell", async ({ page }) => {
   await expect(lineage.getByText("=B10-B16", { exact: true })).toBeVisible();
 });
 
+test("labels a literal source formula as a formula constant", async ({ page }) => {
+  await page.goto("./");
+  const imported = structuredClone(sample) as ModelDatabase;
+  const transformation = imported.transformations.find(
+    (item) => item.id === "transformation_northstar_gross_profit",
+  )!;
+  transformation.originalExpression = "=-974.6";
+  transformation.expression = "(-974.6)";
+  transformation.dependencyMetricIds = [];
+
+  await uploadJson(page, "formula-constant.json", imported);
+  await page.getByTitle(/Derived · obs_northstar_gross_profit_fy2025/).click();
+  const lineage = page.getByTestId("formula-lineage");
+  await expect(lineage).toContainText("Formula constant");
+  await expect(lineage).not.toContainText("Derived from 0 inputs");
+  await expect(lineage.getByText("=-974.6", { exact: true })).toBeVisible();
+});
+
 test("labels opaque formulas without inventing canonical lineage", async ({ page }) => {
   await page.goto("./");
   const imported = structuredClone(sample) as ModelDatabase;
