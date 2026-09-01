@@ -384,24 +384,6 @@ test("persists the selected dark appearance", async ({ page }) => {
   await expect(root).toHaveAttribute("data-theme", nextTheme);
 });
 
-test("renders formula-derived dependency edges in the optional lineage map", async ({ page }) => {
-  await page.goto("./");
-  await page.getByRole("button", { name: "Lineage map" }).click();
-  await expect(page.getByTestId("dependency-graph-view")).toBeVisible();
-  await page.locator(".metric-picker select").selectOption("metric_northstar_gross_profit");
-  await expect(
-    page.locator(
-      '.dependency-edge[data-from="metric_northstar_revenue"][data-to="metric_northstar_gross_profit"]',
-    ),
-  ).toHaveCount(1);
-  await expect(
-    page.locator(
-      '.dependency-edge[data-from="metric_northstar_gross_profit"][data-to="metric_northstar_gross_margin"]',
-    ),
-  ).toHaveCount(1);
-  await expect(page.locator(".graph-node--focus .node-name")).toHaveText("Gross profit");
-});
-
 test("keeps the mobile shell within the viewport", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "mobile-only layout assertion");
   await page.goto("./");

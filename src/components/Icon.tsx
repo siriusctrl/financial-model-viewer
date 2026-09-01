@@ -3,7 +3,6 @@ import type { SVGProps } from "react";
 export type IconName =
   | "overview"
   | "table"
-  | "graph"
   | "database"
   | "search"
   | "arrow"
@@ -37,14 +36,6 @@ export function Icon({
       <>
         <rect x="3" y="4" width="18" height="16" rx="1.5" />
         <path d="M3 9h18M9 4v16M15 4v16" />
-      </>
-    ),
-    graph: (
-      <>
-        <circle cx="5" cy="12" r="2.5" />
-        <circle cx="19" cy="5" r="2.5" />
-        <circle cx="19" cy="19" r="2.5" />
-        <path d="m7.2 10.8 9.5-4.6M7.2 13.2l9.5 4.6" />
       </>
     ),
     database: (

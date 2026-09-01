@@ -87,18 +87,6 @@ describe("query projections", () => {
       .getAttentionItems()[0]?.period?.id).toBe("period_fy2025");
   });
 
-  it("derives graph edges from parsed expressions instead of stored dependencies", () => {
-    const graph = queries.getDependencies({
-      metricId: "metric_northstar_gross_profit",
-      direction: "both",
-    });
-    expect(graph.edges).toContainEqual(expect.objectContaining({
-      fromId: "metric_northstar_revenue",
-      toId: "metric_northstar_gross_profit",
-    }));
-    expect(graph.nodes.map((metric) => metric.id)).toContain("metric_northstar_gross_margin");
-  });
-
   it("resolves provenance and exact workbook inputs for a derived cell", () => {
     const provenance = queries.getProvenance("obs_northstar_subscription_revenue_fy2025");
     expect(provenance.records[0].source.type).toBe("workbook");

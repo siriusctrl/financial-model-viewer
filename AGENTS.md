@@ -13,7 +13,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `src/model-db/queries.ts`: visualization-neutral query layer. UI code consumes projections from here.
 - `src/model-db/attention.ts`: shared domain guard for complete attention guidance.
 - `tablePresentations` in `src/model-db/schema.ts`: optional non-canonical table sections and metric order captured during extraction.
-- `src/visualizations/`: Ledgerglass table view and optional dependency graph projection.
+- `src/visualizations/`: Ledgerglass financial table projection.
 - `src/components/ObjectDetailPanel.tsx`: dismissible slide-over for object/property inspection, local value edits, and reverse lineage.
 - `src/components/AttentionGuidance.tsx`: action/review explanation and guarded review confirmation.
 - `src/components/AttentionCenter.tsx`: global open-attention queue and model/source navigation.
@@ -74,7 +74,7 @@ npm run verify:proof
 npm run verify:extraction-preview
 ```
 
-Inspect desktop/mobile screenshots and `artifacts/verification/contact-sheet.png`. A successful build alone does not prove table scrolling, model switching, graph interaction, or source traceability.
+Inspect desktop/mobile screenshots and `artifacts/verification/contact-sheet.png`. A successful build alone does not prove table scrolling, model switching, inspector navigation, or source traceability.
 
 For a real extraction, also run `npm run extraction:preview -- path/to/output-directory`, inspect `viewer/review/contact-sheet.png` and the individual screenshots, spot-check source cells/formulas, and confirm every open attention item is explicit, correctly owned, and tied to a precise source location. Do not treat the automated preview result as visual acceptance.
 

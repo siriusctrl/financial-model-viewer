@@ -79,23 +79,19 @@ try {
   await desktop.getByRole("button", { name: "Back to previous inspected cell" }).click();
   await desktop.getByTestId("detail-panel").getByLabel("Clear selection").click();
 
-  await desktop.getByRole("button", { name: "Lineage map" }).click();
-  await desktop.locator(".metric-picker select").selectOption("metric_northstar_gross_profit");
-  await capture(desktop, "05-lineage-map-desktop");
-
   await desktop.getByLabel("Active model").selectOption("model_harbor_national");
-  await capture(desktop, "06-bank-table-desktop");
+  await capture(desktop, "05-bank-table-desktop");
 
   await desktop.getByTestId("attention-trigger").click();
-  await capture(desktop, "07-review-queue-desktop");
+  await capture(desktop, "06-review-queue-desktop");
   await desktop.getByTestId("attention-center").getByLabel("Close review queue").click();
 
   await desktop.getByLabel("Active model").selectOption("model_northstar_cloud");
   await desktop.getByLabel("Switch to dark mode").click();
   await desktop.waitForTimeout(250);
-  await capture(desktop, "08-dark-table-desktop");
+  await capture(desktop, "07-dark-table-desktop");
   await desktop.getByTestId("attention-trigger").click();
-  await capture(desktop, "09-dark-review-queue-desktop");
+  await capture(desktop, "08-dark-review-queue-desktop");
 
   const mobile = await browser.newPage({
     viewport: { width: 393, height: 852 },
@@ -104,10 +100,10 @@ try {
   });
   await mobile.goto(baseUrl, { waitUntil: "networkidle" });
   await mobile.waitForTimeout(250);
-  await capture(mobile, "10-dark-table-mobile");
+  await capture(mobile, "09-dark-table-mobile");
   await mobile.getByTitle(/obs_northstar_subscription_revenue_fy2022/).click();
   await mobile.waitForTimeout(250);
-  await capture(mobile, "11-dark-inspector-mobile");
+  await capture(mobile, "10-dark-inspector-mobile");
 
   const adaptiveInspector = await browser.newPage({
     viewport: { width: 900, height: 800 },
@@ -117,7 +113,7 @@ try {
   await adaptiveInspector.goto(baseUrl, { waitUntil: "networkidle" });
   await adaptiveInspector.getByTitle(/Derived · obs_northstar_revenue_fy2026/).click();
   await adaptiveInspector.waitForTimeout(250);
-  await capture(adaptiveInspector, "12-adaptive-inspector-desktop");
+  await capture(adaptiveInspector, "11-adaptive-inspector-desktop");
   await browser.close();
 
   const thumbWidth = 680;

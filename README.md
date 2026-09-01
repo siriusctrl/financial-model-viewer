@@ -113,7 +113,7 @@ Browser screenshots and contact sheets are written under the ignored `artifacts/
 
 - [`src/model-db/schema.ts`](src/model-db/schema.ts) is the only hand-maintained canonical contract.
 - [`src/model-db/`](src/model-db/) contains validation, expressions, calculations, queries, and inferred types.
-- [`src/visualizations/`](src/visualizations/) contains the table-first viewer and optional dependency graph.
+- [`src/visualizations/`](src/visualizations/) contains the compact financial table projection.
 - [`skills/extract-financial-model/`](skills/extract-financial-model/) contains the extraction procedure and tools.
 - [`examples/`](examples/) contains synthetic cross-sector fixtures, not real investment research.
 - [`docs/architecture-decisions.md`](docs/architecture-decisions.md) records durable contract, security, query, and hosting decisions.

@@ -16,7 +16,7 @@ The extraction directory must contain `model-db.json` and `extraction-report.md`
 2. builds the current viewer with relative static assets;
 3. embeds the validated model database in the generated HTML;
 4. opens the bundle in headless Chromium;
-5. checks every model and period-frequency table, cell inspection, derived lineage, the deduplicated metric dependency graph, and unresolved cues when available, plus browser errors, mobile table scrolling, mobile cell inspection, and document overflow;
+5. checks every model and period-frequency table, cell inspection, direct and reverse derived lineage, and unresolved cues when available, plus browser errors, mobile table scrolling, mobile cell inspection, and document overflow;
 6. writes `viewer/review/review.json`, individual screenshots, and `viewer/review/contact-sheet.png`.
 
 The generated viewer root also contains `.ledgerglass-preview.json` with format `ledgerglass-preview@0.1`. The serve and rebuild commands use this marker to recognize and safely replace a generated bundle; do not delete or edit it by hand.

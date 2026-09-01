@@ -71,19 +71,6 @@ export type FinancialTableProjection = {
   rows: FinancialTableRow[];
 };
 
-export type DependencyEdge = {
-  fromId: string;
-  toId: string;
-  transformationId: string;
-};
-
-export type DependencyGraphProjection = {
-  focusMetric: Metric;
-  nodes: Metric[];
-  edges: DependencyEdge[];
-  transformations: Array<Extract<Transformation, { status: "supported" }>>;
-};
-
 export type ProvenanceProjection = {
   records: Array<{
     provenance: ResolvedProvenanceRecord;
@@ -767,89 +754,6 @@ export class ModelDatabaseQueries {
           (item.targetId === observation.id || item.targetId === metric.id) &&
           (!item.modelId || item.modelId === observation.modelId),
       ),
-    };
-  }
-
-  getDependencies({
-    metricId,
-    direction = "both",
-  }: {
-    metricId: string;
-    direction?: "upstream" | "downstream" | "both";
-  }): DependencyGraphProjection {
-    const focusMetric = this.getMetric(metricId);
-    const edges: DependencyEdge[] = [];
-    const transformationIds = new Set<string>();
-    const visibleMetricIds = new Set([metricId]);
-    const queue: Array<{ metricId: string; depth: number }> = [
-      { metricId, depth: 0 },
-    ];
-    const seen = new Set<string>();
-
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current || seen.has(`${direction}:${current.metricId}`)) continue;
-      seen.add(`${direction}:${current.metricId}`);
-      if (current.depth >= 2) continue;
-
-      if (direction === "upstream" || direction === "both") {
-        for (const transformation of this.database.transformations.filter(
-          (item) => item.status === "supported" && item.outputMetricId === current.metricId,
-        )) {
-          transformationIds.add(transformation.id);
-          for (const dependencyMetricId of transformationDependencyMetricIds(transformation)) {
-            if (dependencyMetricId === transformation.outputMetricId) continue;
-            edges.push({
-              fromId: dependencyMetricId,
-              toId: transformation.outputMetricId,
-              transformationId: transformation.id,
-            });
-            visibleMetricIds.add(dependencyMetricId);
-            queue.push({ metricId: dependencyMetricId, depth: current.depth + 1 });
-          }
-        }
-      }
-
-      if (direction === "downstream" || direction === "both") {
-        for (const transformation of this.database.transformations.filter((item) =>
-          item.status === "supported"
-            && transformationDependencyMetricIds(item).includes(current.metricId),
-        )) {
-          transformationIds.add(transformation.id);
-          if (current.metricId === transformation.outputMetricId) continue;
-          edges.push({
-            fromId: current.metricId,
-            toId: transformation.outputMetricId,
-            transformationId: transformation.id,
-          });
-          visibleMetricIds.add(transformation.outputMetricId);
-          queue.push({
-            metricId: transformation.outputMetricId,
-            depth: current.depth + 1,
-          });
-        }
-      }
-    }
-
-    const uniqueEdges = [...new Map(
-      edges.map((edge) => [`${edge.fromId}|${edge.toId}`, edge]),
-    ).values()];
-    const uniqueTransformations = [...new Map(
-      [...transformationIds]
-        .map((id) => this.transformations.get(id))
-        .filter((item): item is Extract<Transformation, { status: "supported" }> =>
-          item?.status === "supported"
-        )
-        .map((item) => [
-          `${item.outputMetricId}|${item.expression}`,
-          item,
-        ]),
-    ).values()];
-    return {
-      focusMetric,
-      nodes: [...visibleMetricIds].map((id) => this.getMetric(id)),
-      edges: uniqueEdges,
-      transformations: uniqueTransformations,
     };
   }
 

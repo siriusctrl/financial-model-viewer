@@ -14,10 +14,7 @@ import type {
   UnresolvedItem,
 } from "../model-db/types";
 import { AttentionGuidance } from "./AttentionGuidance";
-import {
-  sourceExpressionFor,
-  transformationDependencyMetricIds,
-} from "../model-db/access";
+import { sourceExpressionFor } from "../model-db/access";
 
 type Props = {
   targetId: string | null;
@@ -26,7 +23,6 @@ type Props = {
   canNavigateBack: boolean;
   onNavigateBack: () => void;
   onSelectTarget: (targetId: string) => void;
-  onFocusGraph: (metricId: string) => void;
   onUpdateObservation: (
     observationId: string,
     value: ScalarValue,
@@ -139,7 +135,6 @@ export function ObjectDetailPanel({
   canNavigateBack,
   onNavigateBack,
   onSelectTarget,
-  onFocusGraph,
   onUpdateObservation,
   onConfirmReview,
 }: Props) {
@@ -202,7 +197,6 @@ export function ObjectDetailPanel({
           canNavigateBack={canNavigateBack}
           onNavigateBack={onNavigateBack}
           onSelectTarget={onSelectTarget}
-          onFocusGraph={onFocusGraph}
           onUpdateObservation={onUpdateObservation}
           onConfirmReview={onConfirmReview}
         />
@@ -352,7 +346,6 @@ function CellDetail({
   canNavigateBack,
   onNavigateBack,
   onSelectTarget,
-  onFocusGraph,
   onUpdateObservation,
   onConfirmReview,
 }: {
@@ -361,7 +354,6 @@ function CellDetail({
   canNavigateBack: boolean;
   onNavigateBack: () => void;
   onSelectTarget: (targetId: string) => void;
-  onFocusGraph: (metricId: string) => void;
   onUpdateObservation: Props["onUpdateObservation"];
   onConfirmReview: Props["onConfirmReview"];
 }) {
@@ -466,11 +458,6 @@ function CellDetail({
                     : `Derived from ${detail.inputs.length} input${detail.inputs.length === 1 ? "" : "s"}`
                   : "Opaque workbook formula"}
               </h3>
-              {transformationDependencyMetricIds(detail.transformation).length > 0 && (
-                <button className="text-button" onClick={() => onFocusGraph(detail.metric.id)}>
-                  Open map <Icon name="arrow" size={13} />
-                </button>
-              )}
             </div>
 
             {detail.transformation.status === "supported" ? (

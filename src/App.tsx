@@ -16,10 +16,8 @@ import {
 } from "./model-db/queries";
 import type { ModelDatabase, Period, ScalarValue } from "./model-db/types";
 import type { ValidationError } from "./model-db/validate";
-import { DependencyGraph } from "./visualizations/dependency-graph/DependencyGraph";
 import { FinancialTable } from "./visualizations/financial-table/FinancialTable";
 
-type View = "table" | "graph";
 type Theme = "light" | "dark";
 
 type InspectorLocation = {
@@ -28,14 +26,7 @@ type InspectorLocation = {
   presentationId?: string;
   entityId: string;
   periodType?: Period["type"];
-  view: View;
-  graphMetricId: string | null;
 };
-
-const views: Array<{ id: View; label: string }> = [
-  { id: "table", label: "Model table" },
-  { id: "graph", label: "Lineage map" },
-];
 
 const MAX_JSON_BYTES = 100 * 1024 * 1024;
 
@@ -52,18 +43,6 @@ type ImportNotice = {
 
 function defaultModelId(database: ModelDatabase): string {
   return database.dataset.defaultModelId ?? database.models[0].id;
-}
-
-function initialGraphMetric(database: ModelDatabase, modelId: string): string | null {
-  const metricIds = new Set(
-    observations(database)
-      .filter((observation) => observation.modelId === modelId)
-      .map((observation) => observation.metricId),
-  );
-  return (
-    database.transformations.find((item) => metricIds.has(item.outputMetricId))
-      ?.outputMetricId ?? [...metricIds][0] ?? null
-  );
 }
 
 function initialPresentationId(database: ModelDatabase, modelId: string): string | undefined {
@@ -153,7 +132,6 @@ export default function App() {
       initialEntityId(defaultDatabase, defaultModelId(defaultDatabase)),
     ),
   );
-  const [view, setView] = useState<View>("table");
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [inspectorHistory, setInspectorHistory] = useState<InspectorLocation[]>([]);
   const [attentionOpen, setAttentionOpen] = useState(false);
@@ -162,10 +140,6 @@ export default function App() {
     periodId?: string;
     attentionLevel: "needs_review" | "action_required";
   } | null>(null);
-  const [graphMetricId, setGraphMetricId] = useState<string | null>(() =>
-    initialGraphMetric(defaultDatabase, defaultModelId(defaultDatabase)),
-  );
-
   const queries = useMemo(() => new ModelDatabaseQueries(database), [database]);
   const models = queries.getModels();
   const attentionItems = useMemo(() => queries.getAttentionItems(), [queries]);
@@ -186,16 +160,6 @@ export default function App() {
         presentationId: selectedPresentationId,
       }),
     [queries, selectedEntityId, selectedModelId, selectedPeriodType, selectedPresentationId],
-  );
-  const availableMetrics = useMemo(
-    () => table.rows.map((row) => row.metric),
-    [table.rows],
-  );
-  const graph = useMemo(
-    () => graphMetricId
-      ? queries.getDependencies({ metricId: graphMetricId, direction: "both" })
-      : null,
-    [graphMetricId, queries],
   );
   const actionRequiredCount = attentionItems.filter(
     (item) => item.item.attentionLevel === "action_required",
@@ -231,16 +195,9 @@ export default function App() {
     setSelectedPresentationId(presentationId);
     setSelectedEntityId(entityId);
     setSelectedPeriodType(initialPeriodType(database, modelId, presentationId, entityId));
-    setGraphMetricId(initialGraphMetric(database, modelId));
     setSelectedTargetId(null);
     setInspectorHistory([]);
     setAttentionFocus(null);
-    setView("table");
-  };
-
-  const focusGraph = (metricId: string) => {
-    setGraphMetricId(metricId);
-    setView("graph");
   };
 
   const rememberCurrentInspector = (nextTargetId: string) => {
@@ -251,8 +208,6 @@ export default function App() {
       presentationId: selectedPresentationId,
       entityId: selectedEntityId,
       periodType: selectedPeriodType,
-      view,
-      graphMetricId,
     };
     setInspectorHistory((history) => {
       const withoutDuplicateTail = history.at(-1)?.targetId === current.targetId
@@ -278,8 +233,6 @@ export default function App() {
     setSelectedPresentationId(target.presentation?.id);
     setSelectedEntityId(target.entity.id);
     setSelectedPeriodType(target.period.type);
-    setGraphMetricId(initialGraphMetric(database, target.model.id));
-    setView("table");
     setAttentionFocus(null);
     setSelectedTargetId(observationId);
   };
@@ -298,8 +251,6 @@ export default function App() {
     setSelectedPresentationId(previous.presentationId);
     setSelectedEntityId(previous.entityId);
     setSelectedPeriodType(previous.periodType);
-    setGraphMetricId(previous.graphMetricId);
-    setView(previous.view);
     setAttentionFocus(null);
     setSelectedTargetId(previous.targetId);
   };
@@ -332,9 +283,7 @@ export default function App() {
         projection.period?.type
           ?? initialPeriodType(database, projection.model.id, presentationId, entityId),
       );
-      setGraphMetricId(initialGraphMetric(database, projection.model.id));
     }
-    setView("table");
     setSelectedTargetId(projection.item.id);
     setAttentionFocus(projection.metric ? {
       metricId: projection.metric.id,
@@ -363,12 +312,10 @@ export default function App() {
       nextPresentationId,
       nextEntityId,
     ));
-    setGraphMetricId(initialGraphMetric(nextDatabase, nextModelId));
     setSelectedTargetId(null);
     setInspectorHistory([]);
     setAttentionFocus(null);
     setAttentionOpen(false);
-    setView("table");
   };
 
   const handleDatabaseFile = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -678,53 +625,19 @@ export default function App() {
               </select>
             </label>
           )}
-          <nav className="view-tabs" aria-label="Viewer mode">
-            {views.map((item) => (
-              <button
-                key={item.id}
-                className={view === item.id ? "active" : ""}
-                onClick={() => setView(item.id)}
-                aria-current={view === item.id ? "page" : undefined}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
         </div>
       </section>
 
       <div className="viewer-layout">
         <main className="model-canvas">
-          {view === "table" && (
-            <FinancialTable
-              projection={table}
-              selectedTargetId={selectedTargetId}
-              lineageInputIds={selectedLineageInputIds}
-              attentionFocus={attentionFocus}
-              onSelectMetric={selectMetric}
-              onSelectObservation={selectObservation}
-            />
-          )}
-          {view === "graph" && graph && (
-            <DependencyGraph
-              projection={graph}
-              availableMetrics={availableMetrics}
-              onFocusMetric={setGraphMetricId}
-              onSelectMetric={selectMetric}
-              onSelectTransformation={(targetId) => {
-                rememberCurrentInspector(targetId);
-                setAttentionFocus(null);
-                setSelectedTargetId(targetId);
-              }}
-            />
-          )}
-          {view === "graph" && !graph && (
-            <section className="empty-projection" data-testid="empty-dependency-graph">
-              <Icon name="graph" size={24} />
-              <h2>No dependency graph is available.</h2>
-              <p>Add observations and transformations, then open the database again.</p>
-            </section>
-          )}
+          <FinancialTable
+            projection={table}
+            selectedTargetId={selectedTargetId}
+            lineageInputIds={selectedLineageInputIds}
+            attentionFocus={attentionFocus}
+            onSelectMetric={selectMetric}
+            onSelectObservation={selectObservation}
+          />
         </main>
 
         <ObjectDetailPanel
@@ -734,7 +647,6 @@ export default function App() {
           canNavigateBack={inspectorHistory.length > 0}
           onNavigateBack={navigateBack}
           onSelectTarget={navigateToObservation}
-          onFocusGraph={focusGraph}
           onUpdateObservation={updateObservationValue}
           onConfirmReview={confirmReview}
         />
