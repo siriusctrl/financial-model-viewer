@@ -17,11 +17,12 @@ This file is the operating map for agents working in this repository. Keep produ
 - `src/components/ObjectDetailPanel.tsx`: dismissible slide-over for object/property inspection, local value edits, and reverse lineage.
 - `src/components/AttentionGuidance.tsx`: action/review explanation and guarded review confirmation.
 - `src/components/AttentionCenter.tsx`: global open-attention queue and model/source navigation.
-- `scripts/generate-schema.ts`: generates `schema/model-db.schema.json` from `schema.ts`.
+- `scripts/generate-schema.ts`: generates the repository and Pages copies of `model-db.schema.json` from `schema.ts`.
 - `scripts/generate-sample.ts`: generates and validates the representative cross-sector fixture.
 - `skills/extract-financial-model/`: reusable workbook/model extraction workflow and contract.
 - `skills/extract-financial-model/scripts/ooxml.py`: sparse read-only XLSX package access used by inventory and mapped extraction.
 - `skills/extract-financial-model/scripts/formula_translation.py`: restricted mapped-cell arithmetic, comparisons, guarded numeric IFERROR, SUM/AVERAGE, equal-length range SUMPRODUCT, and one-criterion SUMIFS/AVERAGEIFS translation with cached-value replay across mapped periods and worksheets.
+- `workbook-inventory.json` in a mapped extraction output: lossless workbook structure, cells, formulas, comments, styles, and unsupported package features used as extraction evidence.
 - `formula-translation-tasks.json` in a mapped extraction output: machine-readable follow-up queue for formulas that still exceed deterministic translator coverage.
 - `workbook-style-evidence.json` in a mapped extraction output: non-canonical per-cell styles and matches from the fixed Alice convention.
 - `skills/extract-financial-model/scripts/build-preview.mjs`: validates, compiles, and Playwright-reviews a local extraction bundle without changing GitHub Pages.
@@ -75,7 +76,7 @@ npm run verify:extraction-preview
 
 Inspect desktop/mobile screenshots and `artifacts/verification/contact-sheet.png`. A successful build alone does not prove table scrolling, model switching, graph interaction, or source traceability.
 
-For a real extraction, also run `npm run extraction:preview -- path/to/output-directory`, inspect `viewer/review/contact-sheet.png` and the individual screenshots, spot-check source cells/formulas, and confirm every open analyst question is explicit. Do not treat the automated preview result as visual acceptance.
+For a real extraction, also run `npm run extraction:preview -- path/to/output-directory`, inspect `viewer/review/contact-sheet.png` and the individual screenshots, spot-check source cells/formulas, and confirm every open attention item is explicit, correctly owned, and tied to a precise source location. Do not treat the automated preview result as visual acceptance.
 
 ## Documentation and handoff
 

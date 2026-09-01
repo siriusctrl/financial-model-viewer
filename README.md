@@ -59,12 +59,14 @@ Extract a workbook using an explicit semantic map:
 npm run workbook:extract -- model.xlsx extraction-map.json output-directory
 ```
 
-The output directory must contain:
+Every extraction package must contain at least:
 
 ```text
 model-db.json
 extraction-report.md
 ```
+
+The mapped XLSX extractor writes a complete five-file bundle by also preserving `workbook-inventory.json`, `workbook-style-evidence.json`, and `formula-translation-tasks.json`. Other extraction paths must include the translation-task file whenever an opaque formula remains.
 
 Validate the complete package, then compile it into a local static viewer and run the Playwright review loop:
 

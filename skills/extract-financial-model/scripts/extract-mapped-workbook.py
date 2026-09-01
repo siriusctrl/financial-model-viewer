@@ -14,7 +14,7 @@ from mapped_workbook import MappedWorkbookExtractor, load_mapping
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Read selected XLSX cells through an explicit semantic map and emit model-db.json plus extraction-report.md."
+        description="Read selected XLSX cells through an explicit semantic map and emit the complete five-file extraction bundle."
     )
     parser.add_argument("workbook", type=Path)
     parser.add_argument("mapping", type=Path)

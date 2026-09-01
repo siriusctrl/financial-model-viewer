@@ -117,7 +117,7 @@ Before accepting an opaque formula:
 1. Inspect its exact blocker and referenced cells.
 2. Extend the semantic map for every defensible missing input.
 3. Retry translation and cached-value replay.
-4. Open its generated `formula-translation-tasks.json` item. Extend the reusable restricted translator and tests when the syntax has defensible general semantics, then rerun extraction.
+4. Open its generated `formula-translation-tasks.json` item. Only when shared tooling improvement is explicitly authorized, extend the reusable restricted translator and tests for syntax with defensible general semantics, then rerun extraction.
 5. Use a reviewed canonical expression only when it matches the source formula's meaning for that specific period type.
 6. Keep the formula opaque when syntax remains outside `model-expression@0.1` and tooling improvement is not in scope, or source meaning is genuinely unresolved.
 
