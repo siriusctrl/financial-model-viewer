@@ -1,4 +1,13 @@
-import { type ChangeEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { AttentionCenter } from "./components/AttentionCenter";
 import { Icon } from "./components/Icon";
 import { ObjectDetailPanel } from "./components/ObjectDetailPanel";
@@ -9,6 +18,10 @@ import {
   type ObservationEditResult,
 } from "./model-db/calculation";
 import { modelDatabaseGzip, readModelDatabaseFile } from "./model-db/import";
+import {
+  createDatabaseHistory,
+  databaseHistoryReducer,
+} from "./model-db/history";
 import { observations } from "./model-db/access";
 import {
   ModelDatabaseQueries,
@@ -82,6 +95,11 @@ function initialTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement
+    && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+}
+
 function attentionSummary(items: Array<{
   attentionLevel: "needs_review" | "action_required";
   actionOwner?: "extraction_agent" | "model_owner" | "source_owner";
@@ -113,9 +131,16 @@ function attentionSummary(items: Array<{
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [theme, setTheme] = useState<Theme>(initialTheme);
-  const [database, setDatabase] = useState(defaultDatabase);
+  const [databaseHistory, dispatchDatabaseHistory] = useReducer(
+    databaseHistoryReducer,
+    defaultDatabase,
+    createDatabaseHistory,
+  );
+  const database = databaseHistory.present;
+  const draftTransactions = databaseHistory.past.length;
+  const canUndo = databaseHistory.past.length > 0;
+  const canRedo = databaseHistory.future.length > 0;
   const [datasetSource, setDatasetSource] = useState<DatasetSource>({ kind: "bundled" });
-  const [draftTransactions, setDraftTransactions] = useState(0);
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const [selectedModelId, setSelectedModelId] = useState(() => defaultModelId(defaultDatabase));
   const [selectedPresentationId, setSelectedPresentationId] = useState<string | undefined>(() =>
@@ -187,6 +212,30 @@ export default function App() {
       // The active theme remains valid for this tab when storage is unavailable.
     }
   }, [theme]);
+
+  const undoDatabase = useCallback(() => {
+    dispatchDatabaseHistory({ type: "undo" });
+  }, []);
+
+  const redoDatabase = useCallback(() => {
+    dispatchDatabaseHistory({ type: "redo" });
+  }, []);
+
+  useEffect(() => {
+    const navigateHistory = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || isEditableTarget(event.target)) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      const redo = (key === "z" && event.shiftKey) || (key === "y" && event.ctrlKey);
+      if (key !== "z" && !redo) return;
+      event.preventDefault();
+      if (redo) redoDatabase();
+      else undoDatabase();
+    };
+    window.addEventListener("keydown", navigateHistory);
+    return () => window.removeEventListener("keydown", navigateHistory);
+  }, [redoDatabase, undoDatabase]);
 
   const changeModel = (modelId: string) => {
     const presentationId = initialPresentationId(database, modelId);
@@ -300,9 +349,8 @@ export default function App() {
     const nextModelId = defaultModelId(nextDatabase);
     const nextPresentationId = initialPresentationId(nextDatabase, nextModelId);
     const nextEntityId = initialEntityId(nextDatabase, nextModelId);
-    setDatabase(nextDatabase);
+    dispatchDatabaseHistory({ type: "reset", database: nextDatabase });
     setDatasetSource(source);
-    setDraftTransactions(0);
     setSelectedModelId(nextModelId);
     setSelectedPresentationId(nextPresentationId);
     setSelectedEntityId(nextEntityId);
@@ -378,28 +426,20 @@ export default function App() {
     }
   };
 
-  const restoreBundledDatabase = () => {
-    activateDatabase(defaultDatabase, { kind: "bundled" });
-    setImportNotice({
-      kind: "success",
-      title: "Bundled dataset restored",
-      message: "You are previewing the dataset compiled into this viewer.",
-    });
-  };
-
   const updateObservationValue = (
     observationId: string,
     value: ScalarValue,
   ): ObservationEditResult => {
     const result = editObservationValue(database, observationId, value);
-    setDatabase(result.database);
-    setDraftTransactions((count) => count + 1);
+    dispatchDatabaseHistory({ type: "commit", database: result.database });
     return result;
   };
 
   const confirmReview = (itemId: string) => {
-    setDatabase(confirmReviewItem(database, itemId));
-    setDraftTransactions((count) => count + 1);
+    dispatchDatabaseHistory({
+      type: "commit",
+      database: confirmReviewItem(database, itemId),
+    });
     if (selectedTargetId === itemId) {
       setSelectedTargetId(null);
       setInspectorHistory([]);
@@ -469,7 +509,6 @@ export default function App() {
             title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
           >
             <Icon name="theme" size={15} />
-            <span>{theme === "light" ? "Dark" : "Light"}</span>
           </button>
           {draftTransactions > 0 && (
             <button
@@ -481,6 +520,30 @@ export default function App() {
               Export draft <span>{draftTransactions}</span>
             </button>
           )}
+          <div
+            className={`edit-history-controls ${canUndo || canRedo ? "is-visible" : ""}`}
+            aria-label="Edit history"
+            aria-hidden={!canUndo && !canRedo}
+          >
+            <button
+              className="history-button"
+              onClick={undoDatabase}
+              disabled={!canUndo}
+              aria-label="Undo last change"
+              title="Undo last change (⌘Z / Ctrl+Z)"
+            >
+              <Icon name="undo" size={15} />
+            </button>
+            <button
+              className="history-button"
+              onClick={redoDatabase}
+              disabled={!canRedo}
+              aria-label="Redo last change"
+              title="Redo last change (⌘⇧Z / Ctrl+Shift+Z)"
+            >
+              <Icon name="redo" size={15} />
+            </button>
+          </div>
           <input
             ref={fileInputRef}
             className="json-file-input"
@@ -496,9 +559,6 @@ export default function App() {
           >
             <Icon name="upload" size={15} /> Upload JSON
           </button>
-          {datasetSource.kind === "file" && (
-            <button className="text-button" onClick={restoreBundledDatabase}>Restore bundled</button>
-          )}
         </div>
       </header>
 

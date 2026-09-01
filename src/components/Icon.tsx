@@ -7,6 +7,8 @@ export type IconName =
   | "search"
   | "arrow"
   | "back"
+  | "undo"
+  | "redo"
   | "close"
   | "source"
   | "formula"
@@ -53,6 +55,8 @@ export function Icon({
     ),
     arrow: <path d="M5 12h14M14 7l5 5-5 5" />,
     back: <path d="M19 12H5M10 7l-5 5 5 5" />,
+    undo: <path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6" />,
+    redo: <path d="m15 7 5 5-5 5M19 12h-8a6 6 0 0 0-6 6" />,
     close: <path d="m6 6 12 12M18 6 6 18" />,
     source: (
       <>

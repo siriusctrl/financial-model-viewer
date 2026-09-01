@@ -32,7 +32,7 @@ The primary model table supports:
 - entity switching for peer and portfolio-style datasets;
 - cell inspection with workbook source, confidence, and extraction run;
 - direct and reverse formula lineage with automatic cross-view cell navigation and inspector back history;
-- browser-local input edits with deterministic downstream recalculation;
+- browser-local input edits with deterministic downstream recalculation, Undo/Redo controls, and standard keyboard shortcuts;
 - dark and light appearances;
 - compact gzip JSON export of the local working copy.
 

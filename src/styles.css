@@ -295,13 +295,13 @@ select:focus-visible,
 }
 
 .theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 650;
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -360,7 +360,47 @@ select:focus-visible,
   font-size: 8px;
 }
 
+.edit-history-controls {
+  display: grid;
+  grid-template-columns: repeat(2, 30px);
+  flex: 0 0 62px;
+  gap: 2px;
+  visibility: hidden;
+}
+
+.edit-history-controls.is-visible {
+  visibility: visible;
+}
+
+.history-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.history-button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line-strong);
+}
+
+.history-button:disabled {
+  color: var(--soft-muted);
+  cursor: default;
+  opacity: 0.38;
+}
+
 .upload-button:active,
+.theme-toggle:active,
+.draft-export-button:active,
+.history-button:active:not(:disabled),
 .value-button:active,
 .metric-label-button:active {
   transform: translateY(1px);
@@ -2077,10 +2117,6 @@ select:focus-visible,
     display: none;
   }
 
-  .theme-toggle span {
-    display: none;
-  }
-
   .validation-status.has-warning {
     display: inline-flex;
   }
@@ -2141,10 +2177,6 @@ select:focus-visible,
 @media (max-width: 560px) {
   .product-lockup strong {
     font-size: 12px;
-  }
-
-  .header-actions .text-button {
-    display: none;
   }
 
   .header-actions {

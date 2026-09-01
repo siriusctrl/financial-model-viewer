@@ -41,6 +41,8 @@ async function uploadGzip(page: Page, name: string, value: unknown) {
 test("opens on the extracted model table and inspects a sourced cell", async ({ page }) => {
   await page.goto("./");
   await expect(page.getByRole("button", { name: "Upload JSON" })).toBeVisible();
+  await expect(page.locator('.edit-history-controls')).toHaveCSS("visibility", "hidden");
+  await expect(page.getByRole("button", { name: /Switch to (dark|light) mode/ })).toHaveText("");
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
   await expect(page.getByTestId("financial-table-view")).toBeVisible();
   await expect(page.getByText("Revenue build", { exact: true })).toBeVisible();
@@ -151,6 +153,10 @@ test("sizes table columns from the active model content", async ({ page }) => {
 
 test("edits an input, propagates formulas, and exports the local draft", async ({ page }) => {
   await page.goto("./");
+  const uploadButton = page.getByRole("button", { name: "Upload JSON" });
+  const uploadPositionBefore = await uploadButton.boundingBox();
+  const undoButton = page.getByRole("button", { name: "Undo last change" });
+  const redoButton = page.getByRole("button", { name: "Redo last change" });
   await page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/).click();
   const inspector = page.getByTestId("detail-panel");
   await expect(inspector.getByTestId("reverse-lineage")).toContainText("Used by 1 formula cell");
@@ -173,6 +179,34 @@ test("edits an input, propagates formulas, and exports the local draft", async (
   await expect(page.getByTitle(/Derived · obs_northstar_gross_margin_fy2025/)).toContainText(
     "70.4%",
   );
+  await expect(undoButton).toBeEnabled();
+  await expect(redoButton).toBeDisabled();
+  const uploadPositionAfter = await uploadButton.boundingBox();
+  if ((page.viewportSize()?.width ?? 0) > 560) {
+    expect(Math.abs((uploadPositionAfter?.x ?? 0) - (uploadPositionBefore?.x ?? 0))).toBeLessThan(1);
+  }
+
+  const compactViewport = (page.viewportSize()?.width ?? 0) <= 560;
+  if (compactViewport) await page.keyboard.press("Meta+Z");
+  else await undoButton.click();
+  await expect(
+    page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/),
+  ).toContainText("1,315.0");
+  await expect(redoButton).toBeEnabled();
+
+  await page.keyboard.press("Meta+Shift+Z");
+  await expect(
+    page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/),
+  ).toContainText("1,400.0");
+  await page.keyboard.press("Meta+Z");
+  await expect(
+    page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/),
+  ).toContainText("1,315.0");
+  if (compactViewport) await page.keyboard.press("Meta+Shift+Z");
+  else await redoButton.click();
+  await expect(
+    page.getByTitle(/Assumption · obs_northstar_subscription_revenue_fy2025/),
+  ).toContainText("1,400.0");
 
   await inspector.getByTestId("reverse-lineage").locator("button").first().click();
   await expect(inspector.getByTestId("formula-lineage")).toContainText("Derived from 2 inputs");
@@ -410,6 +444,7 @@ test("previews a validated model database JSON file locally", async ({ page }) =
   await expect(notice.getByRole("button", { name: "Review attention" })).toBeVisible();
   await expect(page.locator(".dataset-breadcrumb")).toContainText("Imported analyst model");
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restore bundled" })).toHaveCount(0);
 });
 
 test("separates annual and quarterly periods in a mixed-frequency model", async ({ page }) => {
