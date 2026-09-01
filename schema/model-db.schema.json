@@ -915,6 +915,9 @@
               "lineage",
               "actuality_boundary",
               "presentation",
+              "source_error",
+              "source_update",
+              "model_inconsistency",
               "other"
             ]
           },

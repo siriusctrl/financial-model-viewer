@@ -31,6 +31,7 @@ Check all of the following against the source workbook or lossless IR:
 - selected-cell value, source locator, confidence, and review state;
 - derived input metrics, input periods, workbook cells, and original formula;
 - neutral-blue `needs_review` cues for reversible assumptions and red `action_required` cues for blocked decisions, at status, row, and cell-detail level;
+- every possible source/model error or required update appears as a red action and is not ranked or suppressed by confidence;
 - attention detail that clearly separates current treatment, impact, and next action; documented review items expose only an explicit confirmation control, while action items and incomplete legacy reviews expose no manual clear/dismiss control;
 - table scrolling and inspector placement on desktop and mobile.
 

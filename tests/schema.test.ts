@@ -69,6 +69,28 @@ describe("deterministic model database validator", () => {
     }
   });
 
+  it("requires possible workbook errors and updates to remain actions", () => {
+    const database = fixture();
+    database.unresolvedItems[0].category = "source_error";
+
+    const downgraded = validateModelDatabase(database);
+    expect(downgraded.success).toBe(false);
+    if (!downgraded.success) {
+      expect(downgraded.errors).toContainEqual(
+        expect.objectContaining({
+          code: "unresolved.repair_required",
+          objectId: database.unresolvedItems[0].id,
+          field: "attentionLevel",
+        }),
+      );
+    }
+
+    database.unresolvedItems[0].attentionLevel = "action_required";
+    database.unresolvedItems[0].actionOwner = "source_owner";
+    const repairAction = validateModelDatabase(database);
+    expect(repairAction.success).toBe(true);
+  });
+
   it("requires an open action while a transformation remains opaque", () => {
     const database = fixture();
     const transformation = database.transformations.find(

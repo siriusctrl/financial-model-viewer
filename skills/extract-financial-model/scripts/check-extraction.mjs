@@ -12,6 +12,7 @@ const REQUIRED_REPORT_SECTIONS = [
   "Table presentation",
   "Actual / estimate boundary",
   "Formula coverage",
+  "Workbook quality audit",
   "Unresolved mappings",
   "Missing lineage",
   "Validator result",

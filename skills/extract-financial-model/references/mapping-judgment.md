@@ -71,6 +71,8 @@ Confidence, human review status, and attention level answer different questions:
 - provenance `reviewStatus`: has a human reviewed or corrected it?
 - unresolved `attentionLevel`: may the extraction proceed, should someone inspect it, or is a decision required?
 
+Confidence is evidence metadata only. It never determines attention priority: every concrete possible workbook/model error or required update is `action_required` until repaired and re-extracted.
+
 Use these three product states:
 
 | Product state | Database representation | Rule |
@@ -95,6 +97,12 @@ Typical `action_required` cases:
 - period or scenario identity cannot be determined;
 - source evidence conflicts and choosing either interpretation would materially change the model.
 - any opaque formula, even when its cached value is usable for preview, because canonical calculation lineage is still missing.
+- a broken reference, formula error, or required source value that is missing;
+- a literal value interrupting a repeated neighboring formula pattern;
+- a stated total or model identity that does not reconcile;
+- explicit source evidence that a required input needs updating.
+
+Classify source/model repair findings as `source_error`, `source_update`, or `model_inconsistency`. Do not downgrade one to `needs_review` because the detection is low-confidence; instead state the concrete evidence and the check needed to close it. Do not manufacture actions from vague anomaly scores.
 
 Do not create unresolved items for harmless formatting differences, unsupported non-model workbook parts, deliberately out-of-scope worksheets, or facts already settled by deterministic evidence. Record scope exclusions explicitly in the map and report. Preserve comments outside the selected semantic graph in `workbook-inventory.json`; attach material in-scope comments as evidence instead of asking an analyst to classify every comment.
 

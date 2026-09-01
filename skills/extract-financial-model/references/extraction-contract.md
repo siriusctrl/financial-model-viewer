@@ -147,7 +147,7 @@ Use the narrowest available locator:
 - filing/document: page and passage;
 - transcript/voice memo: timecode and passage.
 
-Use `confirmed` only for human-reviewed or directly unambiguous mappings. Use `unreviewed` for AI extraction, even when confidence is high. Confidence expresses extraction certainty; it does not replace review status.
+Use `confirmed` only for human-reviewed or directly unambiguous mappings. Use `unreviewed` for AI extraction, even when confidence is high. Confidence expresses extraction certainty; it does not replace review status and must never set repair priority.
 
 ## 7. Attention items
 
@@ -157,6 +157,8 @@ Use:
 
 - `attentionLevel: needs_review` when a useful, reversible interpretation can be emitted with its assumption stated;
 - `attentionLevel: action_required` when the source must be repaired, a person must choose among materially different meanings, or canonical ingestion is blocked by an unresolved tooling gap such as an opaque formula. Do not emit a disputed claim; cached opaque values may be retained only for explicit preview.
+
+Any concrete possible workbook/model error or required source update is always `action_required`, regardless of confidence. Use `source_error` for broken or unusable source data, `source_update` for evidence that a required source value is stale or missing a required refresh, and `model_inconsistency` for a formula/value pattern or declared identity that may be internally inconsistent. Keep `needs_review` only for non-error, reversible interpretations.
 
 Every `action_required` item must also assign exactly one `actionOwner`:
 
@@ -194,12 +196,13 @@ Write `extraction-report.md` with these sections:
 ## Table presentation
 ## Actual / estimate boundary
 ## Formula coverage
+## Workbook quality audit
 ## Unresolved mappings
 ## Missing lineage
 ## Validator result
 ## Questions and next actions
 ```
 
-The table-presentation section must list every model, its ordered sections, metric coverage, source range, and any fallback warning. Formula coverage must count supported, opaque, and unresolved transformations. Object counts must include entities, metrics, observations, transformations, relationships, table presentation sections, assumptions, decisions, and unresolved items. The validator section must record both the fast validator and the final strict checker invocation (`npm run extraction:check` or the repository's `check-extraction.mjs` path), their result, every remaining error, and every warning; do not summarize a failed validator as successful.
+The table-presentation section must list every model, its ordered sections, metric coverage, source range, and any fallback warning. Formula coverage must count supported, opaque, and unresolved transformations. The workbook-quality section must state which deterministic source/model checks ran and list every possible error or required update as an action; it must not rank findings by confidence. Object counts must include entities, metrics, observations, transformations, relationships, table presentation sections, assumptions, decisions, and unresolved items. The validator section must record both the fast validator and the final strict checker invocation (`npm run extraction:check` or the repository's `check-extraction.mjs` path), their result, every remaining error, and every warning; do not summarize a failed validator as successful.
 
 Every open item must appear on one report line prefixed by `NEEDS REVIEW` or `ACTION REQUIRED`, and the extraction run must remain `completed_with_issues`. Every workbook issue and next action must name its worksheet and narrowest available cell or range. Distinguish extraction tooling issues from model/source-owner decisions. For a cross-sheet formula, name both the worksheet containing the formula and every referenced worksheet that blocks translation. For a genuinely workbook-level issue, say that no single worksheet owns it and list the affected worksheets when known.

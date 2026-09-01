@@ -71,7 +71,14 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - For every attention item, write `description` (what was found), `currentTreatment` (what the database emitted or omitted), `impact` (what may be wrong or unavailable), and `nextAction` (one concrete confirmation or repair instruction). Put these fields in `model-db.json`, not only the report.
    - Confidence, provenance review status, and attention level are independent; follow the decision table in `mapping-judgment.md`.
 
-6. Emit and validate.
+6. Audit workbook quality.
+   - Run deterministic checks for formula errors and broken references, missing required series values, formula/literal interruptions inside a repeated calculation pattern, declared totals or identities that do not reconcile, and explicit source dates that show a required update is stale.
+   - Emit every concrete possible workbook/model error or required update as `attentionLevel: action_required`, using `source_error`, `source_update`, or `model_inconsistency`. Keep it open until the source/model is repaired and the workbook is re-extracted.
+   - Use confidence only to describe the evidence behind the finding. Never rank, suppress, or downgrade repair work because confidence is high or low.
+   - Reserve `needs_review` for reversible interpretations that do not imply the workbook is wrong. Do not silently repair or overwrite the source workbook; name the affected worksheet and narrowest cell or range.
+   - Avoid speculative anomaly scoring. Open an action only when you can state the observed inconsistency, its impact, and a concrete repair/check.
+
+7. Emit and validate.
    - Write `model-db.json`, `extraction-report.md`, and `formula-translation-tasks.json` next to the requested output.
    - While iterating on the database, run `npm run validate -- path/to/model-db.json` for fast object-level repair output.
    - Before reporting completion, run `npm run extraction:check -- path/to/output-directory`. This loads `model-db.json` through the viewer's runtime contract and checks that `extraction-report.md` has every required, non-empty section in contract order.
@@ -79,7 +86,7 @@ Treat `schema.ts` as the contract authority. The JSON Schema is generated from i
    - From the repository root, run `npm run check` after changing schema, fixtures, expressions, validator, or query code.
    - Label every open report item `NEEDS REVIEW` or `ACTION REQUIRED`, and include the action owner for every required action. The strict package checker rejects any emitted attention item without `currentTreatment`, `impact`, or `nextAction`, and rejects an action without `actionOwner`. Keep the extraction run `completed_with_issues` while either kind remains open. Do not report success while validator errors, silent presentation fallbacks, or missing-lineage objects remain.
 
-7. Compile and visually review.
+8. Compile and visually review.
    - Run `npm run extraction:preview -- path/to/output-directory`. This reruns the strict extraction checker, builds a local static viewer, exercises it with Playwright, and writes `viewer/review/` screenshots plus `review.json`.
    - From outside the repository, run `node /path/to/financial-model-viewer/skills/extract-financial-model/scripts/build-preview.mjs path/to/output-directory`; the script resolves the repository toolchain itself.
    - Inspect `viewer/review/contact-sheet.png` and the individual desktop/mobile table, inspector, and dependency-graph screenshots with an image-viewing tool. An automated pass is not visual acceptance.

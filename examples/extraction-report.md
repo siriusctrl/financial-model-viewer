@@ -59,6 +59,10 @@ FY22–FY24 are marked actual and FY25–FY26 are base estimates. This boundary 
 
 All supported formulas preserve a representative original Excel formula and a parsed canonical expression. This coverage must not be generalized to real workbooks.
 
+## Workbook quality audit
+
+This generated fixture has no raw XLSX freshness metadata. Deterministic fixture checks found no formula errors, broken references, missing required values, formula/literal interruptions, or declared identity failures. Any such finding in a real extraction must be `ACTION REQUIRED`; confidence records the evidence quality but does not rank or suppress repair work.
+
 ## Unresolved mappings
 
 NEEDS REVIEW — `unresolved_harbor_provision_label`: The workbook label 'LLP' was mapped to provision for credit losses, but the source contains no explicit definition. Current treatment: The row is currently presented as Provision for credit losses. Impact: If LLP means something else, this row's semantic label and relationships are wrong; the source values are unchanged. The object remains unreviewed with 64% confidence.

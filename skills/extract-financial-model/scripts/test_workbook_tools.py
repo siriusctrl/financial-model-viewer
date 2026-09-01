@@ -618,6 +618,23 @@ class WorkbookToolTests(unittest.TestCase):
             )
             self.assertIn("2 formulas were auto-translated", automatic.report)
 
+            missing_sheet = SHEET_XML.replace(
+                '<c r="C1" s="2"><v>3</v></c>',
+                "",
+            )
+            missing_workbook = Path(directory) / "missing.xlsx"
+            write_fixture(missing_workbook, missing_sheet)
+            missing = MappedWorkbookExtractor(missing_workbook, mapping()).extract()
+            missing_action = next(
+                item
+                for item in missing.database["unresolvedItems"]
+                if item["id"] == "unresolved_missing_source_value_test_input_fy2025"
+            )
+            self.assertEqual(missing_action["category"], "source_error")
+            self.assertEqual(missing_action["attentionLevel"], "action_required")
+            self.assertEqual(missing_action["actionOwner"], "source_owner")
+            self.assertIn("Workbook quality audit", missing.report)
+
             opaque_sheet = SHEET_XML.replace(
                 '<f t="shared" si="0" ref="B2:B3">B1*2</f><v>4</v>',
                 '<f>OFFSET(B1,0,0)*2</f><v>4</v>',

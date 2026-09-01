@@ -527,6 +527,9 @@ class MappedWorkbookExtractor:
                     source_key = _cell_key(sheet, coordinate)
                     cell = cells.get(source_key)
                     if not cell or (cell.get("value") is None and "formula" not in cell):
+                        self._missing_source_value(
+                            metric["id"], period_id, sheet, coordinate, model["id"], source["id"]
+                        )
                         continue
                     style_record = self._record_style(
                         cell,
@@ -1018,7 +1021,7 @@ class MappedWorkbookExtractor:
         self._unresolved({
             "id": f"unresolved_missing_value_{suffix}",
             "modelId": model_id,
-            "category": "formula",
+            "category": "source_error",
             "description": "The workbook formula has no materialized cached value; no observation was emitted.",
             "currentTreatment": f"The database omits `{metric_id}` for `{period_id}`.",
             "impact": "The selected metric-period point is unavailable in the table and formula graph.",
@@ -1030,6 +1033,33 @@ class MappedWorkbookExtractor:
             "actionOwner": "source_owner",
             "status": "open",
             "nextAction": f"Recalculate `{sheet}!{coordinate}` in the source workbook, or explicitly omit it from `{metric_id}`.",
+        })
+
+    def _missing_source_value(
+        self,
+        metric_id: str,
+        period_id: str,
+        sheet: str,
+        coordinate: str,
+        model_id: str,
+        source_id: str,
+    ) -> None:
+        suffix = f"{_without_prefix(metric_id, 'metric_')}_{_without_prefix(period_id, 'period_')}"
+        self._unresolved({
+            "id": f"unresolved_missing_source_value_{suffix}",
+            "modelId": model_id,
+            "category": "source_error",
+            "description": "An explicitly mapped output cell is blank or absent; no observation was emitted.",
+            "currentTreatment": f"The database omits `{metric_id}` for `{period_id}`.",
+            "impact": "The mapped metric-period point is unavailable and any dependent analysis may be incomplete.",
+            "targetId": metric_id,
+            "sourceArtifactId": source_id,
+            "locator": _locator(sheet, cell=coordinate),
+            "confidence": 0.99,
+            "attentionLevel": "action_required",
+            "actionOwner": "source_owner",
+            "status": "open",
+            "nextAction": f"Provide the required value at `{sheet}!{coordinate}`, or remove this point from the explicit extraction map if the blank is intentional, then rerun extraction.",
         })
 
     def _incompatible_value(
@@ -1046,7 +1076,7 @@ class MappedWorkbookExtractor:
         self._unresolved({
             "id": f"unresolved_incompatible_value_{suffix}",
             "modelId": model_id,
-            "category": "metric_mapping",
+            "category": "source_error",
             "description": f"The source cell contains {value!r}, which is incompatible with the mapped metric type; no observation was emitted.",
             "currentTreatment": f"The database omits `{metric_id}` for `{period_id}` instead of inventing a replacement value.",
             "impact": "That metric-period point is absent; other valid periods and metrics remain available.",
@@ -1159,6 +1189,13 @@ class MappedWorkbookExtractor:
                 f"in `workbook-inventory.json`; examples: {', '.join(unmapped_comments[:5])}."
                 if unmapped_comments
                 else "- No workbook comments remain outside the selected observation graph."
+            ),
+            "", "## Workbook quality audit", "",
+            "- Deterministic checks cover selected-cell formula errors, broken references, missing required mapped values, formula translation/replay, declared map constraints, and source/model consistency findings emitted by the extraction.",
+            "- Every possible source/model error or required update is ACTION REQUIRED until repaired and re-extracted; confidence is evidence metadata and does not rank or suppress repair work.",
+            (
+                f"- {sum(1 for item in self.database['unresolvedItems'] if item['category'] in {'source_error', 'source_update', 'model_inconsistency'})} "
+                "source/model repair actions remain open."
             ),
             "", "## Unresolved mappings", "",
         ])

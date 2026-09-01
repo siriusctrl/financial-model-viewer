@@ -917,6 +917,20 @@ export function validateModelDatabase(input: unknown): ValidationResult {
       ),
     );
     pushMissingReference(errors, unresolved.id, "sourceArtifactId", unresolved.sourceArtifactId, sourceArtifactIds, "Source artifact");
+    if (
+      ["source_error", "source_update", "model_inconsistency"].includes(unresolved.category)
+      && unresolved.attentionLevel !== "action_required"
+    ) {
+      errors.push(
+        error(
+          "unresolved.repair_required",
+          unresolved.id,
+          "attentionLevel",
+          `${unresolved.category} identifies a possible workbook error or required update`,
+          "Use action_required until the source or model is repaired and re-extracted",
+        ),
+      );
+    }
     if (unresolved.status === "open") {
       for (const provenance of provenanceByTarget.get(unresolved.id) ?? []) {
         const run = extractionRuns.get(provenance.extractionRunId);

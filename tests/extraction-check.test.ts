@@ -23,6 +23,31 @@ afterEach(() => {
 });
 
 describe("extraction package attention guidance", () => {
+  it("requires a workbook quality audit in the extraction report", () => {
+    const directory = mkdtempSync(join(tmpdir(), "model-db-report-"));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, "model-db.json");
+    const reportPath = join(directory, "extraction-report.md");
+    writeFileSync(databasePath, JSON.stringify(sample));
+    writeFileSync(
+      reportPath,
+      readFileSync(report, "utf8").replace(
+        /## Workbook quality audit[\s\S]*?(?=## Unresolved mappings)/,
+        "",
+      ),
+    );
+
+    const result = spawnSync("node", [checker, databasePath, reportPath], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'is missing "## Workbook quality audit"',
+    );
+  });
+
   it.each(["currentTreatment", "impact", "nextAction"] as const)(
     "rejects an attention item without %s",
     (field) => {
