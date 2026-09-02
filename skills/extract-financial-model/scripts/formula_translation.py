@@ -43,6 +43,14 @@ FUNCTION_CALL = re.compile(
 COORDINATE = re.compile(r"(?P<column>[A-Z]{1,3})(?P<row>[1-9][0-9]*)", re.IGNORECASE)
 EXCEL_EQUALITY = re.compile(r"(?<![<>=!])=(?!=)")
 EXCEL_BOOLEAN = re.compile(r"(?<![A-Z0-9_.])(?P<value>TRUE|FALSE)(?![A-Z0-9_])", re.IGNORECASE)
+RIGHT_TEXT_COMPARISON = re.compile(
+    r"RIGHT\(\s*"
+    r"(?:(?:'(?P<quoted>[^']+)'|(?P<plain>[A-Za-z_][A-Za-z0-9_. ]*))!)?"
+    r"(?P<cell>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*,\s*"
+    r"(?P<count>[1-9][0-9]*)\s*\)\s*"
+    r"(?P<operator>=|<>)\s*\"(?P<expected>[^\"]*)\"",
+    re.IGNORECASE,
+)
 CONDITIONAL_AGGREGATE = re.compile(
     r"(?P<function>SUMIFS|AVERAGEIFS)\(\s*"
     r"(?P<sum_start>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*:\s*"
@@ -652,7 +660,33 @@ class FormulaTranslator:
         target_value: float | int,
         target_sheet: str | None,
     ) -> FormulaTranslation | None:
-        if '"' in formula_body:
+        unresolved_right_comparison = False
+        folded_right_comparison = False
+
+        def replace_right_comparison(match: re.Match[str]) -> str:
+            nonlocal unresolved_right_comparison, folded_right_comparison
+            key = self._key(
+                match.group("cell"),
+                match.group("quoted") or match.group("plain"),
+                target_sheet,
+            )
+            cell = self.cells.get(key) if key else None
+            if key not in self.literal_coordinates or cell is None or cell.get("value") is None:
+                unresolved_right_comparison = True
+                return match.group(0)
+            value = cell["value"]
+            if isinstance(value, float) and value.is_integer():
+                text = str(int(value))
+            else:
+                text = str(value)
+            count = int(match.group("count"))
+            equal = text[-count:] == match.group("expected")
+            result = equal if match.group("operator") == "=" else not equal
+            folded_right_comparison = True
+            return "TRUE" if result else "FALSE"
+
+        formula_body = RIGHT_TEXT_COMPARISON.sub(replace_right_comparison, formula_body)
+        if unresolved_right_comparison or '"' in formula_body:
             return None
         formula_body = PERCENT_LITERAL.sub(_percentage_value, formula_body)
         formula_body = EXCEL_BOOLEAN.sub(_boolean_value, formula_body)
@@ -828,10 +862,9 @@ class FormulaTranslator:
                         return None
                     return f"mod({left[0]}, {right[0]})", calculated
                 if normalized_name == "IF" and len(node.args) == 3:
+                    dependencies_before_condition = set(dependencies)
                     condition = compile_node(node.args[0])
-                    consequent = compile_node(node.args[1])
-                    alternate = compile_node(node.args[2])
-                    if condition is None or consequent is None or alternate is None:
+                    if condition is None:
                         return None
                     condition_expression, condition_value = condition
                     if isinstance(condition_value, bool):
@@ -839,6 +872,13 @@ class FormulaTranslator:
                     else:
                         condition_expression = f"({condition_expression} != 0)"
                         truthy = condition_value != 0
+                    if folded_right_comparison and dependencies == dependencies_before_condition:
+                        selected = compile_node(node.args[1] if truthy else node.args[2])
+                        return selected
+                    consequent = compile_node(node.args[1])
+                    alternate = compile_node(node.args[2])
+                    if consequent is None or alternate is None:
+                        return None
                     return (
                         f"when({condition_expression}, {consequent[0]}, {alternate[0]})",
                         consequent[1] if truthy else alternate[1],

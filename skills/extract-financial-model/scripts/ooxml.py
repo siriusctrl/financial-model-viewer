@@ -378,6 +378,22 @@ class WorkbookPackage:
             return {"type": "gradient", "attributes": _typed_attributes(gradient), "stops": stops}
         return {"type": "none"}
 
+    def _border(self, element: ET.Element) -> dict[str, Any]:
+        sides: dict[str, Any] = {}
+        for side_name in ("left", "right", "top", "bottom", "diagonal", "vertical", "horizontal"):
+            side = element.find(f"m:{side_name}", NS)
+            if side is None:
+                continue
+            parsed = {
+                "style": side.get("style"),
+                "color": _color(side.find("m:color", NS), self.theme_colors),
+            }
+            if parsed["style"] is not None or parsed["color"] is not None:
+                sides[side_name] = {
+                    key: value for key, value in parsed.items() if value is not None
+                }
+        return sides
+
     def _read_styles(self) -> dict[str, Any]:
         styles_part = "xl/styles.xml"
         if styles_part not in self.parts:
@@ -391,6 +407,7 @@ class WorkbookPackage:
         root = self._xml(styles_part)
         fonts_node = root.find("m:fonts", NS)
         fills_node = root.find("m:fills", NS)
+        borders_node = root.find("m:borders", NS)
         formats_node = root.find("m:numFmts", NS)
         xfs_node = root.find("m:cellXfs", NS)
         fonts = [
@@ -400,6 +417,10 @@ class WorkbookPackage:
         fills = [
             self._fill(item)
             for item in (list(fills_node) if fills_node is not None else [])
+        ]
+        borders = [
+            self._border(item)
+            for item in (list(borders_node) if borders_node is not None else [])
         ]
         custom_formats = {
             int(item.get("numFmtId", "0")): item.get("formatCode", "")
@@ -444,6 +465,7 @@ class WorkbookPackage:
             "themeColors": self.theme_colors,
             "fonts": fonts,
             "fills": fills,
+            "borders": borders,
             "numberFormats": number_formats,
             "cellFormats": cell_formats,
         }
@@ -455,6 +477,8 @@ class WorkbookPackage:
         fill_id = cell_format["fillId"]
         fonts = self.style_catalog["fonts"]
         fills = self.style_catalog["fills"]
+        borders = self.style_catalog.get("borders", [])
+        border_id = cell_format["borderId"]
         number_format = next(
             (
                 item
@@ -467,6 +491,7 @@ class WorkbookPackage:
             "styleId": style_id,
             "font": fonts[font_id] if 0 <= font_id < len(fonts) else {},
             "fill": fills[fill_id] if 0 <= fill_id < len(fills) else {},
+            "border": borders[border_id] if 0 <= border_id < len(borders) else {},
             "numberFormat": number_format,
             "alignment": cell_format.get("alignment", {}),
             "protection": cell_format.get("protection", {}),

@@ -10,7 +10,11 @@ from zipfile import ZipFile
 import unittest
 
 from formula_translation import FormulaTranslator
-from mapped_workbook import MappedWorkbookExtractor, _is_specific_blue_font
+from mapped_workbook import (
+    LEO_STYLE_CONVENTION,
+    MappedWorkbookExtractor,
+    _is_specific_blue_font,
+)
 from ooxml import WorkbookPackage, translate_shared_formula
 
 
@@ -243,6 +247,55 @@ class WorkbookToolTests(unittest.TestCase):
         self.assertTrue(_is_specific_blue_font({"type": "theme", "theme": 8}))
         self.assertTrue(_is_specific_blue_font({"type": "rgb", "rgb": "FF0070C0"}))
         self.assertFalse(_is_specific_blue_font({"type": "rgb", "rgb": "FF0000FF"}))
+
+    def test_leo_style_convention_uses_formula_precedence_and_exact_markers(self) -> None:
+        leo_mapping = mapping()
+        leo_mapping["styleConvention"] = LEO_STYLE_CONVENTION
+        extractor = MappedWorkbookExtractor(Path("unused.xlsx"), leo_mapping)
+
+        yellow = {
+            "font": {},
+            "fill": {
+                "patternType": "solid",
+                "foregroundColor": {"type": "rgb", "rgb": "FFFFFF99"},
+            },
+            "border": {},
+        }
+        blue = {
+            "font": {"color": {"type": "theme", "theme": 4}},
+            "fill": {"patternType": "none", "foregroundColor": None},
+            "border": {},
+        }
+        green_border = {
+            "font": {},
+            "fill": {"patternType": "none", "foregroundColor": None},
+            "border": {
+                "bottom": {
+                    "style": "thick",
+                    "color": {"type": "indexed", "indexed": 17},
+                },
+            },
+        }
+
+        self.assertEqual(
+            extractor._matching_style_semantic(yellow, "literal", None)["role"],
+            "leo_assumption",
+        )
+        self.assertEqual(
+            extractor._matching_style_semantic(blue, "literal", None)["valueType"],
+            "reported",
+        )
+        self.assertEqual(
+            extractor._matching_style_semantic(
+                green_border,
+                "formula",
+                "='Other Sheet'!A1",
+            )["role"],
+            "leo_cross_sheet_reference",
+        )
+        self.assertIsNone(
+            extractor._matching_style_semantic(green_border, "literal", None)
+        )
         self.assertFalse(_is_specific_blue_font({"type": "theme", "theme": 4, "tint": 0.25}))
 
     def test_shared_formula_translation_respects_absolute_references_and_strings(self) -> None:
@@ -530,6 +583,35 @@ class WorkbookToolTests(unittest.TestCase):
             )
             self.assertIsNotNone(iferror)
             self.assertEqual((iferror.expression, iferror.dependency_metric_ids), ("(2020 * 2)", []))
+
+            right_header = FormulaTranslator(
+                {
+                    "H2": {"value": 202001, "formula": "=202001", "style": 0},
+                    "B1": {"value": 5, "style": 0},
+                },
+                {
+                    "B1": {
+                        "metricId": "metric_test_input",
+                        "periodId": "period_fy2020_q1",
+                        "dataType": "number",
+                    },
+                },
+                literal_coordinates={"H2"},
+            )
+            selected_quarter_branch = right_header.translate(
+                '=IF(RIGHT(H2,2)="01",B1,C99)',
+                "H3",
+                "period_fy2020_q1",
+                5,
+            )
+            self.assertIsNotNone(selected_quarter_branch)
+            self.assertEqual(
+                (
+                    selected_quarter_branch.expression,
+                    selected_quarter_branch.dependency_metric_ids,
+                ),
+                ('ref("metric_test_input")', ["metric_test_input"]),
+            )
 
     def test_mapped_extraction_rejects_formula_period_gaps(self) -> None:
         with TemporaryDirectory() as directory:

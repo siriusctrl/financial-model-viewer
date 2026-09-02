@@ -90,7 +90,7 @@ Classify source/model repair findings as `source_error`, `source_update`, or `mo
 
 Do not create unresolved items for harmless formatting differences, unsupported non-model workbook parts, deliberately out-of-scope worksheets, or facts already settled by deterministic evidence. Record scope exclusions explicitly in the map and report. Preserve comments outside the selected semantic graph in `workbook-inventory.json`; attach material in-scope comments as evidence instead of asking an analyst to classify every comment.
 
-The fixed Alice style convention describes source and adjustability only. It does not imply actual or estimate status, so a style/period combination is never an attention item by itself.
+The fixed Alice and Leo style conventions describe source and adjustability only. They do not imply actual or estimate status, so a style/period combination is never an attention item by itself. Leo green styling is positive cross-sheet evidence but not a completeness test; inspect formula references directly.
 
 ## 5. Decide what may remain opaque
 

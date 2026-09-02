@@ -15,7 +15,12 @@ from ooxml import WorkbookPackage
 
 
 MAP_FORMAT = "financial-model-workbook-map@0.4"
-STYLE_CONVENTION = "alice-blue-yellow@0.1"
+ALICE_STYLE_CONVENTION = "alice-blue-yellow@0.1"
+LEO_STYLE_CONVENTION = "leo-yellow-green-blue@0.1"
+SUPPORTED_STYLE_CONVENTIONS = frozenset({
+    ALICE_STYLE_CONVENTION,
+    LEO_STYLE_CONVENTION,
+})
 CANONICAL_METRIC_FIELDS = frozenset({
     "id",
     "name",
@@ -36,14 +41,14 @@ MAPPED_METRIC_FIELDS = CANONICAL_METRIC_FIELDS | {
     "opaqueDependencyMetricIds",
     "confidence",
 }
-BLUE_FONT_SOURCE_COLORS = (
+ALICE_BLUE_FONT_SOURCE_COLORS = (
     {"type": "theme", "theme": 4},
     {"type": "theme", "theme": 4, "tint": -0.499984740745262},
     {"type": "theme", "theme": 8},
     {"type": "rgb", "rgb": "FF0070C0"},
 )
-YELLOW_FILL_SOURCE_COLOR = {"type": "rgb", "rgb": "FFFFFF00"}
-STYLE_SEMANTICS = {
+ALICE_YELLOW_FILL_SOURCE_COLOR = {"type": "rgb", "rgb": "FFFFFF00"}
+ALICE_STYLE_SEMANTICS = {
     "alice_hardcode": {
         "id": "alice_hardcode",
         "role": "alice_hardcode",
@@ -59,6 +64,42 @@ STYLE_SEMANTICS = {
             "and are not adjustable by Alice."
         ),
         "valueType": "reported",
+        "adjustable": False,
+    },
+}
+LEO_BLUE_FONT_SOURCE_COLORS = (
+    {"type": "theme", "theme": 4},
+    {"type": "theme", "theme": 8, "tint": -0.249977111117893},
+)
+LEO_GREEN_FONT_SOURCE_COLORS = (
+    {"type": "rgb", "rgb": "FF008080"},
+    {"type": "rgb", "rgb": "FF5EC271"},
+)
+LEO_YELLOW_FILL_SOURCE_COLORS = (
+    {"type": "rgb", "rgb": "FFFFFF99"},
+    {"type": "rgb", "rgb": "FFFFFFCC"},
+    {"type": "theme", "theme": 7, "tint": 0.7999816888943144},
+)
+LEO_GREEN_MARKER_SOURCE_COLOR = {"type": "indexed", "indexed": 17}
+LEO_STYLE_SEMANTICS = {
+    "leo_assumption": {
+        "id": "leo_assumption",
+        "role": "leo_assumption",
+        "description": "A pale-yellow input cell marks a Leo-controlled assumption.",
+        "valueType": "assumption",
+        "adjustable": True,
+    },
+    "leo_reported_hardcode": {
+        "id": "leo_reported_hardcode",
+        "role": "leo_reported_hardcode",
+        "description": "Blue-font literals without fill are historical hard-coded values.",
+        "valueType": "reported",
+        "adjustable": False,
+    },
+    "leo_cross_sheet_reference": {
+        "id": "leo_cross_sheet_reference",
+        "role": "leo_cross_sheet_reference",
+        "description": "Green-font or green-border formulas with an explicit worksheet reference point to another sheet.",
         "adjustable": False,
     },
 }
@@ -190,20 +231,51 @@ def _source_color(color: dict[str, Any] | None) -> dict[str, Any]:
         return {}
     return {
         key: color[key]
-        for key in ("type", "theme", "rgb", "tint")
+        for key in ("type", "theme", "rgb", "indexed", "tint")
         if key in color
     }
 
 
 def _is_specific_blue_font(color: dict[str, Any] | None) -> bool:
-    return _source_color(color) in BLUE_FONT_SOURCE_COLORS
+    return _source_color(color) in ALICE_BLUE_FONT_SOURCE_COLORS
 
 
 def _is_specific_yellow_fill(style: dict[str, Any]) -> bool:
     fill = style.get("fill", {})
     return (
         fill.get("patternType") == "solid"
-        and _source_color(fill.get("foregroundColor")) == YELLOW_FILL_SOURCE_COLOR
+        and _source_color(fill.get("foregroundColor")) == ALICE_YELLOW_FILL_SOURCE_COLOR
+    )
+
+
+def _is_unfilled(style: dict[str, Any]) -> bool:
+    fill = style.get("fill", {})
+    return fill.get("patternType") in {None, "none"}
+
+
+def _matches_source_color(
+    color: dict[str, Any] | None,
+    candidates: tuple[dict[str, Any], ...],
+) -> bool:
+    return _source_color(color) in candidates
+
+
+def _is_leo_yellow_fill(style: dict[str, Any]) -> bool:
+    fill = style.get("fill", {})
+    return (
+        fill.get("patternType") == "solid"
+        and _matches_source_color(
+            fill.get("foregroundColor"),
+            LEO_YELLOW_FILL_SOURCE_COLORS,
+        )
+    )
+
+
+def _has_leo_green_border(style: dict[str, Any]) -> bool:
+    return any(
+        _source_color(side.get("color")) == LEO_GREEN_MARKER_SOURCE_COLOR
+        for side in style.get("border", {}).values()
+        if isinstance(side, dict)
     )
 
 
@@ -255,10 +327,11 @@ class MappedWorkbookExtractor:
         self._auto_translated_count = 0
         if "styleSemantics" in mapping:
             raise ValueError(
-                f"Configurable styleSemantics rules are not supported; use styleConvention={STYLE_CONVENTION!r}"
+                "Configurable styleSemantics rules are not supported; use one of the named "
+                f"style conventions: {', '.join(sorted(SUPPORTED_STYLE_CONVENTIONS))}"
             )
         self.style_convention = mapping.get("styleConvention")
-        if self.style_convention not in {None, STYLE_CONVENTION}:
+        if self.style_convention is not None and self.style_convention not in SUPPORTED_STYLE_CONVENTIONS:
             raise ValueError(f"Unsupported styleConvention: {self.style_convention!r}")
         self._validate_hierarchy_mapping()
 
@@ -1033,15 +1106,36 @@ class MappedWorkbookExtractor:
         self,
         style: dict[str, Any],
         cell_kind: str,
+        formula: str | None,
     ) -> dict[str, Any] | None:
-        if self.style_convention != STYLE_CONVENTION:
+        font_color = style.get("font", {}).get("color")
+        if self.style_convention == ALICE_STYLE_CONVENTION:
+            if not _is_specific_blue_font(font_color):
+                return None
+            if _is_specific_yellow_fill(style):
+                return ALICE_STYLE_SEMANTICS["alice_hardcode"]
+            if cell_kind == "literal":
+                return ALICE_STYLE_SEMANTICS["reported_source"]
             return None
-        if not _is_specific_blue_font(style.get("font", {}).get("color")):
-            return None
-        if _is_specific_yellow_fill(style):
-            return STYLE_SEMANTICS["alice_hardcode"]
-        if cell_kind == "literal":
-            return STYLE_SEMANTICS["reported_source"]
+        if self.style_convention == LEO_STYLE_CONVENTION:
+            if _is_leo_yellow_fill(style):
+                return LEO_STYLE_SEMANTICS["leo_assumption"]
+            if (
+                cell_kind == "formula"
+                and formula is not None
+                and "!" in formula
+                and (
+                    _matches_source_color(font_color, LEO_GREEN_FONT_SOURCE_COLORS)
+                    or _has_leo_green_border(style)
+                )
+            ):
+                return LEO_STYLE_SEMANTICS["leo_cross_sheet_reference"]
+            if (
+                cell_kind == "literal"
+                and _is_unfilled(style)
+                and _matches_source_color(font_color, LEO_BLUE_FONT_SOURCE_COLORS)
+            ):
+                return LEO_STYLE_SEMANTICS["leo_reported_hardcode"]
         return None
 
     def _record_style(
@@ -1057,6 +1151,7 @@ class MappedWorkbookExtractor:
         font = resolved.get("font", {})
         fill = resolved.get("fill", {})
         alignment = resolved.get("alignment", {})
+        border = resolved.get("border", {})
         style = {
             "styleId": resolved.get("styleId", cell["style"]),
             "font": {
@@ -1068,6 +1163,7 @@ class MappedWorkbookExtractor:
                 "patternType": fill.get("patternType"),
                 "foregroundColor": deepcopy(fill.get("foregroundColor")),
             },
+            "border": deepcopy(border),
             "numberFormat": deepcopy(resolved.get("numberFormat", {})),
             "alignment": {
                 key: value
@@ -1077,7 +1173,11 @@ class MappedWorkbookExtractor:
         }
         self._evidence_styles[style["styleId"]] = style
         cell_kind = "formula" if "formula" in cell else "literal"
-        semantic_definition = self._matching_style_semantic(style, cell_kind)
+        semantic_definition = self._matching_style_semantic(
+            style,
+            cell_kind,
+            cell.get("formula"),
+        )
         source_key = _cell_key(sheet, coordinate)
         record: dict[str, Any] = {
             "sheet": sheet,
@@ -1112,22 +1212,7 @@ class MappedWorkbookExtractor:
                 "sha256": inventory["input"]["sha256"],
                 "sheets": sorted({item["sheet"] for item in self._style_records}),
             },
-            "styleConvention": (
-                {
-                    "id": STYLE_CONVENTION,
-                    "blueFontSourceColors": deepcopy(BLUE_FONT_SOURCE_COLORS),
-                    "yellowFill": {
-                        "patternType": "solid",
-                        "foregroundColor": deepcopy(YELLOW_FILL_SOURCE_COLOR),
-                    },
-                    "roles": [
-                        deepcopy(semantic)
-                        for semantic in STYLE_SEMANTICS.values()
-                    ],
-                }
-                if self.style_convention == STYLE_CONVENTION
-                else None
-            ),
+            "styleConvention": self._style_convention_evidence(),
             "styles": [
                 deepcopy(self._evidence_styles[style_id])
                 for style_id in sorted(self._evidence_styles)
@@ -1144,6 +1229,34 @@ class MappedWorkbookExtractor:
             },
             "cells": self._style_records,
         }
+
+    def _style_convention_evidence(self) -> dict[str, Any] | None:
+        if self.style_convention == ALICE_STYLE_CONVENTION:
+            return {
+                "id": ALICE_STYLE_CONVENTION,
+                "blueFontSourceColors": deepcopy(ALICE_BLUE_FONT_SOURCE_COLORS),
+                "yellowFill": {
+                    "patternType": "solid",
+                    "foregroundColor": deepcopy(ALICE_YELLOW_FILL_SOURCE_COLOR),
+                },
+                "roles": [
+                    deepcopy(semantic)
+                    for semantic in ALICE_STYLE_SEMANTICS.values()
+                ],
+            }
+        if self.style_convention == LEO_STYLE_CONVENTION:
+            return {
+                "id": LEO_STYLE_CONVENTION,
+                "blueFontSourceColors": deepcopy(LEO_BLUE_FONT_SOURCE_COLORS),
+                "greenFontSourceColors": deepcopy(LEO_GREEN_FONT_SOURCE_COLORS),
+                "greenMarkerSourceColor": deepcopy(LEO_GREEN_MARKER_SOURCE_COLOR),
+                "yellowFillSourceColors": deepcopy(LEO_YELLOW_FILL_SOURCE_COLORS),
+                "roles": [
+                    deepcopy(semantic)
+                    for semantic in LEO_STYLE_SEMANTICS.values()
+                ],
+            }
+        return None
 
     @staticmethod
     def _canonical_metric(mapped_metric: dict[str, Any]) -> dict[str, Any]:
