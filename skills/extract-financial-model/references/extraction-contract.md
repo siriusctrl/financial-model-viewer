@@ -63,7 +63,9 @@ Map input concepts as follows:
 
 Do not add a `calculated_from` relationship when the same edge is derivable from a transformation's dependencies.
 
-Workbook-specific formatting conventions belong outside the canonical schema. The mapped extractor supports explicit named opt-in conventions, currently `alice-blue-yellow@0.1` and `leo-yellow-green-blue@0.1`; it does not expose a generic color-rule language. Treat matches only as reviewable source/adjustability evidence. Formula presence takes precedence over a style-implied value type: keep the observation `derived` and retain the style role alongside it. A convention does not imply actual or estimate status; determine actuality independently from period evidence.
+Workbook-specific formatting conventions belong outside the canonical schema. The mapped extractor supports explicit named opt-in conventions, currently the legacy `alice-blue-yellow@0.1` and neutral `financial-model-colors-example@0.1`; it does not expose a generic color-rule language. New public conventions must never be named after real authors or organizations. Treat matches only as reviewable source/adjustability evidence. Formula presence takes precedence over a style-implied value type: keep the observation `derived` and retain the style role alongside it. A convention does not imply actual or estimate status; determine actuality independently from period evidence.
+
+Delivered extraction artifacts use a privacy-safe source title and content hash. They must omit author, comment-author, creator/last-modifier metadata, local filesystem URIs, and person-bearing source paths or filenames. Comments may remain evidence when their text is material, but their authorship is discarded. Workbook cell and range locators remain because they identify model structure without identifying the workbook maintainer.
 
 ### Table presentation metadata
 

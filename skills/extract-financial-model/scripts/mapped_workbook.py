@@ -16,10 +16,10 @@ from ooxml import WorkbookPackage
 
 MAP_FORMAT = "financial-model-workbook-map@0.4"
 ALICE_STYLE_CONVENTION = "alice-blue-yellow@0.1"
-LEO_STYLE_CONVENTION = "leo-yellow-green-blue@0.1"
+EXAMPLE_STYLE_CONVENTION = "financial-model-colors-example@0.1"
 SUPPORTED_STYLE_CONVENTIONS = frozenset({
     ALICE_STYLE_CONVENTION,
-    LEO_STYLE_CONVENTION,
+    EXAMPLE_STYLE_CONVENTION,
 })
 CANONICAL_METRIC_FIELDS = frozenset({
     "id",
@@ -67,38 +67,38 @@ ALICE_STYLE_SEMANTICS = {
         "adjustable": False,
     },
 }
-LEO_BLUE_FONT_SOURCE_COLORS = (
+EXAMPLE_BLUE_FONT_SOURCE_COLORS = (
     {"type": "theme", "theme": 4},
     {"type": "theme", "theme": 8, "tint": -0.249977111117893},
 )
-LEO_GREEN_FONT_SOURCE_COLORS = (
+EXAMPLE_GREEN_FONT_SOURCE_COLORS = (
     {"type": "rgb", "rgb": "FF008080"},
     {"type": "rgb", "rgb": "FF5EC271"},
 )
-LEO_YELLOW_FILL_SOURCE_COLORS = (
+EXAMPLE_YELLOW_FILL_SOURCE_COLORS = (
     {"type": "rgb", "rgb": "FFFFFF99"},
     {"type": "rgb", "rgb": "FFFFFFCC"},
     {"type": "theme", "theme": 7, "tint": 0.7999816888943144},
 )
-LEO_GREEN_MARKER_SOURCE_COLOR = {"type": "indexed", "indexed": 17}
-LEO_STYLE_SEMANTICS = {
-    "leo_assumption": {
-        "id": "leo_assumption",
-        "role": "leo_assumption",
-        "description": "A pale-yellow input cell marks a Leo-controlled assumption.",
+EXAMPLE_GREEN_MARKER_SOURCE_COLOR = {"type": "indexed", "indexed": 17}
+EXAMPLE_STYLE_SEMANTICS = {
+    "assumption_input": {
+        "id": "assumption_input",
+        "role": "assumption_input",
+        "description": "A pale-yellow input cell marks an analyst-controlled assumption.",
         "valueType": "assumption",
         "adjustable": True,
     },
-    "leo_reported_hardcode": {
-        "id": "leo_reported_hardcode",
-        "role": "leo_reported_hardcode",
+    "reported_hardcode": {
+        "id": "reported_hardcode",
+        "role": "reported_hardcode",
         "description": "Blue-font literals without fill are historical hard-coded values.",
         "valueType": "reported",
         "adjustable": False,
     },
-    "leo_cross_sheet_reference": {
-        "id": "leo_cross_sheet_reference",
-        "role": "leo_cross_sheet_reference",
+    "cross_sheet_reference": {
+        "id": "cross_sheet_reference",
+        "role": "cross_sheet_reference",
         "description": "Green-font or green-border formulas with an explicit worksheet reference point to another sheet.",
         "adjustable": False,
     },
@@ -108,6 +108,26 @@ MAP_COVERAGE_BLOCKERS = frozenset({
     "unmapped_metric",
     "unmapped_sheet",
 })
+PERSON_METADATA_KEYS = frozenset({
+    "author",
+    "authors",
+    "creator",
+    "lastmodifiedby",
+    "modifiedby",
+})
+
+
+def _without_person_metadata(value: Any) -> Any:
+    """Remove identity metadata that is not required to interpret the model."""
+    if isinstance(value, dict):
+        return {
+            key: _without_person_metadata(item)
+            for key, item in value.items()
+            if key.replace("_", "").lower() not in PERSON_METADATA_KEYS
+        }
+    if isinstance(value, list):
+        return [_without_person_metadata(item) for item in value]
+    return deepcopy(value)
 
 
 def _formula_task_acceptance(blocker_kind: str) -> list[str]:
@@ -260,20 +280,20 @@ def _matches_source_color(
     return _source_color(color) in candidates
 
 
-def _is_leo_yellow_fill(style: dict[str, Any]) -> bool:
+def _is_example_yellow_fill(style: dict[str, Any]) -> bool:
     fill = style.get("fill", {})
     return (
         fill.get("patternType") == "solid"
         and _matches_source_color(
             fill.get("foregroundColor"),
-            LEO_YELLOW_FILL_SOURCE_COLORS,
+            EXAMPLE_YELLOW_FILL_SOURCE_COLORS,
         )
     )
 
 
-def _has_leo_green_border(style: dict[str, Any]) -> bool:
+def _has_example_green_border(style: dict[str, Any]) -> bool:
     return any(
-        _source_color(side.get("color")) == LEO_GREEN_MARKER_SOURCE_COLOR
+        _source_color(side.get("color")) == EXAMPLE_GREEN_MARKER_SOURCE_COLOR
         for side in style.get("border", {}).values()
         if isinstance(side, dict)
     )
@@ -570,17 +590,18 @@ class MappedWorkbookExtractor:
                 for style_id in {cell["style"] for cell in cells.values()}
             }
 
-        source = deepcopy(self.mapping["sourceArtifact"])
+        source = _without_person_metadata(self.mapping["sourceArtifact"])
         source["contentHash"] = f"sha256:{inventory['input']['sha256']}"
-        source.setdefault("uri", str(self.workbook))
-        run = deepcopy(self.mapping["extractionRun"])
+        source.pop("uri", None)
+        inventory["input"]["filename"] = source["title"]
+        run = _without_person_metadata(self.mapping["extractionRun"])
         run["sourceArtifactIds"] = [source["id"]]
         run["modelVersionId"] = self.mapping["model"]["currentVersionId"]
 
-        self.database["dataset"] = deepcopy(self.mapping["dataset"])
-        self.database["models"] = [deepcopy(self.mapping["model"])]
-        self.database["entities"] = [deepcopy(self.mapping["entity"])]
-        self.database["scenarios"] = deepcopy(self.mapping.get("scenarios", []))
+        self.database["dataset"] = _without_person_metadata(self.mapping["dataset"])
+        self.database["models"] = [_without_person_metadata(self.mapping["model"])]
+        self.database["entities"] = [_without_person_metadata(self.mapping["entity"])]
+        self.database["scenarios"] = _without_person_metadata(self.mapping.get("scenarios", []))
         self.database["sourceArtifacts"] = [source]
         self.database["extractionRuns"] = [run]
 
@@ -1117,25 +1138,25 @@ class MappedWorkbookExtractor:
             if cell_kind == "literal":
                 return ALICE_STYLE_SEMANTICS["reported_source"]
             return None
-        if self.style_convention == LEO_STYLE_CONVENTION:
-            if _is_leo_yellow_fill(style):
-                return LEO_STYLE_SEMANTICS["leo_assumption"]
+        if self.style_convention == EXAMPLE_STYLE_CONVENTION:
+            if _is_example_yellow_fill(style):
+                return EXAMPLE_STYLE_SEMANTICS["assumption_input"]
             if (
                 cell_kind == "formula"
                 and formula is not None
                 and "!" in formula
                 and (
-                    _matches_source_color(font_color, LEO_GREEN_FONT_SOURCE_COLORS)
-                    or _has_leo_green_border(style)
+                    _matches_source_color(font_color, EXAMPLE_GREEN_FONT_SOURCE_COLORS)
+                    or _has_example_green_border(style)
                 )
             ):
-                return LEO_STYLE_SEMANTICS["leo_cross_sheet_reference"]
+                return EXAMPLE_STYLE_SEMANTICS["cross_sheet_reference"]
             if (
                 cell_kind == "literal"
                 and _is_unfilled(style)
-                and _matches_source_color(font_color, LEO_BLUE_FONT_SOURCE_COLORS)
+                and _matches_source_color(font_color, EXAMPLE_BLUE_FONT_SOURCE_COLORS)
             ):
-                return LEO_STYLE_SEMANTICS["leo_reported_hardcode"]
+                return EXAMPLE_STYLE_SEMANTICS["reported_hardcode"]
         return None
 
     def _record_style(
@@ -1244,16 +1265,16 @@ class MappedWorkbookExtractor:
                     for semantic in ALICE_STYLE_SEMANTICS.values()
                 ],
             }
-        if self.style_convention == LEO_STYLE_CONVENTION:
+        if self.style_convention == EXAMPLE_STYLE_CONVENTION:
             return {
-                "id": LEO_STYLE_CONVENTION,
-                "blueFontSourceColors": deepcopy(LEO_BLUE_FONT_SOURCE_COLORS),
-                "greenFontSourceColors": deepcopy(LEO_GREEN_FONT_SOURCE_COLORS),
-                "greenMarkerSourceColor": deepcopy(LEO_GREEN_MARKER_SOURCE_COLOR),
-                "yellowFillSourceColors": deepcopy(LEO_YELLOW_FILL_SOURCE_COLORS),
+                "id": EXAMPLE_STYLE_CONVENTION,
+                "blueFontSourceColors": deepcopy(EXAMPLE_BLUE_FONT_SOURCE_COLORS),
+                "greenFontSourceColors": deepcopy(EXAMPLE_GREEN_FONT_SOURCE_COLORS),
+                "greenMarkerSourceColor": deepcopy(EXAMPLE_GREEN_MARKER_SOURCE_COLOR),
+                "yellowFillSourceColors": deepcopy(EXAMPLE_YELLOW_FILL_SOURCE_COLORS),
                 "roles": [
                     deepcopy(semantic)
-                    for semantic in LEO_STYLE_SEMANTICS.values()
+                    for semantic in EXAMPLE_STYLE_SEMANTICS.values()
                 ],
             }
         return None
@@ -1435,7 +1456,7 @@ class MappedWorkbookExtractor:
             "fromId": evidence_id,
             "type": "supports",
             "toId": observation_id,
-            "attributes": {"author": comment["author"], "kind": "workbook_comment"},
+            "attributes": {"kind": "workbook_comment"},
         })
         locator = _locator(comment["sheet"], cell=comment["cell"])
         self._provenance(evidence_id, locator, 0.98)

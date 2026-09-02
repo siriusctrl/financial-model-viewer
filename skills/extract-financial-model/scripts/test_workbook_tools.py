@@ -11,7 +11,7 @@ import unittest
 
 from formula_translation import FormulaTranslator
 from mapped_workbook import (
-    LEO_STYLE_CONVENTION,
+    EXAMPLE_STYLE_CONVENTION,
     MappedWorkbookExtractor,
     _is_specific_blue_font,
 )
@@ -88,8 +88,9 @@ SHEET_RELS = """<?xml version="1.0" encoding="UTF-8"?>
 
 COMMENTS_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <authors><author>Analyst</author></authors>
-  <commentList><comment ref="B2" authorId="0"><text><t>Reviewed output</t></text></comment></commentList>
+  <authors><author>Example Analyst</author></authors>
+  <commentList><comment ref="B2" authorId="0"><text><t>Example Analyst:
+Reviewed output</t></text></comment></commentList>
 </comments>"""
 
 
@@ -125,7 +126,7 @@ def mapping() -> dict:
         },
         "entity": {"id": "entity_test", "type": "company", "name": "Test"},
         "scenarios": [],
-        "sourceArtifact": {"id": "artifact_test", "type": "workbook", "title": "Test.xlsx"},
+        "sourceArtifact": {"id": "artifact_test", "type": "workbook", "title": "Fixture workbook.xlsx"},
         "extractionRun": {
             "id": "run_test",
             "startedAt": "2026-01-01T00:00:00Z",
@@ -248,10 +249,10 @@ class WorkbookToolTests(unittest.TestCase):
         self.assertTrue(_is_specific_blue_font({"type": "rgb", "rgb": "FF0070C0"}))
         self.assertFalse(_is_specific_blue_font({"type": "rgb", "rgb": "FF0000FF"}))
 
-    def test_leo_style_convention_uses_formula_precedence_and_exact_markers(self) -> None:
-        leo_mapping = mapping()
-        leo_mapping["styleConvention"] = LEO_STYLE_CONVENTION
-        extractor = MappedWorkbookExtractor(Path("unused.xlsx"), leo_mapping)
+    def test_example_style_convention_uses_formula_precedence_and_exact_markers(self) -> None:
+        example_mapping = mapping()
+        example_mapping["styleConvention"] = EXAMPLE_STYLE_CONVENTION
+        extractor = MappedWorkbookExtractor(Path("unused.xlsx"), example_mapping)
 
         yellow = {
             "font": {},
@@ -279,7 +280,7 @@ class WorkbookToolTests(unittest.TestCase):
 
         self.assertEqual(
             extractor._matching_style_semantic(yellow, "literal", None)["role"],
-            "leo_assumption",
+            "assumption_input",
         )
         self.assertEqual(
             extractor._matching_style_semantic(blue, "literal", None)["valueType"],
@@ -291,7 +292,7 @@ class WorkbookToolTests(unittest.TestCase):
                 "formula",
                 "='Other Sheet'!A1",
             )["role"],
-            "leo_cross_sheet_reference",
+            "cross_sheet_reference",
         )
         self.assertIsNone(
             extractor._matching_style_semantic(green_border, "literal", None)
@@ -735,6 +736,15 @@ class WorkbookToolTests(unittest.TestCase):
                 result.database["relationships"],
             )
             self.assertEqual(result.database["evidence"][0]["excerpt"], "Reviewed output")
+            comment_relationship = next(
+                item
+                for item in result.database["relationships"]
+                if item.get("attributes", {}).get("kind") == "workbook_comment"
+            )
+            self.assertNotIn("author", comment_relationship["attributes"])
+            self.assertNotIn("uri", result.database["sourceArtifacts"][0])
+            self.assertEqual(result.inventory["input"]["filename"], "Fixture workbook.xlsx")
+            self.assertNotIn("author", result.inventory["sheets"][0]["comments"][0])
             self.assertEqual(result.database["unresolvedItems"], [])
             self.assertEqual(result.style_evidence["summary"]["byRole"], {
                 "alice_hardcode": 1,

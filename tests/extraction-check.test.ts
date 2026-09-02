@@ -151,4 +151,24 @@ describe("extraction package attention guidance", () => {
 
     expect(result.status).toBe(0);
   });
+
+  it("rejects person metadata in delivered databases", () => {
+    const database = structuredClone(sample) as ModelDatabase;
+    database.models[0].attributes = {
+      ...database.models[0].attributes,
+      author: "Example Analyst",
+    };
+    const directory = mkdtempSync(join(tmpdir(), "model-db-privacy-"));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, "model-db.json");
+    writeFileSync(databasePath, JSON.stringify(database));
+
+    const result = spawnSync("node", [checker, databasePath, report], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("exposes person metadata");
+  });
 });

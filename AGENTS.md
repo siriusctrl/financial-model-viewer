@@ -25,7 +25,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - `skills/extract-financial-model/scripts/formula_translation.py`: restricted mapped-cell arithmetic, comparisons, guarded numeric IFERROR, SUM/AVERAGE, equal-length range SUMPRODUCT, and one-criterion SUMIFS/AVERAGEIFS translation with cached-value replay across mapped periods and worksheets.
 - `workbook-inventory.json` in a mapped extraction output: lossless workbook structure, cells, formulas, comments, styles, and unsupported package features used as extraction evidence.
 - `formula-translation-tasks.json` in a mapped extraction output: machine-readable follow-up queue for formulas that still exceed deterministic translator coverage.
-- `workbook-style-evidence.json` in a mapped extraction output: non-canonical per-cell styles and matches from the fixed Alice convention.
+- `workbook-style-evidence.json` in a mapped extraction output: non-canonical per-cell styles and matches from an explicit fixed convention.
 - `skills/extract-financial-model/scripts/build-preview.mjs`: validates, compiles, and Playwright-reviews a local extraction bundle without changing GitHub Pages.
 - `examples/`: generated semantic dataset and its extraction report.
 - `tests/`: expression, validator, query-generality, and Playwright browser behavior.
@@ -86,6 +86,7 @@ For a real extraction, also run `npm run extraction:preview -- path/to/output-di
 - Update the project skill when extraction behavior or report requirements change.
 - Keep private map syntax in `references/mapped-workbook.md`, canonical output rules in `references/extraction-contract.md`, and judgment guidance in `references/mapping-judgment.md`; link instead of copying detailed rules across them.
 - Keep generated extraction viewers local and uncommitted unless publication is explicitly authorized; the normal Pages build remains the representative public viewer.
+- Keep public formatting conventions neutral and fictional. Never add a real-author-named convention; Alice is a legacy exception only. Delivered extraction artifacts must omit person metadata and local source paths.
 - Report checks actually run and distinguish representative fixtures from real analyst models.
 - Do not commit confidential workbooks, generated `dist/`, browser artifacts, credentials, or local caches.
 - Use focused Conventional Commit messages.

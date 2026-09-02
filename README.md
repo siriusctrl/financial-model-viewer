@@ -83,7 +83,7 @@ For further local browser or Playwright interaction:
 npm run extraction:serve -- output-directory/viewer
 ```
 
-The server binds to `127.0.0.1`. Keep confidential workbooks, extracted datasets, and generated viewers outside Git unless publication is explicitly authorized.
+The server binds to `127.0.0.1`. Keep confidential workbooks, extracted datasets, and generated viewers outside Git unless publication is explicitly authorized. Delivered extraction bundles use a privacy-safe source label and content hash; they omit workbook/comment authors, creator metadata, and local source paths.
 
 ## Validation and verification
 

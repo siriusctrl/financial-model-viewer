@@ -510,10 +510,14 @@ class WorkbookPackage:
             authors = [author.text or "" for author in root.findall("m:authors/m:author", NS)]
             for comment in root.findall("m:commentList/m:comment", NS):
                 author_id = int(comment.get("authorId", "0"))
+                author = authors[author_id] if author_id < len(authors) else ""
+                text = _text(comment.find("m:text", NS)) or ""
+                author_prefix = f"{author}:" if author else ""
+                if author_prefix and text.startswith(author_prefix):
+                    text = text[len(author_prefix):].lstrip()
                 comments.append({
                     "cell": comment.get("ref", ""),
-                    "author": authors[author_id] if author_id < len(authors) else "",
-                    "text": _text(comment.find("m:text", NS)) or "",
+                    "text": text,
                 })
         return comments
 

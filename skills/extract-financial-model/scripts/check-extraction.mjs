@@ -67,6 +67,8 @@ function resolveArtifacts(arguments_) {
       databasePath: join(targetPath, "model-db.json"),
       reportPath: join(targetPath, "extraction-report.md"),
       translationTasksPath: join(targetPath, "formula-translation-tasks.json"),
+      inventoryPath: join(targetPath, "workbook-inventory.json"),
+      styleEvidencePath: join(targetPath, "workbook-style-evidence.json"),
     };
   }
 
@@ -81,7 +83,104 @@ function resolveArtifacts(arguments_) {
       ? resolve(process.cwd(), arguments_[1])
       : join(dirname(targetPath), "extraction-report.md"),
     translationTasksPath: join(dirname(targetPath), "formula-translation-tasks.json"),
+    inventoryPath: join(dirname(targetPath), "workbook-inventory.json"),
+    styleEvidencePath: join(dirname(targetPath), "workbook-style-evidence.json"),
   };
+}
+
+const PERSON_METADATA_KEYS = new Set([
+  "author",
+  "authors",
+  "creator",
+  "lastmodifiedby",
+  "modifiedby",
+]);
+
+function normalizedKey(value) {
+  return value.replaceAll("_", "").toLowerCase();
+}
+
+function visitJson(value, path, visitor) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => visitJson(item, `${path}[${index}]`, visitor));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, item] of Object.entries(value)) {
+    const itemPath = `${path}.${key}`;
+    visitor(key, item, itemPath);
+    visitJson(item, itemPath, visitor);
+  }
+}
+
+function isLocalPath(value) {
+  return typeof value === "string" && (
+    /^file:/i.test(value)
+    || /^\/(?:home|root|Users)\//.test(value)
+    || /^[A-Za-z]:[\\/]/.test(value)
+  );
+}
+
+function checkPrivacy({ databasePath, reportPath, translationTasksPath, inventoryPath, styleEvidencePath }) {
+  const jsonPaths = [databasePath, translationTasksPath, inventoryPath, styleEvidencePath]
+    .filter((path) => existsSync(path) && statSync(path).isFile());
+  let valid = true;
+  let database;
+
+  for (const path of jsonPaths) {
+    try {
+      const document = JSON.parse(readFileSync(path, "utf8"));
+      if (path === databasePath) database = document;
+      visitJson(document, "$", (key, value, itemPath) => {
+        if (PERSON_METADATA_KEYS.has(normalizedKey(key))) {
+          fail(`${path} exposes person metadata at ${itemPath}.`);
+          valid = false;
+        }
+        if (isLocalPath(value)) {
+          fail(`${path} exposes a local filesystem path at ${itemPath}.`);
+          valid = false;
+        }
+      });
+    } catch (cause) {
+      fail(`Could not run privacy checks for ${path}: ${cause instanceof Error ? cause.message : String(cause)}`);
+      valid = false;
+    }
+  }
+
+  if (database && existsSync(inventoryPath) && existsSync(styleEvidencePath)) {
+    try {
+      const sourceTitle = database.sourceArtifacts?.[0]?.title;
+      const inventory = JSON.parse(readFileSync(inventoryPath, "utf8"));
+      const styleEvidence = JSON.parse(readFileSync(styleEvidencePath, "utf8"));
+      if (typeof sourceTitle !== "string" || sourceTitle.trim().length === 0) {
+        fail(`${databasePath} must provide a privacy-safe source artifact title.`);
+        valid = false;
+      }
+      if (inventory.input?.filename !== sourceTitle) {
+        fail(`${inventoryPath} input filename must use the privacy-safe source artifact title.`);
+        valid = false;
+      }
+      if (styleEvidence.source?.filename !== sourceTitle) {
+        fail(`${styleEvidencePath} source filename must use the privacy-safe source artifact title.`);
+        valid = false;
+      }
+    } catch (cause) {
+      fail(`Could not compare privacy-safe source labels: ${cause instanceof Error ? cause.message : String(cause)}`);
+      valid = false;
+    }
+  }
+
+  const reportText = existsSync(reportPath) ? readFileSync(reportPath, "utf8") : "";
+  const reportContainsLocalPath = /file:\/\//i.test(reportText)
+    || /\/(?:home|root|Users)\//.test(reportText)
+    || /(?:^|[\s"'`])[A-Za-z]:[\\/]/m.test(reportText);
+  if (reportContainsLocalPath) {
+    fail(`${reportPath} exposes a local filesystem path.`);
+    valid = false;
+  }
+
+  if (valid) console.log("VALID extraction package privacy boundary");
+  return valid;
 }
 
 function checkFormulaTranslationTasks(tasksPath, databasePath) {
@@ -330,13 +429,15 @@ function checkDatabase(databasePath) {
   return true;
 }
 
-const { databasePath, reportPath, translationTasksPath } = resolveArtifacts(process.argv.slice(2));
+const artifacts = resolveArtifacts(process.argv.slice(2));
+const { databasePath, reportPath, translationTasksPath } = artifacts;
 const reportIsValid = checkReport(reportPath, databasePath);
 const databaseIsValid = checkDatabase(databasePath);
 const attentionGuidanceIsValid = checkAttentionGuidance(databasePath);
 const translationTasksAreValid = checkFormulaTranslationTasks(translationTasksPath, databasePath);
+const privacyIsValid = checkPrivacy(artifacts);
 
-if (!reportIsValid || !databaseIsValid || !attentionGuidanceIsValid || !translationTasksAreValid) {
+if (!reportIsValid || !databaseIsValid || !attentionGuidanceIsValid || !translationTasksAreValid || !privacyIsValid) {
   process.exitCode = 1;
 } else {
   console.log("PASS extraction package matches the viewer contract and report format.");
