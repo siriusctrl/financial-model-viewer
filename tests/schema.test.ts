@@ -47,9 +47,9 @@ describe("deterministic model database validator", () => {
     }
   });
 
-  it("rejects the pre-0.2 contract instead of maintaining compatibility", () => {
+  it("rejects the pre-0.3 contract instead of maintaining compatibility", () => {
     const legacy = structuredClone(sample) as Record<string, unknown>;
-    legacy.schemaVersion = "0.1.0";
+    legacy.schemaVersion = "0.2.0";
     const result = validateModelDatabase(legacy);
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -263,25 +263,44 @@ describe("deterministic model database validator", () => {
     }
   });
 
-  it("validates presentation indentation independently from semantic hierarchy", () => {
+  it("validates presentation parents independently from semantic hierarchy", () => {
     const database = fixture();
     const section = database.tablePresentations[0].sections[0];
     const childMetricId = section.metricIds[1];
-    section.metricDepths = { [childMetricId]: 1 };
+    section.metricParentIds = { [childMetricId]: section.metricIds[0] };
     expect(validateModelDatabase(database).success).toBe(true);
 
-    section.metricDepths = { [childMetricId]: 2 };
-    const jump = validateModelDatabase(database);
-    expect(jump.success).toBe(false);
-    if (!jump.success) {
-      expect(jump.errors).toContainEqual(expect.objectContaining({ code: "presentation.depth_jump" }));
+    section.metricParentIds = { [section.metricIds[0]]: childMetricId };
+    const order = validateModelDatabase(database);
+    expect(order.success).toBe(false);
+    if (!order.success) {
+      expect(order.errors).toContainEqual(expect.objectContaining({ code: "presentation.parent_order" }));
     }
 
-    section.metricDepths = { metric_not_in_section: 1 };
+    section.metricParentIds = { metric_not_in_section: section.metricIds[0] };
     const unknown = validateModelDatabase(database);
     expect(unknown.success).toBe(false);
     if (!unknown.success) {
-      expect(unknown.errors).toContainEqual(expect.objectContaining({ code: "presentation.depth_metric_unknown" }));
+      expect(unknown.errors).toContainEqual(expect.objectContaining({ code: "presentation.parent_metric_unknown" }));
+    }
+  });
+
+  it("rejects cyclic semantic component relationships", () => {
+    const database = fixture();
+    database.relationships.push({
+      id: "relationship_northstar_revenue_component_cycle",
+      fromId: "metric_northstar_revenue",
+      type: "component_of",
+      toId: "metric_northstar_subscription_revenue",
+    });
+    addProvenance(database, "relationship_northstar_revenue_component_cycle");
+
+    const result = validateModelDatabase(database);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors).toContainEqual(expect.objectContaining({
+        code: "relationship.component_cycle",
+      }));
     }
   });
 });

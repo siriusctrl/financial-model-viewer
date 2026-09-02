@@ -23,7 +23,7 @@ npm run build
 
 ## Use the viewer
 
-Select **Upload JSON** in the public or local viewer and choose a validated `model-db@0.2.0` `.json` or `.json.gz` file. Both contain the same contract; gzip only reduces transfer and storage size. The browser decompresses and validates the selected file locally, without sending it to a server, persisting it, or placing the model in the URL. Invalid files do not replace the current model. Pre-0.2 files are rejected rather than migrated implicitly.
+Select **Upload JSON** in the public or local viewer and choose a validated `model-db@0.3.0` `.json` or `.json.gz` file. Both contain the same contract; gzip only reduces transfer and storage size. The browser decompresses and validates the selected file locally, without sending it to a server, persisting it, or placing the model in the URL. Invalid files do not replace the current model. Pre-0.3 files are rejected rather than migrated implicitly.
 
 The primary model table supports:
 

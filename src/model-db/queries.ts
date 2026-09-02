@@ -183,6 +183,24 @@ function locatorRow(locator: SourceLocator | undefined): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
+function presentationDepth(
+  metricId: string,
+  metricParentIds: Record<string, string>,
+): number {
+  let currentMetricId = metricId;
+  let depth = 0;
+  const visited = new Set<string>();
+  while (metricParentIds[currentMetricId]) {
+    if (visited.has(currentMetricId)) {
+      throw new Error(`Table presentation parent cycle at ${currentMetricId}`);
+    }
+    visited.add(currentMetricId);
+    currentMetricId = metricParentIds[currentMetricId];
+    depth += 1;
+  }
+  return depth;
+}
+
 function locatorColumn(locator: SourceLocator | undefined): string | undefined {
   const address = locator?.cell ?? locator?.range?.split(":")[0];
   return address?.match(/^\$?([A-Z]+)/i)?.[1]?.toUpperCase();
@@ -632,10 +650,10 @@ export class ModelDatabaseQueries {
           rows: section.metricIds
             .map((metricId) => {
               const row = rowsByMetric.get(metricId);
-              if (!row || !section.metricDepths) return row;
+              if (!row || !section.metricParentIds) return row;
               return {
                 ...row,
-                depth: section.metricDepths[metricId] ?? 0,
+                depth: presentationDepth(metricId, section.metricParentIds),
               };
             })
             .filter((row): row is FinancialTableRow => Boolean(row)),

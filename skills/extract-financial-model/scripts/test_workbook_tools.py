@@ -102,7 +102,7 @@ def write_fixture(path: Path, sheet_xml: str = SHEET_XML) -> None:
 
 def mapping() -> dict:
     return {
-        "format": "financial-model-workbook-map@0.2",
+        "format": "financial-model-workbook-map@0.3",
         "dataset": {
             "id": "dataset_test",
             "name": "Test",
@@ -168,7 +168,8 @@ def mapping() -> dict:
                     "row": 1,
                     "labelCell": "A1",
                     "dataType": "number",
-                    "presentationDepth": 0,
+                    "presentationParentMetricId": None,
+                    "componentOfMetricId": None,
                 },
                 {
                     "id": "metric_test_output",
@@ -178,7 +179,8 @@ def mapping() -> dict:
                     "dataType": "number",
                     "canonicalExpression": 'ref("metric_test_input") * 2',
                     "dependencyMetricIds": ["metric_test_input"],
-                    "presentationDepth": 1,
+                    "presentationParentMetricId": "metric_test_input",
+                    "componentOfMetricId": "metric_test_input",
                 },
             ],
         }],
@@ -186,16 +188,24 @@ def mapping() -> dict:
 
 
 class WorkbookToolTests(unittest.TestCase):
-    def test_mapped_extraction_requires_explicit_presentation_depth(self) -> None:
+    def test_mapped_extraction_requires_explicit_parent_decisions(self) -> None:
         with TemporaryDirectory() as directory:
             workbook = Path(directory) / "fixture.xlsx"
             write_fixture(workbook)
             incomplete_mapping = mapping()
-            del incomplete_mapping["sections"][0]["metrics"][1]["presentationDepth"]
+            del incomplete_mapping["sections"][0]["metrics"][1]["presentationParentMetricId"]
 
             with self.assertRaisesRegex(
                 ValueError,
-                r"metric_test_output must declare integer presentationDepth",
+                r"metric_test_output must explicitly declare presentationParentMetricId",
+            ):
+                MappedWorkbookExtractor(workbook, incomplete_mapping).extract()
+
+            incomplete_mapping = mapping()
+            del incomplete_mapping["sections"][0]["metrics"][1]["componentOfMetricId"]
+            with self.assertRaisesRegex(
+                ValueError,
+                r"metric_test_output must explicitly declare componentOfMetricId",
             ):
                 MappedWorkbookExtractor(workbook, incomplete_mapping).extract()
 
@@ -519,7 +529,7 @@ class WorkbookToolTests(unittest.TestCase):
             workbook = Path(directory) / "fixture.xlsx"
             write_fixture(workbook)
             explicit_mapping = mapping()
-            explicit_mapping["format"] = "financial-model-workbook-map@0.2"
+            explicit_mapping["format"] = "financial-model-workbook-map@0.3"
             for period in explicit_mapping["periods"]:
                 del period["column"]
             input_metric, output_metric = explicit_mapping["sections"][0]["metrics"]
@@ -552,7 +562,7 @@ class WorkbookToolTests(unittest.TestCase):
             multi_view_mapping = mapping()
             section = multi_view_mapping["sections"][0]
             output_metric = section["metrics"].pop()
-            output_metric["presentationDepth"] = 0
+            output_metric["presentationParentMetricId"] = None
             multi_view_mapping["sections"].append({
                 "id": "section_test_output",
                 "title": "Output",
@@ -605,8 +615,17 @@ class WorkbookToolTests(unittest.TestCase):
             self.assertEqual(result.database["transformations"][0]["sourceExpressions"]["period_fy2024"], "=B1*2")
             self.assertEqual(result.database["transformations"][0]["status"], "supported")
             self.assertEqual(
-                result.database["tablePresentations"][0]["sections"][0]["metricDepths"],
-                {"metric_test_output": 1},
+                result.database["tablePresentations"][0]["sections"][0]["metricParentIds"],
+                {"metric_test_output": "metric_test_input"},
+            )
+            self.assertIn(
+                {
+                    "id": "relationship_test_output_component_of_test_input",
+                    "fromId": "metric_test_output",
+                    "type": "component_of",
+                    "toId": "metric_test_input",
+                },
+                result.database["relationships"],
             )
             self.assertEqual(result.database["evidence"][0]["excerpt"], "Reviewed output")
             self.assertEqual(result.database["unresolvedItems"], [])

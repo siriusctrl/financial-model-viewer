@@ -207,7 +207,7 @@ export const TableSectionSchema = z
     id: IdSchema,
     title: z.string().min(1),
     metricIds: z.array(IdSchema).min(1),
-    metricDepths: z.record(IdSchema, z.number().int().min(1).max(8)).optional(),
+    metricParentIds: z.record(IdSchema, IdSchema).optional(),
     sourceLocator: SourceLocatorSchema.optional(),
   })
   .strict();
@@ -354,7 +354,7 @@ export const UnresolvedItemSchema = z
 
 export const ModelDatabaseSchema = z
   .object({
-    schemaVersion: z.literal("0.2.0"),
+    schemaVersion: z.literal("0.3.0"),
     dataset: DatasetMetadataSchema,
     models: z.array(ModelSchema).min(1),
     entities: z.array(EntitySchema).min(1),

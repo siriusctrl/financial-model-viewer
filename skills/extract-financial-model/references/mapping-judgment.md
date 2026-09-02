@@ -39,12 +39,12 @@ Create a helper metric only when its semantic role can be named from labels, nam
 
 ## 3. Map layouts without assuming a grid
 
-Use the preferred `financial-model-workbook-map@0.2` format for new maps.
+Use the preferred `financial-model-workbook-map@0.3` format for new maps.
 
 - Use `row` plus period `column` only for a genuine repeated metric-row by period-column grid. Add metric `sheet` when that row is on another worksheet.
 - Use metric `cells` for arbitrary layouts. Each entry explicitly declares `sheet`, `cell`, `periodId`, and optional confidence.
 - Mix grid metrics and explicit-cell metrics in the same model when the workbook mixes statements, assumptions, and driver blocks.
-- Put every observed metric in at least one presentation section, even when its source cells are scattered. Keep it unique within a presentation; multiple worksheet views may intentionally reuse it. Record every mapped metric's defensible section-relative visual indentation as `presentationDepth`; do not flatten a source hierarchy simply because an ancestor row is omitted. Add the ancestor or normalize the local section. Presentation order and indentation are viewer concerns; cell coordinates remain provenance.
+- Put every observed metric in at least one presentation section, even when its source cells are scattered. Keep it unique within a presentation; multiple worksheet views may intentionally reuse it. Record a defensible section-relative `presentationParentMetricId` and an independent semantic `componentOfMetricId` decision for every mapped metric. Do not turn indentation alone into a semantic component edge. Add an omitted parent metric, start a new local root, or split the section rather than attaching a child to the nearest unrelated row. Presentation order and parent edges are viewer concerns; cell coordinates remain provenance.
 - Map cross-sheet inputs explicitly. The translator supports mapped cross-sheet arithmetic, comparisons, `IF`/`MOD`, `SUM`, and `AVERAGE` references; an unmapped worksheet is not automatically an opaque formula.
 
 Example:
@@ -56,6 +56,8 @@ Example:
   "labelCell": { "sheet": "Drivers", "cell": "A4" },
   "dataType": "percentage",
   "unit": "%",
+  "presentationParentMetricId": null,
+  "componentOfMetricId": null,
   "cells": [
     { "sheet": "Drivers", "cell": "B4", "periodId": "period_acme_fy2025" },
     { "sheet": "Drivers", "cell": "B5", "periodId": "period_acme_fy2026", "confidence": 0.9 }

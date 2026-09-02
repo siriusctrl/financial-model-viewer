@@ -644,7 +644,7 @@ test("keeps the current preview when an uploaded file is malformed", async ({ pa
   await expect(page.getByRole("heading", { name: "Northstar Cloud" })).toBeVisible();
 });
 
-test("opens a gzip-compressed 0.2 database entirely in the browser", async ({ page }) => {
+test("opens a gzip-compressed 0.3 database entirely in the browser", async ({ page }) => {
   await page.goto("./");
   const imported = structuredClone(sample);
   imported.dataset.name = "Compressed analyst model";

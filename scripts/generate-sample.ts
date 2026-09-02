@@ -507,7 +507,7 @@ const provenanceRecords: ProvenanceRecord[] = requiredTargets.map((target) => {
 });
 
 const database: ModelDatabase = {
-  schemaVersion: "0.2.0",
+  schemaVersion: "0.3.0",
   dataset: {
     id: "dataset_representative_models",
     name: "Representative cross-sector financial models",

@@ -29,7 +29,7 @@ Check all of the following against the source workbook or lossless IR:
 
 - model, entity, period labels, and actual/estimate boundary;
 - section grouping and metric reading order;
-- metric names, indentation, units, sign, precision, and missing values; inspect at least one expected nested row per section and treat an unexpectedly flat section as an extraction defect;
+- metric names, parent relationships, resulting indentation, units, sign, precision, and missing values; inspect at least one expected nested row per section and treat an unexpectedly flat or wrongly parented section as an extraction defect;
 - selected-cell value, source locator, confidence, and review state;
 - derived input metrics, input periods, workbook cells, and original formula;
 - neutral-blue `needs_review` cues for reversible assumptions and red `action_required` cues for blocked decisions, at status, row, and cell-detail level;

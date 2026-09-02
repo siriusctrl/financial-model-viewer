@@ -527,47 +527,46 @@ export function validateModelDatabase(input: unknown): ValidationResult {
         modelPresentedMetricIds.add(metricId);
       });
 
-      if (section.metricDepths) {
-        for (const metricId of Object.keys(section.metricDepths)) {
-          if (!section.metricIds.includes(metricId)) {
+      if (section.metricParentIds) {
+        const metricPositions = new Map(
+          section.metricIds.map((metricId, index) => [metricId, index]),
+        );
+        for (const [metricId, parentMetricId] of Object.entries(section.metricParentIds)) {
+          const metricPosition = metricPositions.get(metricId);
+          const parentPosition = metricPositions.get(parentMetricId);
+          if (metricPosition === undefined) {
             errors.push(
               error(
-                "presentation.depth_metric_unknown",
+                "presentation.parent_metric_unknown",
                 section.id,
-                `metricDepths.${metricId}`,
-                `Presentation depth references metric ${metricId}, which is not in this section`,
-                "Remove the depth entry or add the metric to this section",
+                `metricParentIds.${metricId}`,
+                `Presentation parent mapping references child metric ${metricId}, which is not in this section`,
+                "Remove the parent mapping or add the child metric to this section",
+              ),
+            );
+          }
+          if (parentPosition === undefined) {
+            errors.push(
+              error(
+                "presentation.parent_unknown",
+                section.id,
+                `metricParentIds.${metricId}`,
+                `Presentation parent ${parentMetricId} is not in this section`,
+                "Add the parent metric to this section or remove the parent mapping",
+              ),
+            );
+          } else if (metricPosition !== undefined && parentPosition >= metricPosition) {
+            errors.push(
+              error(
+                "presentation.parent_order",
+                section.id,
+                `metricParentIds.${metricId}`,
+                `Presentation parent ${parentMetricId} must appear before child ${metricId}`,
+                "Move the parent before the child or correct the relationship",
               ),
             );
           }
         }
-
-        let previousDepth = 0;
-        section.metricIds.forEach((metricId, index) => {
-          const depth = section.metricDepths?.[metricId] ?? 0;
-          if (index === 0 && depth !== 0) {
-            errors.push(
-              error(
-                "presentation.depth_first_metric",
-                section.id,
-                `metricDepths.${metricId}`,
-                "The first metric in a table section must start at depth 0",
-                "Normalize presentation indentation relative to the section root",
-              ),
-            );
-          } else if (depth > previousDepth + 1) {
-            errors.push(
-              error(
-                "presentation.depth_jump",
-                section.id,
-                `metricDepths.${metricId}`,
-                `Presentation depth jumps from ${previousDepth} to ${depth}`,
-                "Add the missing parent row or normalize the child depth to at most one level deeper",
-              ),
-            );
-          }
-          previousDepth = depth;
-        });
       }
     }
     presentedMetricsByModel.set(presentation.modelId, modelPresentedMetricIds);
@@ -954,9 +953,67 @@ export function validateModelDatabase(input: unknown): ValidationResult {
   }
 
   const relationshipTargetIds = new Set(seenIds.keys());
+  const componentParentByMetric = new Map<string, string>();
   for (const relationship of database.relationships) {
     pushMissingReference(errors, relationship.id, "fromId", relationship.fromId, relationshipTargetIds, "Canonical object");
     pushMissingReference(errors, relationship.id, "toId", relationship.toId, relationshipTargetIds, "Canonical object");
+    if (relationship.type !== "component_of") continue;
+    if (!metrics.has(relationship.fromId) || !metrics.has(relationship.toId)) {
+      errors.push(
+        error(
+          "relationship.component_metric",
+          relationship.id,
+          "type",
+          "component_of relationships must connect two metrics",
+          "Use component_of only for a supported metric hierarchy",
+        ),
+      );
+      continue;
+    }
+    const existingParent = componentParentByMetric.get(relationship.fromId);
+    if (existingParent && existingParent !== relationship.toId) {
+      errors.push(
+        error(
+          "relationship.component_multiple_parents",
+          relationship.id,
+          "fromId",
+          `Metric ${relationship.fromId} already has component parent ${existingParent}`,
+          "Keep one canonical semantic parent; use presentation-specific parents for alternate views",
+        ),
+      );
+    } else {
+      componentParentByMetric.set(relationship.fromId, relationship.toId);
+    }
+  }
+
+  const reportedComponentCycles = new Set<string>();
+  for (const metricId of componentParentByMetric.keys()) {
+    const path: string[] = [];
+    const positions = new Map<string, number>();
+    let currentMetricId: string | undefined = metricId;
+    while (currentMetricId) {
+      const cycleStart = positions.get(currentMetricId);
+      if (cycleStart !== undefined) {
+        const cycle = [...path.slice(cycleStart), currentMetricId];
+        const signature = [...new Set(cycle)].sort().join("|");
+        if (!reportedComponentCycles.has(signature)) {
+          reportedComponentCycles.add(signature);
+          errors.push(
+            error(
+              "relationship.component_cycle",
+              metricId,
+              "relationships",
+              `Metric component cycle detected: ${cycle.join(" -> ")}`,
+              "Break the semantic component cycle",
+            ),
+          );
+        }
+        break;
+      }
+      positions.set(currentMetricId, path.length);
+      path.push(currentMetricId);
+      currentMetricId = componentParentByMetric.get(currentMetricId);
+    }
   }
 
   for (const artifact of database.sourceArtifacts) {

@@ -39,9 +39,8 @@ describe("query projections", () => {
 
   it("uses presentation indentation without inventing semantic relationships", () => {
     const next = fixture();
-    next.tablePresentations[0].sections[1].metricDepths = {
-      metric_northstar_gross_profit: 1,
-      metric_northstar_gross_margin: 2,
+    next.tablePresentations[0].sections[1].metricParentIds = {
+      metric_northstar_gross_margin: "metric_northstar_gross_profit",
     };
     const rows = new ModelDatabaseQueries(assertValidModelDatabase(next)).getFinancialTable({
       modelId: "model_northstar_cloud",
@@ -50,8 +49,8 @@ describe("query projections", () => {
 
     expect(rows.map((row) => [row.metric.id, row.depth])).toEqual([
       ["metric_northstar_cost_of_revenue", 0],
-      ["metric_northstar_gross_profit", 1],
-      ["metric_northstar_gross_margin", 2],
+      ["metric_northstar_gross_profit", 0],
+      ["metric_northstar_gross_margin", 1],
     ]);
   });
 
