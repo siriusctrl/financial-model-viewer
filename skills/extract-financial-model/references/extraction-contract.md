@@ -59,7 +59,7 @@ Map input concepts as follows:
 | Source passage supporting a view | `Evidence` | Preserve a short excerpt or locator, subject to source policy. |
 | Forward-looking analyst belief | `Assumption` | Require evidence; formulas alone are insufficient. |
 | Deliberate forecast change | `Decision` + `DecisionChange` | Record rationale only when present in an input source. |
-| Explicit worksheet section and metric order | `TablePresentation` | Preserve a lean, non-canonical table grouping with ordered metric IDs and the source range. |
+| Explicit worksheet section, metric order, and visual indentation | `TablePresentation` | Preserve a lean, non-canonical table grouping with ordered metric IDs, compact nonzero `metricDepths`, and the source range. |
 
 Do not add a `calculated_from` relationship when the same edge is derivable from a transformation's dependencies.
 
@@ -71,12 +71,13 @@ Emit one `tablePresentations` entry per defensible worksheet/view. A model may h
 
 - Give each section a semantic snake-case ID and source-facing title.
 - List each observed model metric exactly once across the ordered sections.
+- Preserve defensible, section-relative visual indentation in `metricDepths`; omitted metric IDs mean depth zero. The first row is depth zero, depth may increase by at most one per row, and keys must belong to the section.
 - Preserve the workbook sheet/range in `sourceLocator` when available.
 - Use `component_of` for semantic hierarchy; table sections do not create business relationships.
-- Do not preserve blank rows, merged cells, indentation, coordinates, or formatting as canonical identity.
+- Do not preserve blank rows, merged cells, indentation, coordinates, or formatting as canonical identity. Presentation indentation is view metadata only.
 - If the grouping is uncertain, omit the presentation and add a `needs_review` presentation item. The viewer will fall back to semantic hierarchy and provenance order. Use `action_required` only when no defensible, inspectable fallback can be produced without a semantic decision.
 
-The validator enforces presentation coverage automatically. Across a model's presentations, every observed metric must appear at least once; within each presentation it may appear only once. Every model, metric, section, and source reference must resolve. If no presentation exists, add an open unresolved item with `category: presentation`; the validator emits a visible fallback warning. Missing both presentations and that unresolved item is an error.
+The validator enforces presentation coverage and indentation integrity automatically. Across a model's presentations, every observed metric must appear at least once; within each presentation it may appear only once. Every model, metric, section, depth key, and source reference must resolve. If no presentation exists, add an open unresolved item with `category: presentation`; the validator emits a visible fallback warning. Missing both presentations and that unresolved item is an error.
 
 ## 4. Formula translation
 

@@ -207,6 +207,7 @@ export const TableSectionSchema = z
     id: IdSchema,
     title: z.string().min(1),
     metricIds: z.array(IdSchema).min(1),
+    metricDepths: z.record(IdSchema, z.number().int().min(1).max(8)).optional(),
     sourceLocator: SourceLocatorSchema.optional(),
   })
   .strict();

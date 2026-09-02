@@ -37,6 +37,24 @@ describe("query projections", () => {
     expect(harbor.rows.some((row) => row.metric.name === "Subscription revenue")).toBe(false);
   });
 
+  it("uses presentation indentation without inventing semantic relationships", () => {
+    const next = fixture();
+    next.tablePresentations[0].sections[1].metricDepths = {
+      metric_northstar_gross_profit: 1,
+      metric_northstar_gross_margin: 2,
+    };
+    const rows = new ModelDatabaseQueries(assertValidModelDatabase(next)).getFinancialTable({
+      modelId: "model_northstar_cloud",
+      scenarioId: "scenario_base",
+    }).sections[1].rows;
+
+    expect(rows.map((row) => [row.metric.id, row.depth])).toEqual([
+      ["metric_northstar_cost_of_revenue", 0],
+      ["metric_northstar_gross_profit", 1],
+      ["metric_northstar_gross_margin", 2],
+    ]);
+  });
+
   it("selects and navigates among multiple worksheet presentations", () => {
     const next = fixture();
     next.tablePresentations[0].id = "presentation_northstar_revenue";

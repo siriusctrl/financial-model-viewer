@@ -1169,6 +1169,17 @@
             "$ref": "#/$defs/__schema2"
           }
         },
+        "metricDepths": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/__schema2"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          }
+        },
         "sourceLocator": {
           "$ref": "#/$defs/__schema28"
         }

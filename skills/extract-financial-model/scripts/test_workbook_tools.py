@@ -168,6 +168,7 @@ def mapping() -> dict:
                     "row": 1,
                     "labelCell": "A1",
                     "dataType": "number",
+                    "presentationDepth": 0,
                 },
                 {
                     "id": "metric_test_output",
@@ -177,6 +178,7 @@ def mapping() -> dict:
                     "dataType": "number",
                     "canonicalExpression": 'ref("metric_test_input") * 2',
                     "dependencyMetricIds": ["metric_test_input"],
+                    "presentationDepth": 1,
                 },
             ],
         }],
@@ -184,6 +186,19 @@ def mapping() -> dict:
 
 
 class WorkbookToolTests(unittest.TestCase):
+    def test_mapped_extraction_requires_explicit_presentation_depth(self) -> None:
+        with TemporaryDirectory() as directory:
+            workbook = Path(directory) / "fixture.xlsx"
+            write_fixture(workbook)
+            incomplete_mapping = mapping()
+            del incomplete_mapping["sections"][0]["metrics"][1]["presentationDepth"]
+
+            with self.assertRaisesRegex(
+                ValueError,
+                r"metric_test_output must declare integer presentationDepth",
+            ):
+                MappedWorkbookExtractor(workbook, incomplete_mapping).extract()
+
     def test_fixed_style_convention_only_accepts_observed_blue_sources(self) -> None:
         self.assertTrue(_is_specific_blue_font({"type": "theme", "theme": 4}))
         self.assertTrue(_is_specific_blue_font({
@@ -537,6 +552,7 @@ class WorkbookToolTests(unittest.TestCase):
             multi_view_mapping = mapping()
             section = multi_view_mapping["sections"][0]
             output_metric = section["metrics"].pop()
+            output_metric["presentationDepth"] = 0
             multi_view_mapping["sections"].append({
                 "id": "section_test_output",
                 "title": "Output",
@@ -588,6 +604,10 @@ class WorkbookToolTests(unittest.TestCase):
             self.assertEqual(extracted_observations[3]["value"], 6)
             self.assertEqual(result.database["transformations"][0]["sourceExpressions"]["period_fy2024"], "=B1*2")
             self.assertEqual(result.database["transformations"][0]["status"], "supported")
+            self.assertEqual(
+                result.database["tablePresentations"][0]["sections"][0]["metricDepths"],
+                {"metric_test_output": 1},
+            )
             self.assertEqual(result.database["evidence"][0]["excerpt"], "Reviewed output")
             self.assertEqual(result.database["unresolvedItems"], [])
             self.assertEqual(result.style_evidence["summary"]["byRole"], {

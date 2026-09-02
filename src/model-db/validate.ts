@@ -526,6 +526,49 @@ export function validateModelDatabase(input: unknown): ValidationResult {
         presentedMetricIds.add(metricId);
         modelPresentedMetricIds.add(metricId);
       });
+
+      if (section.metricDepths) {
+        for (const metricId of Object.keys(section.metricDepths)) {
+          if (!section.metricIds.includes(metricId)) {
+            errors.push(
+              error(
+                "presentation.depth_metric_unknown",
+                section.id,
+                `metricDepths.${metricId}`,
+                `Presentation depth references metric ${metricId}, which is not in this section`,
+                "Remove the depth entry or add the metric to this section",
+              ),
+            );
+          }
+        }
+
+        let previousDepth = 0;
+        section.metricIds.forEach((metricId, index) => {
+          const depth = section.metricDepths?.[metricId] ?? 0;
+          if (index === 0 && depth !== 0) {
+            errors.push(
+              error(
+                "presentation.depth_first_metric",
+                section.id,
+                `metricDepths.${metricId}`,
+                "The first metric in a table section must start at depth 0",
+                "Normalize presentation indentation relative to the section root",
+              ),
+            );
+          } else if (depth > previousDepth + 1) {
+            errors.push(
+              error(
+                "presentation.depth_jump",
+                section.id,
+                `metricDepths.${metricId}`,
+                `Presentation depth jumps from ${previousDepth} to ${depth}`,
+                "Add the missing parent row or normalize the child depth to at most one level deeper",
+              ),
+            );
+          }
+          previousDepth = depth;
+        });
+      }
     }
     presentedMetricsByModel.set(presentation.modelId, modelPresentedMetricIds);
   }

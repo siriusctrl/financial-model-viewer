@@ -630,7 +630,14 @@ export class ModelDatabaseQueries {
           title: section.title,
           sourceLocator: section.sourceLocator,
           rows: section.metricIds
-            .map((metricId) => rowsByMetric.get(metricId))
+            .map((metricId) => {
+              const row = rowsByMetric.get(metricId);
+              if (!row || !section.metricDepths) return row;
+              return {
+                ...row,
+                depth: section.metricDepths[metricId] ?? 0,
+              };
+            })
             .filter((row): row is FinancialTableRow => Boolean(row)),
         }))
       : [

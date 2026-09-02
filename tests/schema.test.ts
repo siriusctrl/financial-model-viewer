@@ -262,4 +262,26 @@ describe("deterministic model database validator", () => {
       expect(result.errors).toContainEqual(expect.objectContaining({ code: "presentation.metric_missing" }));
     }
   });
+
+  it("validates presentation indentation independently from semantic hierarchy", () => {
+    const database = fixture();
+    const section = database.tablePresentations[0].sections[0];
+    const childMetricId = section.metricIds[1];
+    section.metricDepths = { [childMetricId]: 1 };
+    expect(validateModelDatabase(database).success).toBe(true);
+
+    section.metricDepths = { [childMetricId]: 2 };
+    const jump = validateModelDatabase(database);
+    expect(jump.success).toBe(false);
+    if (!jump.success) {
+      expect(jump.errors).toContainEqual(expect.objectContaining({ code: "presentation.depth_jump" }));
+    }
+
+    section.metricDepths = { metric_not_in_section: 1 };
+    const unknown = validateModelDatabase(database);
+    expect(unknown.success).toBe(false);
+    if (!unknown.success) {
+      expect(unknown.errors).toContainEqual(expect.objectContaining({ code: "presentation.depth_metric_unknown" }));
+    }
+  });
 });

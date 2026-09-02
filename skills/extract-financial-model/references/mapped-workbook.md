@@ -15,7 +15,7 @@ Use `format: financial-model-workbook-map@0.2` for every map; pre-0.2 maps are r
 - canonical `dataset`, `model`, `entity`, `scenarios`, `sourceArtifact`, and `extractionRun` objects;
 - a default `sheet`, plus `modelRange` and `periodHeaderRange` locators; each locator may be a compact string or an object containing `sheet` and `cell`/`range`; multi-worksheet maps may additionally provide a non-empty `periodHeaderRanges` array, with `periodHeaderRange` retained as the primary locator;
 - explicit periods with semantic ID, label, type, header cell, date range, and actuality; include `column` only when grid metrics use it;
-- ordered sections with stable section IDs and mapped metrics;
+- ordered sections with stable section IDs and mapped metrics; every metric must declare integer `presentationDepth` from `0` through `8`, relative to its section;
 - optional `presentations`, each with stable `id`, `title`, `sectionIds`, and optional range `sourceLocator`; every mapped section must be assigned exactly once when this array is present;
 - for each metric, a stable ID, semantic name, label-cell locator, type, unit, and exactly one source mapping mode:
   - `row` for a genuine metric-row by period-column grid, optionally with `sheet` when the row is on another worksheet; or
@@ -25,7 +25,7 @@ Use `format: financial-model-workbook-map@0.2` for every map; pre-0.2 maps are r
 
 Every mapped attention item must include `description`, `currentTreatment`, `impact`, and `nextAction`. Every `action_required` item must also use `actionOwner: extraction_agent | model_owner | source_owner`, so the viewer can distinguish an internal extraction follow-up from a genuine model decision or source repair. The extractor preserves these fields in `model-db.json` and fails instead of generating a vague default. `analystQuestion` remains accepted only as a legacy alias for `nextAction`; new maps must use `nextAction`. If both fields are present they must match, so migration cannot silently override the canonical instruction.
 
-Grid and explicit-cell metrics may coexist. Every emitted metric must belong to at least one ordered presentation section. A model may expose multiple worksheet presentations; a metric must be unique within each presentation but may intentionally appear in more than one view.
+Grid and explicit-cell metrics may coexist. Every emitted metric must belong to at least one ordered presentation section. A model may expose multiple worksheet presentations; a metric must be unique within each presentation but may intentionally appear in more than one view. The first metric in each mapped section must use `presentationDepth: 0`, and depth may increase by at most one between adjacent rows. Add a missing visible parent to the map or normalize the section when source indentation starts below an omitted header. The extractor writes only nonzero depths to canonical `section.metricDepths`; omission there means depth zero. This is display metadata, not a substitute for a semantically supported `component_of` relationship.
 
 When the confirmed Alice formatting convention applies, add `styleConvention: alice-blue-yellow@0.1`. This is a fixed convention, not a configurable rule engine. It recognizes only these exact OOXML source encodings:
 

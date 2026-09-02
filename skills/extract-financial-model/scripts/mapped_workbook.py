@@ -289,6 +289,24 @@ class MappedWorkbookExtractor:
         seen_cells: dict[str, str] = {}
         seen_points: dict[tuple[str, str], str] = {}
         for section in self.mapping["sections"]:
+            previous_depth = 0
+            for index, metric in enumerate(section["metrics"]):
+                depth = metric.get("presentationDepth")
+                if not isinstance(depth, int) or isinstance(depth, bool) or not 0 <= depth <= 8:
+                    raise ValueError(
+                        f"Mapped metric {metric.get('id', '<unknown>')} must declare integer "
+                        "presentationDepth between 0 and 8"
+                    )
+                if index == 0 and depth != 0:
+                    raise ValueError(
+                        f"First mapped metric in section {section['id']} must have presentationDepth 0"
+                    )
+                if index > 0 and depth > previous_depth + 1:
+                    raise ValueError(
+                        f"Mapped metric {metric['id']} presentationDepth jumps from "
+                        f"{previous_depth} to {depth}; add the missing parent row or normalize the depth"
+                    )
+                previous_depth = depth
             for metric in section["metrics"]:
                 metric_id = metric["id"]
                 if metric_id in seen_metrics:
@@ -500,6 +518,7 @@ class MappedWorkbookExtractor:
         sections = []
         for section in self.mapping["sections"]:
             section_metric_ids = []
+            section_metric_depths = {}
             for mapped_metric in section["metrics"]:
                 metric = self._canonical_metric(mapped_metric)
                 observations_before = len(self.database["observations"])
@@ -629,6 +648,8 @@ class MappedWorkbookExtractor:
                     raise ValueError(f"Mapped metric {metric['id']} has no observations in the selected periods")
                 self.database["metrics"].append(metric)
                 section_metric_ids.append(metric["id"])
+                if mapped_metric["presentationDepth"] > 0:
+                    section_metric_depths[metric["id"]] = mapped_metric["presentationDepth"]
                 self._provenance(
                     metric["id"],
                     _mapped_locator(
@@ -645,12 +666,14 @@ class MappedWorkbookExtractor:
                 self.sheet_name,
                 kind="range",
             )
-            sections.append({
+            canonical_section = {
                 "id": section["id"],
                 "title": section["title"],
                 "metricIds": section_metric_ids,
+                "metricDepths": section_metric_depths,
                 "sourceLocator": section_locator,
-            })
+            }
+            sections.append(canonical_section)
         mapped_presentations = self.mapping.get("presentations")
         if mapped_presentations:
             sections_by_id = {section["id"]: section for section in sections}
@@ -1037,6 +1060,7 @@ class MappedWorkbookExtractor:
             "dependencyMetricIds",
             "opaqueDependencyMetricIds",
             "confidence",
+            "presentationDepth",
         }
         return {key: deepcopy(value) for key, value in mapped_metric.items() if key not in excluded}
 
