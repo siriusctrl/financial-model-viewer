@@ -10,12 +10,13 @@ python3 skills/extract-financial-model/scripts/inventory-workbook.py model.xlsx 
 python3 skills/extract-financial-model/scripts/extract-mapped-workbook.py model.xlsx extraction-map.json output-directory
 ```
 
-Use `format: financial-model-workbook-map@0.3` for every map; pre-0.3 maps are rejected. The `row` mapping mode remains available for genuine grids. Provide:
+Use `format: financial-model-workbook-map@0.4` for every map; older maps are rejected rather than migrated. The `row` mapping mode remains available for genuine grids. Provide:
 
 - canonical `dataset`, `model`, `entity`, `scenarios`, `sourceArtifact`, and `extractionRun` objects;
 - a default `sheet`, plus `modelRange` and `periodHeaderRange` locators; each locator may be a compact string or an object containing `sheet` and `cell`/`range`; multi-worksheet maps may additionally provide a non-empty `periodHeaderRanges` array, with `periodHeaderRange` retained as the primary locator;
 - explicit periods with semantic ID, label, type, header cell, date range, and actuality; include `column` only when grid metrics use it;
-- ordered sections with stable section IDs and mapped metrics; every metric must explicitly declare nullable `presentationParentMetricId` and nullable `componentOfMetricId`;
+- `hierarchyReviewed: true`, a top-level sparse `componentParentIds` object, and a sparse `metricParentIds` object on every section; use `{}` when a reviewed hierarchy has no edges;
+- ordered sections with stable section IDs and mapped metrics;
 - optional `presentations`, each with stable `id`, `title`, `sectionIds`, and optional range `sourceLocator`; every mapped section must be assigned exactly once when this array is present;
 - for each metric, a stable ID, semantic name, label-cell locator, type, unit, and exactly one source mapping mode:
   - `row` for a genuine metric-row by period-column grid, optionally with `sheet` when the row is on another worksheet; or
@@ -23,9 +24,45 @@ Use `format: financial-model-workbook-map@0.3` for every map; pre-0.3 maps are r
 - optional canonical expression/dependencies; use `canonicalExpressions` keyed by period type when annual and quarterly formulas require different lag semantics;
 - the evidence supporting the actual/estimate boundary and any open attention items.
 
-Every mapped attention item must include `description`, `currentTreatment`, `impact`, and `nextAction`. Every `action_required` item must also use `actionOwner: extraction_agent | model_owner | source_owner`, so the viewer can distinguish an internal extraction follow-up from a genuine model decision or source repair. The extractor preserves these fields in `model-db.json` and fails instead of generating a vague default. `analystQuestion` remains accepted only as a legacy alias for `nextAction`; new maps must use `nextAction`. If both fields are present they must match, so migration cannot silently override the canonical instruction.
+Every mapped attention item must include `description`, `currentTreatment`, `impact`, and `nextAction`. Every `action_required` item must also use `actionOwner: extraction_agent | model_owner | source_owner`, so the viewer can distinguish an internal extraction follow-up from a genuine model decision or source repair. The extractor preserves these fields in `model-db.json` and fails instead of generating a vague default. The removed `analystQuestion` field is rejected.
 
-Grid and explicit-cell metrics may coexist. Every emitted metric must belong to at least one ordered presentation section. A model may expose multiple worksheet presentations; a metric must be unique within each presentation but may intentionally appear in more than one view. Set `presentationParentMetricId` to a prior metric in the same section when the source expresses a display parent, otherwise set it to `null`. The extractor writes these relative edges to canonical `section.metricParentIds`; the viewer derives depth on the fly, so inserting or regrouping rows does not require rewriting numeric depths. Set `componentOfMetricId` only when labels, formulas, or repeated structure support a genuine semantic component relationship; otherwise set it to `null`. A display parent may differ from the semantic component parent, and neither may be inferred merely from the other's existence.
+Grid and explicit-cell metrics may coexist. Every emitted metric must belong to at least one ordered presentation section. A model may expose multiple worksheet presentations; a metric must be unique within each presentation but may intentionally appear in more than one view. Map each non-root display metric to a prior metric in its section's `metricParentIds`. Map each genuine semantic component to its parent in top-level `componentParentIds`. Omitted keys are reviewed roots because `hierarchyReviewed: true` is mandatory. Display and semantic parents may differ, and neither may be inferred from the other's existence.
+
+Hierarchy excerpt:
+
+```json
+{
+  "format": "financial-model-workbook-map@0.4",
+  "hierarchyReviewed": true,
+  "componentParentIds": {
+    "metric_acme_subscription_revenue": "metric_acme_revenue"
+  },
+  "sections": [{
+    "id": "section_revenue",
+    "title": "Revenue",
+    "sourceRange": "A10:F20",
+    "metricParentIds": {
+      "metric_acme_subscription_revenue": "metric_acme_revenue"
+    },
+    "metrics": [
+      {
+        "id": "metric_acme_revenue",
+        "name": "Revenue",
+        "labelCell": "A10",
+        "dataType": "currency",
+        "row": 10
+      },
+      {
+        "id": "metric_acme_subscription_revenue",
+        "name": "Subscription revenue",
+        "labelCell": "A11",
+        "dataType": "currency",
+        "row": 11
+      }
+    ]
+  }]
+}
+```
 
 When the confirmed Alice formatting convention applies, add `styleConvention: alice-blue-yellow@0.1`. This is a fixed convention, not a configurable rule engine. It recognizes only these exact OOXML source encodings:
 
@@ -36,7 +73,7 @@ Yellow-fill blue-font cells are classified as `alice_hardcode`. Other blue-font 
 
 For every mapped formula, the extractor first attempts a deterministic translation of numeric and percentage literals, `+`, `-`, `*`, `/`, comparisons, restricted `IF`/numeric `IFERROR`/`MOD`, `SUM`/`AVERAGE` including multiple ranges, equal-length range-only `SUMPRODUCT`, and one-criterion `SUMIFS`/`AVERAGEIFS`. Every semantic reference must resolve through either a grid mapping or an explicit cell mapping. Formula-free numeric cells inside explicitly declared `periodHeaderRange`/`periodHeaderRanges` may be constant-folded; other unmapped cells may not. Same-period inputs compile to `ref`; cross-period inputs compile to `period_ref(metricId, periodId)`. Mapped cross-sheet references are supported. Mapped or materially blank references—including absent sparse OOXML cells on a known worksheet—follow Excel numeric semantics: arithmetic and `SUM` use zero, while `AVERAGE` excludes blanks. Excel aggregates ignore referenced text values, and a numeric `IFERROR` may select its explicit fallback for a deterministically nonnumeric primary; both cases still require exact cached-value replay. Numeric Excel `IF` conditions compile to explicit boolean comparisons. Numeric `IFERROR` arithmetic with possible division by zero compiles to lazy conditional guards using the source fallback; a non-failing primary may be unwrapped only when it independently replays. The extractor replays the translated expression using workbook cached values and accepts it only when the result matches the formula cell's cached value. This exact source-derived lineage takes precedence over a generic metric-level `canonicalExpression`, which remains a reviewed fallback for formulas outside the deterministic subset.
 
-For row/column grid mappings, an otherwise supported formula that references only unmapped period columns still fails with the formula worksheet, target cell, and missing source cells. This is an incomplete private map, not an analyst ambiguity. Add explicit cells to the 0.3 map when a referenced input does not fit the grid.
+For row/column grid mappings, an otherwise supported formula that references only unmapped period columns still fails with the formula worksheet, target cell, and missing source cells. This is an incomplete private map, not an analyst ambiguity. Add explicit cells when a referenced input does not fit the grid.
 
 Do not accept the first `unmapped_cells`, `unmapped_sheet`, or unsupported-function blocker as final. Inspect the named cells, extend the private semantic map when their roles are defensible, and rerun until referenced-cell closure converges. The extractor writes every remaining opaque blocker to `formula-translation-tasks.json`. Inspect and classify every task. If syntax remains outside the safe language, preserve the exact formula and materialized value as `opaque` with an open `action_required` item owned by `extraction_agent`; do not silently patch the shared translator unless tooling improvement is explicitly in scope. Opaque is an incomplete canonical import; cached values may be previewed, but the action cannot be resolved or dismissed until translation succeeds. Never execute arbitrary TypeScript/JavaScript as a fallback. A formula with no cached value emits no fabricated observation and creates an `action_required` item. Comments attached to selected observation cells become evidence linked to those observations. Material comments on in-scope drivers should lead to mapping those drivers; comments outside the selected semantic graph remain complete in `workbook-inventory.json` and are counted in the report.
 

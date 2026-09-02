@@ -12,7 +12,8 @@ This file is the operating map for agents working in this repository. Keep produ
 - `src/model-db/validate.ts`: deterministic schema, reference, type, cycle, uniqueness, and provenance checks.
 - `src/model-db/queries.ts`: visualization-neutral query layer. UI code consumes projections from here.
 - `src/model-db/attention.ts`: shared domain guard for complete attention guidance.
-- `tablePresentations` in `src/model-db/schema.ts`: optional non-canonical table sections and metric order captured during extraction.
+- `tablePresentations` in `src/model-db/schema.ts`: optional non-canonical table sections, metric order, and view-specific parent edges captured during extraction.
+- `src/model-db/parent-forest.ts`: shared ordered-parent analysis and single-parent cycle detection used by validation and table projection.
 - `src/visualizations/`: Ledgerglass financial table projection.
 - `src/components/ObjectDetailPanel.tsx`: dismissible slide-over for object/property inspection, local value edits, and reverse lineage.
 - `src/components/AttentionGuidance.tsx`: action/review explanation and guarded review confirmation.
@@ -35,7 +36,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - Database objects are the source of truth. Never add canonical block, row, column, indentation, or cell identity. Keep extracted table grouping and order in `tablePresentations`, where it cannot redefine metric identity.
 - Standardize object and relationship rules, not company metrics. Sector-specific metrics belong in data.
 - `schema.ts` is the only maintained contract. Generate JSON Schema and infer TypeScript types from it.
-- Keep `Observation` point-in-time: model, metric, entity, period, scenario, actuality, as-of, and version must remain explicit.
+- Keep observations point-in-time: model, metric, entity, period, scenario, actuality, as-of, and version must remain explicit even though storage groups points into `observationSeries`.
 - Never execute expressions with `eval`, `new Function`, imports, assignments, loops, property access, or browser/network APIs.
 - Keep browser-local mutations atomic and schema-valid. Direct edits cannot overwrite supported or opaque formula cells; downstream propagation must use `model-expression@0.1` and exact observation references.
 - Derive dependency edges from parsed transformations. Do not store duplicate `calculated_from` relationships.
@@ -51,7 +52,7 @@ This file is the operating map for agents working in this repository. Keep produ
 - Schema object or enum change: update `schema.ts`, validator rules, generators, tests, JSON Schema, and fixtures together.
 - Formula-language change: update `expressions.ts`, extraction contract, validator, and expression tests.
 - New visualization: add a query projection first, then build the component against that result.
-- Table grouping/order change: update `tablePresentations`, reference validation, extraction contract, fallback query tests, and fixtures together.
+- Table grouping/order/hierarchy change: update `tablePresentations`, parent-forest validation, extraction contract, query tests, and fixtures together.
 - Workbook extraction: invoke `skills/extract-financial-model/` and keep real confidential inputs outside Git.
 - New model fixture: use stable semantic IDs, preserve source lineage, run the deterministic validator, and prove the existing frontend works without company-specific branches.
 - Deployment or browser change: inspect Playwright and Pages workflow together.
@@ -83,6 +84,7 @@ For a real extraction, also run `npm run extraction:preview -- path/to/output-di
 - Update `README.md` when setup, public behavior, scope, publishing, or verification commands change.
 - Update `docs/architecture-decisions.md` when the canonical contract, expression security boundary, query boundary, or hosting model changes.
 - Update the project skill when extraction behavior or report requirements change.
+- Keep private map syntax in `references/mapped-workbook.md`, canonical output rules in `references/extraction-contract.md`, and judgment guidance in `references/mapping-judgment.md`; link instead of copying detailed rules across them.
 - Keep generated extraction viewers local and uncommitted unless publication is explicitly authorized; the normal Pages build remains the representative public viewer.
 - Report checks actually run and distinguish representative fixtures from real analyst models.
 - Do not commit confidential workbooks, generated `dist/`, browser artifacts, credentials, or local caches.

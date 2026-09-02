@@ -5,6 +5,7 @@ import {
   observations,
   transformationDependencyMetricIds,
 } from "./access";
+import { analyzeOrderedParentForest, findParentCycles } from "./parent-forest";
 import type {
   Metric,
   ModelDatabase,
@@ -528,40 +529,40 @@ export function validateModelDatabase(input: unknown): ValidationResult {
       });
 
       if (section.metricParentIds) {
-        const metricPositions = new Map(
-          section.metricIds.map((metricId, index) => [metricId, index]),
+        const { issues } = analyzeOrderedParentForest(
+          section.metricIds,
+          section.metricParentIds,
         );
-        for (const [metricId, parentMetricId] of Object.entries(section.metricParentIds)) {
-          const metricPosition = metricPositions.get(metricId);
-          const parentPosition = metricPositions.get(parentMetricId);
-          if (metricPosition === undefined) {
+        for (const issue of issues) {
+          if (issue.kind === "unknown_child") {
             errors.push(
               error(
                 "presentation.parent_metric_unknown",
                 section.id,
-                `metricParentIds.${metricId}`,
-                `Presentation parent mapping references child metric ${metricId}, which is not in this section`,
+                `metricParentIds.${issue.childId}`,
+                `Presentation parent mapping references child metric ${issue.childId}, which is not in this section`,
                 "Remove the parent mapping or add the child metric to this section",
               ),
             );
           }
-          if (parentPosition === undefined) {
+          if (issue.kind === "unknown_parent") {
             errors.push(
               error(
                 "presentation.parent_unknown",
                 section.id,
-                `metricParentIds.${metricId}`,
-                `Presentation parent ${parentMetricId} is not in this section`,
+                `metricParentIds.${issue.childId}`,
+                `Presentation parent ${issue.parentId} is not in this section`,
                 "Add the parent metric to this section or remove the parent mapping",
               ),
             );
-          } else if (metricPosition !== undefined && parentPosition >= metricPosition) {
+          }
+          if (issue.kind === "parent_order") {
             errors.push(
               error(
                 "presentation.parent_order",
                 section.id,
-                `metricParentIds.${metricId}`,
-                `Presentation parent ${parentMetricId} must appear before child ${metricId}`,
+                `metricParentIds.${issue.childId}`,
+                `Presentation parent ${issue.parentId} must appear before child ${issue.childId}`,
                 "Move the parent before the child or correct the relationship",
               ),
             );
@@ -986,34 +987,16 @@ export function validateModelDatabase(input: unknown): ValidationResult {
     }
   }
 
-  const reportedComponentCycles = new Set<string>();
-  for (const metricId of componentParentByMetric.keys()) {
-    const path: string[] = [];
-    const positions = new Map<string, number>();
-    let currentMetricId: string | undefined = metricId;
-    while (currentMetricId) {
-      const cycleStart = positions.get(currentMetricId);
-      if (cycleStart !== undefined) {
-        const cycle = [...path.slice(cycleStart), currentMetricId];
-        const signature = [...new Set(cycle)].sort().join("|");
-        if (!reportedComponentCycles.has(signature)) {
-          reportedComponentCycles.add(signature);
-          errors.push(
-            error(
-              "relationship.component_cycle",
-              metricId,
-              "relationships",
-              `Metric component cycle detected: ${cycle.join(" -> ")}`,
-              "Break the semantic component cycle",
-            ),
-          );
-        }
-        break;
-      }
-      positions.set(currentMetricId, path.length);
-      path.push(currentMetricId);
-      currentMetricId = componentParentByMetric.get(currentMetricId);
-    }
+  for (const cycle of findParentCycles(componentParentByMetric)) {
+    errors.push(
+      error(
+        "relationship.component_cycle",
+        cycle[0],
+        "relationships",
+        `Metric component cycle detected: ${cycle.join(" -> ")}`,
+        "Break the semantic component cycle",
+      ),
+    );
   }
 
   for (const artifact of database.sourceArtifacts) {

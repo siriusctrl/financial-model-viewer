@@ -23,6 +23,7 @@ import {
   sourceExpressionFor,
   transformationDependencyMetricIds,
 } from "./access";
+import { analyzeOrderedParentForest } from "./parent-forest";
 
 export type MetricSeriesQuery = {
   modelId: string;
@@ -183,24 +184,6 @@ function locatorRow(locator: SourceLocator | undefined): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
-function presentationDepth(
-  metricId: string,
-  metricParentIds: Record<string, string>,
-): number {
-  let currentMetricId = metricId;
-  let depth = 0;
-  const visited = new Set<string>();
-  while (metricParentIds[currentMetricId]) {
-    if (visited.has(currentMetricId)) {
-      throw new Error(`Table presentation parent cycle at ${currentMetricId}`);
-    }
-    visited.add(currentMetricId);
-    currentMetricId = metricParentIds[currentMetricId];
-    depth += 1;
-  }
-  return depth;
-}
-
 function locatorColumn(locator: SourceLocator | undefined): string | undefined {
   const address = locator?.cell ?? locator?.range?.split(":")[0];
   return address?.match(/^\$?([A-Z]+)/i)?.[1]?.toUpperCase();
@@ -230,9 +213,13 @@ export class ModelDatabaseQueries {
   private readonly scenarios: Map<string, Scenario>;
   private readonly observations: Map<string, Observation>;
   private readonly observationList: Observation[];
+  private readonly observationsByModelMetric: Map<string, Observation[]>;
+  private readonly metricIdsByModel: Map<string, Set<string>>;
   private readonly transformations: Map<string, Transformation>;
   private readonly relationships: Relationship[];
   private readonly objects: Map<string, CanonicalObject | SourceArtifact | ExtractionRun>;
+  private readonly primaryLocators: Map<string, SourceLocator>;
+  private readonly openAttentionByTarget: Map<string, UnresolvedItem[]>;
   private readonly calculator: ModelCalculator;
 
   constructor(database: ModelDatabase) {
@@ -244,11 +231,35 @@ export class ModelDatabaseQueries {
     this.scenarios = new Map(database.scenarios.map((item) => [item.id, item]));
     this.observationList = observations(database);
     this.observations = new Map(this.observationList.map((item) => [item.id, item]));
+    this.observationsByModelMetric = new Map();
+    this.metricIdsByModel = new Map();
+    for (const observation of this.observationList) {
+      const key = `${observation.modelId}\u0000${observation.metricId}`;
+      const grouped = this.observationsByModelMetric.get(key) ?? [];
+      grouped.push(observation);
+      this.observationsByModelMetric.set(key, grouped);
+      const metricIds = this.metricIdsByModel.get(observation.modelId) ?? new Set<string>();
+      metricIds.add(observation.metricId);
+      this.metricIdsByModel.set(observation.modelId, metricIds);
+    }
     this.transformations = new Map(
       database.transformations.map((item) => [item.id, item]),
     );
     this.relationships = database.relationships;
     this.calculator = new ModelCalculator(database);
+    this.primaryLocators = new Map();
+    for (const record of database.provenanceRecords) {
+      if (!this.primaryLocators.has(record.targetId) && record.locator) {
+        this.primaryLocators.set(record.targetId, record.locator);
+      }
+    }
+    this.openAttentionByTarget = new Map();
+    for (const item of database.unresolvedItems) {
+      if (item.status !== "open" || !item.targetId) continue;
+      const grouped = this.openAttentionByTarget.get(item.targetId) ?? [];
+      grouped.push(item);
+      this.openAttentionByTarget.set(item.targetId, grouped);
+    }
     this.objects = new Map();
     for (const collection of [
       database.models,
@@ -454,10 +465,10 @@ export class ModelDatabaseQueries {
     const model = this.getModel(query.modelId);
     const entityId = query.entityId ?? model.primaryEntityId;
     const asOf = query.asOf ?? model.asOf;
-    const observations = this.observationList.filter(
+    const observations = (this.observationsByModelMetric.get(
+      `${query.modelId}\u0000${query.metricId}`,
+    ) ?? []).filter(
       (item) =>
-        item.modelId === query.modelId &&
-        item.metricId === query.metricId &&
         item.entityId === entityId &&
         item.asOf <= asOf &&
         observationMatchesScenario(item, query.scenarioId),
@@ -508,16 +519,11 @@ export class ModelDatabaseQueries {
   }
 
   private visibleMetricIds(modelId: string): Set<string> {
-    return new Set(
-      this.observationList
-        .filter((item) => item.modelId === modelId)
-        .map((item) => item.metricId),
-    );
+    return new Set(this.metricIdsByModel.get(modelId) ?? []);
   }
 
   private primarySourceLocator(targetId: string): SourceLocator | undefined {
-    return this.database.provenanceRecords.find((item) => item.targetId === targetId)
-      ?.locator;
+    return this.primaryLocators.get(targetId);
   }
 
   private compareMetricsBySource(left: Metric, right: Metric): number {
@@ -558,21 +564,19 @@ export class ModelDatabaseQueries {
       childIds.add(relationship.fromId);
     }
 
-    const build = (metricId: string, ancestors: Set<string>): MetricHierarchyNode => {
-      if (ancestors.has(metricId)) throw new Error(`Metric hierarchy cycle at ${metricId}`);
-      const nextAncestors = new Set(ancestors).add(metricId);
+    const build = (metricId: string): MetricHierarchyNode => {
       return {
         metric: this.getMetric(metricId),
         children: (childrenByParent.get(metricId) ?? [])
-          .map((childId) => build(childId, nextAncestors))
+          .map((childId) => build(childId))
           .sort((left, right) => this.compareMetricsBySource(left.metric, right.metric)),
       };
     };
 
-    if (rootMetricId) return [build(rootMetricId, new Set())];
+    if (rootMetricId) return [build(rootMetricId)];
     return [...visible]
       .filter((metricId) => !childIds.has(metricId))
-      .map((metricId) => build(metricId, new Set()))
+      .map((metricId) => build(metricId))
       .sort((left, right) => this.compareMetricsBySource(left.metric, right.metric));
   }
 
@@ -589,7 +593,6 @@ export class ModelDatabaseQueries {
     const entity = this.entities.get(resolvedEntityId);
     if (!entity) throw new Error(`Unknown entity ${resolvedEntityId}`);
 
-    const hierarchy = this.getMetricHierarchy({ modelId });
     const seriesByMetric = new Map<string, MetricSeriesPoint[]>();
     const periodIds = new Set<string>();
     for (const metricId of this.visibleMetricIds(modelId)) {
@@ -609,63 +612,60 @@ export class ModelDatabaseQueries {
       .filter((period): period is Period => Boolean(period))
       .sort(comparePeriods);
 
-    const rows: FinancialTableRow[] = [];
-    const flatten = (node: MetricHierarchyNode, depth: number): void => {
-      const observations = seriesByMetric.get(node.metric.id) ?? [];
-      if (observations.length === 0) {
-        for (const child of node.children) flatten(child, depth);
-        return;
-      }
-      rows.push({
-        metric: node.metric,
+    const rowForMetric = (metricId: string, depth: number): FinancialTableRow | undefined => {
+      const metricObservations = seriesByMetric.get(metricId) ?? [];
+      if (metricObservations.length === 0) return undefined;
+      return {
+        metric: this.getMetric(metricId),
         depth,
-        sourceLocator: this.primarySourceLocator(node.metric.id),
-        unresolvedItems: this.database.unresolvedItems.filter(
-          (item) =>
-            item.status === "open" &&
-            item.targetId === node.metric.id &&
-            (!item.modelId || item.modelId === modelId),
+        sourceLocator: this.primarySourceLocator(metricId),
+        unresolvedItems: (this.openAttentionByTarget.get(metricId) ?? []).filter(
+          (item) => !item.modelId || item.modelId === modelId,
         ),
         observations: Object.fromEntries(
-          observations.map((point) => [
+          metricObservations.map((point) => [
             point.period.id,
             point.observation,
           ]),
         ),
-      });
-      for (const child of node.children) flatten(child, depth + 1);
+      };
     };
-    hierarchy.forEach((node) => flatten(node, 0));
 
     const presentations = this.getTablePresentations(modelId);
     const presentation = presentationId
       ? presentations.find((item) => item.id === presentationId)
       : presentations[0];
-    const rowsByMetric = new Map(rows.map((row) => [row.metric.id, row]));
-    const sections: FinancialTableSection[] = presentation
-      ? presentation.sections.map((section) => ({
+    let sections: FinancialTableSection[];
+    if (presentation) {
+      sections = presentation.sections.map((section) => {
+        const { depths } = analyzeOrderedParentForest(
+          section.metricIds,
+          section.metricParentIds ?? {},
+        );
+        return {
           id: section.id,
           title: section.title,
           sourceLocator: section.sourceLocator,
           rows: section.metricIds
-            .map((metricId) => {
-              const row = rowsByMetric.get(metricId);
-              if (!row || !section.metricParentIds) return row;
-              return {
-                ...row,
-                depth: presentationDepth(metricId, section.metricParentIds),
-              };
-            })
+            .map((metricId) => rowForMetric(metricId, depths.get(metricId) ?? 0))
             .filter((row): row is FinancialTableRow => Boolean(row)),
-        }))
-      : [
-          {
-            id: `section_${modelId.replace(/^model_/, "")}_metrics`,
-            title: "Model metrics",
-            sourceLocator: rows.find((row) => row.sourceLocator)?.sourceLocator,
-            rows,
-          },
-        ];
+        };
+      });
+    } else {
+      const rows: FinancialTableRow[] = [];
+      const flatten = (node: MetricHierarchyNode, depth: number): void => {
+        const row = rowForMetric(node.metric.id, depth);
+        if (row) rows.push(row);
+        for (const child of node.children) flatten(child, row ? depth + 1 : depth);
+      };
+      this.getMetricHierarchy({ modelId }).forEach((node) => flatten(node, 0));
+      sections = [{
+        id: `section_${modelId.replace(/^model_/, "")}_metrics`,
+        title: "Model metrics",
+        sourceLocator: rows.find((row) => row.sourceLocator)?.sourceLocator,
+        rows,
+      }];
+    }
 
     return {
       model,

@@ -14,8 +14,28 @@ from formula_translation import FormulaTranslation, FormulaTranslator, expand_ce
 from ooxml import WorkbookPackage
 
 
-MAP_FORMAT = "financial-model-workbook-map@0.3"
+MAP_FORMAT = "financial-model-workbook-map@0.4"
 STYLE_CONVENTION = "alice-blue-yellow@0.1"
+CANONICAL_METRIC_FIELDS = frozenset({
+    "id",
+    "name",
+    "description",
+    "dataType",
+    "unit",
+    "aggregation",
+    "tags",
+})
+MAPPED_METRIC_FIELDS = CANONICAL_METRIC_FIELDS | {
+    "row",
+    "cells",
+    "sheet",
+    "labelCell",
+    "canonicalExpression",
+    "canonicalExpressions",
+    "dependencyMetricIds",
+    "opaqueDependencyMetricIds",
+    "confidence",
+}
 BLUE_FONT_SOURCE_COLORS = (
     {"type": "theme", "theme": 4},
     {"type": "theme", "theme": 4, "tint": -0.499984740745262},
@@ -240,6 +260,85 @@ class MappedWorkbookExtractor:
         self.style_convention = mapping.get("styleConvention")
         if self.style_convention not in {None, STYLE_CONVENTION}:
             raise ValueError(f"Unsupported styleConvention: {self.style_convention!r}")
+        self._validate_hierarchy_mapping()
+
+    def _validate_hierarchy_mapping(self) -> None:
+        if self.mapping.get("hierarchyReviewed") is not True:
+            raise ValueError("Mapping must declare hierarchyReviewed: true")
+        component_parent_ids = self.mapping.get("componentParentIds")
+        if not isinstance(component_parent_ids, dict):
+            raise ValueError("Mapping must declare componentParentIds as an object, even when empty")
+
+        metric_ids: set[str] = set()
+        for section in self.mapping["sections"]:
+            parent_ids = section.get("metricParentIds")
+            if not isinstance(parent_ids, dict):
+                raise ValueError(
+                    f"Mapped section {section.get('id', '<unknown>')} must declare "
+                    "metricParentIds as an object, even when empty"
+                )
+            ordered_ids: list[str] = []
+            for metric in section["metrics"]:
+                metric_id = metric["id"]
+                if metric_id in metric_ids:
+                    raise ValueError(f"Duplicate mapped metric ID: {metric_id}")
+                if "presentationParentMetricId" in metric or "componentOfMetricId" in metric:
+                    raise ValueError(
+                        f"Mapped metric {metric_id} uses removed per-metric parent fields; "
+                        "use section.metricParentIds and top-level componentParentIds"
+                    )
+                unknown_fields = sorted(set(metric) - MAPPED_METRIC_FIELDS)
+                if unknown_fields:
+                    raise ValueError(
+                        f"Mapped metric {metric_id} has unsupported fields: {', '.join(unknown_fields)}"
+                    )
+                metric_ids.add(metric_id)
+                ordered_ids.append(metric_id)
+            positions = {metric_id: index for index, metric_id in enumerate(ordered_ids)}
+            for child_id, parent_id in parent_ids.items():
+                if not isinstance(child_id, str) or not isinstance(parent_id, str):
+                    raise ValueError(
+                        f"Mapped section {section['id']} metricParentIds must map metric IDs to metric IDs"
+                    )
+                if child_id not in positions:
+                    raise ValueError(
+                        f"Mapped section {section['id']} presentation child {child_id} is not in the section"
+                    )
+                if parent_id not in positions:
+                    raise ValueError(
+                        f"Mapped section {section['id']} presentation parent {parent_id} is not in the section"
+                    )
+                if positions[parent_id] >= positions[child_id]:
+                    raise ValueError(
+                        f"Mapped section {section['id']} presentation parent {parent_id} must appear "
+                        f"before child {child_id}"
+                    )
+
+        for child_id, parent_id in component_parent_ids.items():
+            if not isinstance(child_id, str) or not isinstance(parent_id, str):
+                raise ValueError("componentParentIds must map metric IDs to metric IDs")
+            if child_id not in metric_ids:
+                raise ValueError(f"Component child {child_id} is not a mapped metric")
+            if parent_id not in metric_ids:
+                raise ValueError(f"Component parent {parent_id} is not a mapped metric")
+            if child_id == parent_id:
+                raise ValueError(f"Mapped metric {child_id} cannot be a component of itself")
+
+        complete: set[str] = set()
+        for start_id in component_parent_ids:
+            if start_id in complete:
+                continue
+            path: list[str] = []
+            positions: dict[str, int] = {}
+            current_id: str | None = start_id
+            while current_id is not None and current_id not in complete:
+                if current_id in positions:
+                    cycle = [*path[positions[current_id]:], current_id]
+                    raise ValueError(f"Mapped component cycle: {' -> '.join(cycle)}")
+                positions[current_id] = len(path)
+                path.append(current_id)
+                current_id = component_parent_ids.get(current_id)
+            complete.update(path)
 
     def _provenance(self, target_id: str, locator: dict[str, str], confidence: float) -> None:
         if target_id in self._provenance_targets:
@@ -258,7 +357,7 @@ class MappedWorkbookExtractor:
     def _unresolved(self, item: dict[str, Any]) -> None:
         canonical = deepcopy(item)
         if "analystQuestion" in canonical:
-            raise ValueError("analystQuestion is not part of the 0.2 attention contract; use nextAction")
+            raise ValueError("analystQuestion is not part of the attention contract; use nextAction")
         for field in ("currentTreatment", "impact", "nextAction"):
             value = canonical.get(field)
             if not isinstance(value, str) or not value.strip():
@@ -285,55 +384,11 @@ class MappedWorkbookExtractor:
         periods_by_id: dict[str, dict[str, Any]],
     ) -> dict[str, list[dict[str, Any]]]:
         assignments_by_metric: dict[str, list[dict[str, Any]]] = {}
-        seen_metrics: set[str] = set()
         seen_cells: dict[str, str] = {}
         seen_points: dict[tuple[str, str], str] = {}
-        mapped_metric_ids = {
-            metric["id"]
-            for section in self.mapping["sections"]
-            for metric in section["metrics"]
-        }
         for section in self.mapping["sections"]:
-            previous_metric_ids: set[str] = set()
-            for metric in section["metrics"]:
-                metric_id = metric.get("id", "<unknown>")
-                if "presentationParentMetricId" not in metric:
-                    raise ValueError(
-                        f"Mapped metric {metric_id} must explicitly declare "
-                        "presentationParentMetricId as a prior metric in the section or null"
-                    )
-                presentation_parent = metric["presentationParentMetricId"]
-                if presentation_parent is not None and not isinstance(presentation_parent, str):
-                    raise ValueError(
-                        f"Mapped metric {metric_id} presentationParentMetricId must be a metric ID or null"
-                    )
-                if presentation_parent is not None and presentation_parent not in previous_metric_ids:
-                    raise ValueError(
-                        f"Mapped metric {metric_id} presentation parent {presentation_parent} must "
-                        f"appear earlier in section {section['id']}"
-                    )
-                if "componentOfMetricId" not in metric:
-                    raise ValueError(
-                        f"Mapped metric {metric_id} must explicitly declare componentOfMetricId "
-                        "as a semantic parent metric or null"
-                    )
-                component_parent = metric["componentOfMetricId"]
-                if component_parent is not None and not isinstance(component_parent, str):
-                    raise ValueError(
-                        f"Mapped metric {metric_id} componentOfMetricId must be a metric ID or null"
-                    )
-                if component_parent == metric_id:
-                    raise ValueError(f"Mapped metric {metric_id} cannot be a component of itself")
-                if component_parent is not None and component_parent not in mapped_metric_ids:
-                    raise ValueError(
-                        f"Mapped metric {metric_id} component parent {component_parent} is not mapped"
-                    )
-                previous_metric_ids.add(metric_id)
             for metric in section["metrics"]:
                 metric_id = metric["id"]
-                if metric_id in seen_metrics:
-                    raise ValueError(f"Duplicate mapped metric ID: {metric_id}")
-                seen_metrics.add(metric_id)
                 assignments: list[dict[str, Any]] = []
                 if "cells" in metric:
                     if "row" in metric:
@@ -540,7 +595,7 @@ class MappedWorkbookExtractor:
         sections = []
         for section in self.mapping["sections"]:
             section_metric_ids = []
-            section_metric_parent_ids = {}
+            section_metric_parent_ids = deepcopy(section["metricParentIds"])
             for mapped_metric in section["metrics"]:
                 metric = self._canonical_metric(mapped_metric)
                 observations_before = len(self.database["observations"])
@@ -670,8 +725,6 @@ class MappedWorkbookExtractor:
                     raise ValueError(f"Mapped metric {metric['id']} has no observations in the selected periods")
                 self.database["metrics"].append(metric)
                 section_metric_ids.append(metric["id"])
-                if mapped_metric["presentationParentMetricId"] is not None:
-                    section_metric_parent_ids[metric["id"]] = mapped_metric["presentationParentMetricId"]
                 self._provenance(
                     metric["id"],
                     _mapped_locator(
@@ -697,31 +750,27 @@ class MappedWorkbookExtractor:
             }
             sections.append(canonical_section)
 
-        for section in self.mapping["sections"]:
-            for mapped_metric in section["metrics"]:
-                parent_metric_id = mapped_metric["componentOfMetricId"]
-                if parent_metric_id is None:
-                    continue
-                metric_id = mapped_metric["id"]
-                relationship_id = (
-                    f"relationship_{_without_prefix(metric_id, 'metric_')}_component_of_"
-                    f"{_without_prefix(parent_metric_id, 'metric_')}"
-                )
-                self.database["relationships"].append({
-                    "id": relationship_id,
-                    "fromId": metric_id,
-                    "type": "component_of",
-                    "toId": parent_metric_id,
-                })
-                self._provenance(
-                    relationship_id,
-                    _mapped_locator(
-                        mapped_metric["labelCell"],
-                        mapped_metric.get("sheet", self.sheet_name),
-                        kind="cell",
-                    ),
-                    mapped_metric.get("confidence", 0.95),
-                )
+        for metric_id, parent_metric_id in self.mapping["componentParentIds"].items():
+            mapped_metric = metrics_by_id[metric_id]
+            relationship_id = (
+                f"relationship_{_without_prefix(metric_id, 'metric_')}_component_of_"
+                f"{_without_prefix(parent_metric_id, 'metric_')}"
+            )
+            self.database["relationships"].append({
+                "id": relationship_id,
+                "fromId": metric_id,
+                "type": "component_of",
+                "toId": parent_metric_id,
+            })
+            self._provenance(
+                relationship_id,
+                _mapped_locator(
+                    mapped_metric["labelCell"],
+                    mapped_metric.get("sheet", self.sheet_name),
+                    kind="cell",
+                ),
+                mapped_metric.get("confidence", 0.95),
+            )
         mapped_presentations = self.mapping.get("presentations")
         if mapped_presentations:
             sections_by_id = {section["id"]: section for section in sections}
@@ -1098,20 +1147,11 @@ class MappedWorkbookExtractor:
 
     @staticmethod
     def _canonical_metric(mapped_metric: dict[str, Any]) -> dict[str, Any]:
-        excluded = {
-            "row",
-            "cells",
-            "sheet",
-            "labelCell",
-            "canonicalExpression",
-            "canonicalExpressions",
-            "dependencyMetricIds",
-            "opaqueDependencyMetricIds",
-            "confidence",
-            "presentationParentMetricId",
-            "componentOfMetricId",
+        return {
+            key: deepcopy(value)
+            for key, value in mapped_metric.items()
+            if key in CANONICAL_METRIC_FIELDS
         }
-        return {key: deepcopy(value) for key, value in mapped_metric.items() if key not in excluded}
 
     def _observation(
         self,

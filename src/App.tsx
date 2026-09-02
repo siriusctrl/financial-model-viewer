@@ -29,17 +29,14 @@ import {
 } from "./model-db/queries";
 import type { ModelDatabase, Period, ScalarValue } from "./model-db/types";
 import type { ValidationError } from "./model-db/validate";
+import {
+  createViewerNavigation,
+  viewerNavigationReducer,
+  type ViewerLocation,
+} from "./viewer-navigation";
 import { FinancialTable } from "./visualizations/financial-table/FinancialTable";
 
 type Theme = "light" | "dark";
-
-type InspectorLocation = {
-  targetId: string;
-  modelId: string;
-  presentationId?: string;
-  entityId: string;
-  periodType?: Period["type"];
-};
 
 const MAX_JSON_BYTES = 100 * 1024 * 1024;
 
@@ -79,6 +76,21 @@ function initialPeriodType(
   return typeof configured === "string" && periodTypes.includes(configured as Period["type"])
     ? configured as Period["type"]
     : periodTypes[0];
+}
+
+function initialViewerLocation(
+  database: ModelDatabase,
+  modelId = defaultModelId(database),
+): ViewerLocation {
+  const presentationId = initialPresentationId(database, modelId);
+  const entityId = initialEntityId(database, modelId);
+  return {
+    modelId,
+    presentationId,
+    entityId,
+    periodType: initialPeriodType(database, modelId, presentationId, entityId),
+    targetId: null,
+  };
 }
 
 function periodTypeLabel(type: Period["type"]): string {
@@ -142,23 +154,18 @@ export default function App() {
   const canRedo = databaseHistory.future.length > 0;
   const [datasetSource, setDatasetSource] = useState<DatasetSource>({ kind: "bundled" });
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState(() => defaultModelId(defaultDatabase));
-  const [selectedPresentationId, setSelectedPresentationId] = useState<string | undefined>(() =>
-    initialPresentationId(defaultDatabase, defaultModelId(defaultDatabase)),
+  const [navigation, dispatchNavigation] = useReducer(
+    viewerNavigationReducer,
+    defaultDatabase,
+    (initialDatabase) => createViewerNavigation(initialViewerLocation(initialDatabase)),
   );
-  const [selectedEntityId, setSelectedEntityId] = useState(() =>
-    initialEntityId(defaultDatabase, defaultModelId(defaultDatabase)),
-  );
-  const [selectedPeriodType, setSelectedPeriodType] = useState<Period["type"] | undefined>(() =>
-    initialPeriodType(
-      defaultDatabase,
-      defaultModelId(defaultDatabase),
-      initialPresentationId(defaultDatabase, defaultModelId(defaultDatabase)),
-      initialEntityId(defaultDatabase, defaultModelId(defaultDatabase)),
-    ),
-  );
-  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
-  const [inspectorHistory, setInspectorHistory] = useState<InspectorLocation[]>([]);
+  const {
+    modelId: selectedModelId,
+    presentationId: selectedPresentationId,
+    entityId: selectedEntityId,
+    periodType: selectedPeriodType,
+    targetId: selectedTargetId,
+  } = navigation.current;
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [attentionFocus, setAttentionFocus] = useState<{
     metricId: string;
@@ -238,38 +245,16 @@ export default function App() {
   }, [redoDatabase, undoDatabase]);
 
   const changeModel = (modelId: string) => {
-    const presentationId = initialPresentationId(database, modelId);
-    const entityId = initialEntityId(database, modelId);
-    setSelectedModelId(modelId);
-    setSelectedPresentationId(presentationId);
-    setSelectedEntityId(entityId);
-    setSelectedPeriodType(initialPeriodType(database, modelId, presentationId, entityId));
-    setSelectedTargetId(null);
-    setInspectorHistory([]);
+    dispatchNavigation({ type: "replace", location: initialViewerLocation(database, modelId) });
     setAttentionFocus(null);
-  };
-
-  const rememberCurrentInspector = (nextTargetId: string) => {
-    if (!selectedTargetId || selectedTargetId === nextTargetId) return;
-    const current: InspectorLocation = {
-      targetId: selectedTargetId,
-      modelId: selectedModelId,
-      presentationId: selectedPresentationId,
-      entityId: selectedEntityId,
-      periodType: selectedPeriodType,
-    };
-    setInspectorHistory((history) => {
-      const withoutDuplicateTail = history.at(-1)?.targetId === current.targetId
-        ? history.slice(0, -1)
-        : history;
-      return [...withoutDuplicateTail, current].slice(-24);
-    });
   };
 
   const selectObservation = (observationId: string) => {
-    rememberCurrentInspector(observationId);
     setAttentionFocus(null);
-    setSelectedTargetId(observationId);
+    dispatchNavigation({
+      type: "inspect",
+      location: { ...navigation.current, targetId: observationId },
+    });
   };
 
   const navigateToObservation = (observationId: string) => {
@@ -277,41 +262,38 @@ export default function App() {
       observationId,
       selectedPresentationId,
     );
-    rememberCurrentInspector(observationId);
-    setSelectedModelId(target.model.id);
-    setSelectedPresentationId(target.presentation?.id);
-    setSelectedEntityId(target.entity.id);
-    setSelectedPeriodType(target.period.type);
     setAttentionFocus(null);
-    setSelectedTargetId(observationId);
+    dispatchNavigation({
+      type: "inspect",
+      location: {
+        modelId: target.model.id,
+        presentationId: target.presentation?.id,
+        entityId: target.entity.id,
+        periodType: target.period.type,
+        targetId: observationId,
+      },
+    });
   };
 
   const selectMetric = (metricId: string) => {
-    rememberCurrentInspector(metricId);
     setAttentionFocus(null);
-    setSelectedTargetId(metricId);
+    dispatchNavigation({
+      type: "inspect",
+      location: { ...navigation.current, targetId: metricId },
+    });
   };
 
   const navigateBack = () => {
-    const previous = inspectorHistory.at(-1);
-    if (!previous) return;
-    setInspectorHistory((history) => history.slice(0, -1));
-    setSelectedModelId(previous.modelId);
-    setSelectedPresentationId(previous.presentationId);
-    setSelectedEntityId(previous.entityId);
-    setSelectedPeriodType(previous.periodType);
+    dispatchNavigation({ type: "back" });
     setAttentionFocus(null);
-    setSelectedTargetId(previous.targetId);
   };
 
   const closeInspector = () => {
-    setSelectedTargetId(null);
-    setInspectorHistory([]);
+    dispatchNavigation({ type: "close" });
     setAttentionFocus(null);
   };
 
   const navigateToAttention = (projection: AttentionItemProjection) => {
-    setInspectorHistory([]);
     if (projection.model) {
       const targetObservation = projection.item.targetId
         ? observationList.find((item) => item.id === projection.item.targetId)
@@ -325,15 +307,23 @@ export default function App() {
               ),
           )?.id
         : initialPresentationId(database, projection.model.id);
-      setSelectedModelId(projection.model.id);
-      setSelectedPresentationId(presentationId);
-      setSelectedEntityId(entityId);
-      setSelectedPeriodType(
-        projection.period?.type
-          ?? initialPeriodType(database, projection.model.id, presentationId, entityId),
-      );
+      dispatchNavigation({
+        type: "replace",
+        location: {
+          modelId: projection.model.id,
+          presentationId,
+          entityId,
+          periodType: projection.period?.type
+            ?? initialPeriodType(database, projection.model.id, presentationId, entityId),
+          targetId: projection.item.id,
+        },
+      });
+    } else {
+      dispatchNavigation({
+        type: "replace",
+        location: { ...navigation.current, targetId: projection.item.id },
+      });
     }
-    setSelectedTargetId(projection.item.id);
     setAttentionFocus(projection.metric ? {
       metricId: projection.metric.id,
       periodId: projection.period?.id,
@@ -346,22 +336,9 @@ export default function App() {
     nextDatabase: ModelDatabase,
     source: DatasetSource,
   ) => {
-    const nextModelId = defaultModelId(nextDatabase);
-    const nextPresentationId = initialPresentationId(nextDatabase, nextModelId);
-    const nextEntityId = initialEntityId(nextDatabase, nextModelId);
     dispatchDatabaseHistory({ type: "reset", database: nextDatabase });
     setDatasetSource(source);
-    setSelectedModelId(nextModelId);
-    setSelectedPresentationId(nextPresentationId);
-    setSelectedEntityId(nextEntityId);
-    setSelectedPeriodType(initialPeriodType(
-      nextDatabase,
-      nextModelId,
-      nextPresentationId,
-      nextEntityId,
-    ));
-    setSelectedTargetId(null);
-    setInspectorHistory([]);
+    dispatchNavigation({ type: "replace", location: initialViewerLocation(nextDatabase) });
     setAttentionFocus(null);
     setAttentionOpen(false);
   };
@@ -441,8 +418,7 @@ export default function App() {
       database: confirmReviewItem(database, itemId),
     });
     if (selectedTargetId === itemId) {
-      setSelectedTargetId(null);
-      setInspectorHistory([]);
+      dispatchNavigation({ type: "close" });
       setAttentionFocus(null);
     }
   };
@@ -620,15 +596,20 @@ export default function App() {
                 value={selectedPresentationId}
                 onChange={(event) => {
                   const presentationId = event.target.value;
-                  setSelectedPresentationId(presentationId);
-                  setSelectedPeriodType(initialPeriodType(
-                    database,
-                    selectedModelId,
-                    presentationId,
-                    selectedEntityId,
-                  ));
-                  setSelectedTargetId(null);
-                  setInspectorHistory([]);
+                  dispatchNavigation({
+                    type: "replace",
+                    location: {
+                      ...navigation.current,
+                      presentationId,
+                      periodType: initialPeriodType(
+                        database,
+                        selectedModelId,
+                        presentationId,
+                        selectedEntityId,
+                      ),
+                      targetId: null,
+                    },
+                  });
                   setAttentionFocus(null);
                 }}
               >
@@ -648,15 +629,20 @@ export default function App() {
                 value={selectedEntityId}
                 onChange={(event) => {
                   const entityId = event.target.value;
-                  setSelectedEntityId(entityId);
-                  setSelectedPeriodType(initialPeriodType(
-                    database,
-                    selectedModelId,
-                    selectedPresentationId,
-                    entityId,
-                  ));
-                  setSelectedTargetId(null);
-                  setInspectorHistory([]);
+                  dispatchNavigation({
+                    type: "replace",
+                    location: {
+                      ...navigation.current,
+                      entityId,
+                      periodType: initialPeriodType(
+                        database,
+                        selectedModelId,
+                        selectedPresentationId,
+                        entityId,
+                      ),
+                      targetId: null,
+                    },
+                  });
                   setAttentionFocus(null);
                 }}
               >
@@ -673,9 +659,14 @@ export default function App() {
                 aria-label="Period view"
                 value={selectedPeriodType}
                 onChange={(event) => {
-                  setSelectedPeriodType(event.target.value as Period["type"]);
-                  setSelectedTargetId(null);
-                  setInspectorHistory([]);
+                  dispatchNavigation({
+                    type: "replace",
+                    location: {
+                      ...navigation.current,
+                      periodType: event.target.value as Period["type"],
+                      targetId: null,
+                    },
+                  });
                   setAttentionFocus(null);
                 }}
               >
@@ -704,7 +695,7 @@ export default function App() {
           targetId={selectedTargetId}
           queries={queries}
           onClose={closeInspector}
-          canNavigateBack={inspectorHistory.length > 0}
+          canNavigateBack={navigation.history.length > 0}
           onNavigateBack={navigateBack}
           onSelectTarget={navigateToObservation}
           onUpdateObservation={updateObservationValue}

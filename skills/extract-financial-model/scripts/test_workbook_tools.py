@@ -102,7 +102,7 @@ def write_fixture(path: Path, sheet_xml: str = SHEET_XML) -> None:
 
 def mapping() -> dict:
     return {
-        "format": "financial-model-workbook-map@0.3",
+        "format": "financial-model-workbook-map@0.4",
         "dataset": {
             "id": "dataset_test",
             "name": "Test",
@@ -134,6 +134,10 @@ def mapping() -> dict:
         "periodHeaderRange": "B1:B1",
         "scope": "Synthetic two-row fixture.",
         "actualityBasis": "The sole period is explicitly mapped as actual.",
+        "hierarchyReviewed": True,
+        "componentParentIds": {
+            "metric_test_output": "metric_test_input",
+        },
         "periods": [
             {
                 "id": "period_fy2024",
@@ -161,6 +165,9 @@ def mapping() -> dict:
             "id": "section_test",
             "title": "Test",
             "sourceRange": "A1:B2",
+            "metricParentIds": {
+                "metric_test_output": "metric_test_input",
+            },
             "metrics": [
                 {
                     "id": "metric_test_input",
@@ -168,8 +175,6 @@ def mapping() -> dict:
                     "row": 1,
                     "labelCell": "A1",
                     "dataType": "number",
-                    "presentationParentMetricId": None,
-                    "componentOfMetricId": None,
                 },
                 {
                     "id": "metric_test_output",
@@ -179,8 +184,6 @@ def mapping() -> dict:
                     "dataType": "number",
                     "canonicalExpression": 'ref("metric_test_input") * 2',
                     "dependencyMetricIds": ["metric_test_input"],
-                    "presentationParentMetricId": "metric_test_input",
-                    "componentOfMetricId": "metric_test_input",
                 },
             ],
         }],
@@ -188,26 +191,47 @@ def mapping() -> dict:
 
 
 class WorkbookToolTests(unittest.TestCase):
-    def test_mapped_extraction_requires_explicit_parent_decisions(self) -> None:
+    def test_mapped_extraction_requires_explicit_hierarchy_review(self) -> None:
         with TemporaryDirectory() as directory:
             workbook = Path(directory) / "fixture.xlsx"
             write_fixture(workbook)
             incomplete_mapping = mapping()
-            del incomplete_mapping["sections"][0]["metrics"][1]["presentationParentMetricId"]
+            del incomplete_mapping["hierarchyReviewed"]
 
             with self.assertRaisesRegex(
                 ValueError,
-                r"metric_test_output must explicitly declare presentationParentMetricId",
+                r"must declare hierarchyReviewed: true",
             ):
                 MappedWorkbookExtractor(workbook, incomplete_mapping).extract()
 
             incomplete_mapping = mapping()
-            del incomplete_mapping["sections"][0]["metrics"][1]["componentOfMetricId"]
+            del incomplete_mapping["sections"][0]["metricParentIds"]
             with self.assertRaisesRegex(
                 ValueError,
-                r"metric_test_output must explicitly declare componentOfMetricId",
+                r"section_test must declare metricParentIds as an object",
             ):
                 MappedWorkbookExtractor(workbook, incomplete_mapping).extract()
+
+            incomplete_mapping = mapping()
+            del incomplete_mapping["componentParentIds"]
+            with self.assertRaisesRegex(
+                ValueError,
+                r"must declare componentParentIds as an object",
+            ):
+                MappedWorkbookExtractor(workbook, incomplete_mapping).extract()
+
+            invalid_mapping = mapping()
+            invalid_mapping["sections"][0]["metrics"][0]["descripton"] = "typo"
+            with self.assertRaisesRegex(
+                ValueError,
+                r"metric_test_input has unsupported fields: descripton",
+            ):
+                MappedWorkbookExtractor(workbook, invalid_mapping).extract()
+
+            cyclic_mapping = mapping()
+            cyclic_mapping["componentParentIds"]["metric_test_input"] = "metric_test_output"
+            with self.assertRaisesRegex(ValueError, r"Mapped component cycle"):
+                MappedWorkbookExtractor(workbook, cyclic_mapping).extract()
 
     def test_fixed_style_convention_only_accepts_observed_blue_sources(self) -> None:
         self.assertTrue(_is_specific_blue_font({"type": "theme", "theme": 4}))
@@ -529,7 +553,7 @@ class WorkbookToolTests(unittest.TestCase):
             workbook = Path(directory) / "fixture.xlsx"
             write_fixture(workbook)
             explicit_mapping = mapping()
-            explicit_mapping["format"] = "financial-model-workbook-map@0.3"
+            explicit_mapping["format"] = "financial-model-workbook-map@0.4"
             for period in explicit_mapping["periods"]:
                 del period["column"]
             input_metric, output_metric = explicit_mapping["sections"][0]["metrics"]
@@ -562,11 +586,12 @@ class WorkbookToolTests(unittest.TestCase):
             multi_view_mapping = mapping()
             section = multi_view_mapping["sections"][0]
             output_metric = section["metrics"].pop()
-            output_metric["presentationParentMetricId"] = None
+            section["metricParentIds"] = {}
             multi_view_mapping["sections"].append({
                 "id": "section_test_output",
                 "title": "Output",
                 "sourceRange": "A2:C2",
+                "metricParentIds": {},
                 "metrics": [output_metric],
             })
             multi_view_mapping["presentations"] = [
