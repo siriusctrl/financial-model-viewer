@@ -305,6 +305,60 @@ class WorkbookToolTests(unittest.TestCase):
             'B2+$A2+B$1+$A$1+Sheet2!C3+"A1"+LOG10(C2)',
         )
 
+    def test_static_indirect_address_row_resolves_through_declared_layout_cells(self) -> None:
+        cells = {
+            "B1": {"cell": "B1", "type": "n", "style": 0, "rawValue": "7", "value": 7},
+            "C1": {"cell": "C1", "type": "n", "style": 0, "rawValue": "5", "value": 5},
+            "D1": {"cell": "D1", "type": "n", "style": 0, "rawValue": "2", "value": 2},
+            "D2": {"cell": "D2", "type": "n", "style": 0, "rawValue": "3", "value": 3, "formula": "=D1+1"},
+            "D3": {"cell": "D3", "type": "n", "style": 0, "rawValue": "2.5", "value": 2.5},
+        }
+        semantics = {
+            "B1": {"metricId": "metric_in", "periodId": "period_fy2024", "dataType": "number"},
+            "C1": {"metricId": "metric_in", "periodId": "period_fy2025", "dataType": "number"},
+        }
+        annual = "=SUM(INDIRECT(ADDRESS(ROW(),$D$1)):INDIRECT(ADDRESS(ROW(),$D$2)))"
+        translator = FormulaTranslator(cells, semantics, literal_coordinates={"D1", "D2", "D3"})
+
+        translation = translator.translate(annual, "E1", "period_fy2025", 12)
+        self.assertIsNotNone(translation)
+        self.assertEqual(
+            translation.expression,
+            'sum(period_ref("metric_in", "period_fy2024"), ref("metric_in"))',
+        )
+        # Replay still guards the resolved range: a wrong cached total is rejected.
+        self.assertIsNone(translator.translate(annual, "E1", "period_fy2025", 13))
+        # Index cells outside the declared layout ranges are never dereferenced.
+        undeclared = FormulaTranslator(cells, semantics, literal_coordinates={"D2"})
+        self.assertIsNone(undeclared.translate(annual, "E1", "period_fy2025", 12))
+        self.assertIn(
+            "outside the declared periodHeaderRanges",
+            undeclared.blocker_details(annual, None, "E1").reason,
+        )
+        # A non-integer index cell is not a column number.
+        fractional = "=SUM(INDIRECT(ADDRESS(ROW(),$D$1)):INDIRECT(ADDRESS(ROW(),$D$3)))"
+        self.assertIn(
+            "integer column number",
+            translator.blocker_details(fractional, None, "E1").reason,
+        )
+
+    def test_omitted_excel_arguments_are_zero(self) -> None:
+        cells = {
+            "B1": {"cell": "B1", "type": "n", "style": 0, "rawValue": "7", "value": 7},
+            "C1": {"cell": "C1", "type": "n", "style": 0, "rawValue": "5", "value": 5},
+        }
+        semantics = {
+            "B1": {"metricId": "metric_in", "periodId": "period_fy2024", "dataType": "number"},
+            "C1": {"metricId": "metric_in", "periodId": "period_fy2025", "dataType": "number"},
+        }
+        translator = FormulaTranslator(cells, semantics)
+        translation = translator.translate("=SUM(B1,,C1)", "E1", "period_fy2025", 12)
+        self.assertIsNotNone(translation)
+        self.assertEqual(
+            translation.expression,
+            'sum(period_ref("metric_in", "period_fy2024"), 0, ref("metric_in"))',
+        )
+
     def test_formula_translation_requires_mapped_inputs_and_cached_value_replay(self) -> None:
         with TemporaryDirectory() as directory:
             workbook = Path(directory) / "fixture.xlsx"

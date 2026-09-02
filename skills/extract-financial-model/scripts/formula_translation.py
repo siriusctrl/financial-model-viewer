@@ -41,6 +41,13 @@ FUNCTION_CALL = re.compile(
     re.IGNORECASE,
 )
 COORDINATE = re.compile(r"(?P<column>[A-Z]{1,3})(?P<row>[1-9][0-9]*)", re.IGNORECASE)
+STATIC_INDIRECT = re.compile(
+    r"INDIRECT\(\s*ADDRESS\(\s*ROW\(\s*\)\s*,\s*"
+    r"(?:(?:'(?P<quoted>[^']+)'|(?P<plain>[A-Za-z_][A-Za-z0-9_. ]*))!)?"
+    r"(?P<cell>\$?[A-Z]{1,3}\$?[1-9][0-9]*)\s*\)\s*\)",
+    re.IGNORECASE,
+)
+EMPTY_ARGUMENT = re.compile(r",(\s*)(?=[,)])")
 EXCEL_EQUALITY = re.compile(r"(?<![<>=!])=(?!=)")
 EXCEL_BOOLEAN = re.compile(r"(?<![A-Z0-9_.])(?P<value>TRUE|FALSE)(?![A-Z0-9_])", re.IGNORECASE)
 RIGHT_TEXT_COMPARISON = re.compile(
@@ -237,6 +244,44 @@ class FormulaTranslator:
     @staticmethod
     def _sheet_from_match(match: re.Match[str], prefix: str) -> str | None:
         return match.group(f"{prefix}_quoted") or match.group(f"{prefix}_plain")
+
+    def _resolve_static_indirect(
+        self,
+        formula_body: str,
+        target_coordinate: str,
+        target_sheet: str | None,
+    ) -> tuple[str, str | None]:
+        """Rewrite ``INDIRECT(ADDRESS(ROW(), <index cell>))`` into a concrete same-row reference.
+
+        The idiom addresses a fixed column by number; it is workbook layout, not data.
+        The index cell must sit inside a declared ``periodHeaderRanges`` locator and hold an
+        integer cached column number. Anything else is left untouched so the caller reports
+        the INDIRECT blocker instead of guessing a coordinate.
+        """
+        row = _coordinate_parts(target_coordinate)[1]
+        failure: str | None = None
+
+        def replace(match: re.Match[str]) -> str:
+            nonlocal failure
+            key = self._key(
+                match.group("cell"), match.group("quoted") or match.group("plain"), target_sheet
+            )
+            cell = self.cells.get(key) if key else None
+            value = cell.get("value") if cell else None
+            if key not in self.literal_coordinates:
+                failure = f"INDIRECT index cell {key} is outside the declared periodHeaderRanges"
+                return match.group(0)
+            if (
+                not isinstance(value, (int, float))
+                or isinstance(value, bool)
+                or value != int(value)
+                or value < 1
+            ):
+                failure = f"INDIRECT index cell {key} does not hold an integer column number"
+                return match.group(0)
+            return f"{_column_label(int(value))}{row}"
+
+        return STATIC_INDIRECT.sub(replace, formula_body), failure
 
     def _canonical_cell_reference(
         self,
@@ -768,6 +813,8 @@ class FormulaTranslator:
             return name
 
         python_expression = QUALIFIED_CELL_REFERENCE.sub(replace_reference, formula_body)
+        # Excel treats an omitted argument (``SUM(A1,,B1)``) as zero.
+        python_expression = EMPTY_ARGUMENT.sub(r",0\1", python_expression)
         python_expression = python_expression.replace("<>", "!=")
         python_expression = EXCEL_EQUALITY.sub("==", python_expression)
         try:
@@ -1022,7 +1069,11 @@ class FormulaTranslator:
         cached = _numeric(target_value)
         if cached is None or not original_formula.startswith("="):
             return None
-        formula_body = original_formula[1:].strip()
+        formula_body, indirect_failure = self._resolve_static_indirect(
+            original_formula[1:].strip(), target_coordinate, target_sheet
+        )
+        if indirect_failure:
+            return None
         iferror_primary = self._iferror_primary_expression(formula_body)
         return self._translate_guarded_iferror(
             formula_body,
@@ -1066,8 +1117,15 @@ class FormulaTranslator:
         self,
         original_formula: str,
         target_sheet: str | None = None,
+        target_coordinate: str | None = None,
     ) -> FormulaBlocker:
         formula_body = original_formula[1:].strip() if original_formula.startswith("=") else original_formula
+        if target_coordinate is not None:
+            formula_body, indirect_failure = self._resolve_static_indirect(
+                formula_body, target_coordinate, target_sheet
+            )
+            if indirect_failure:
+                return FormulaBlocker("syntax_or_replay", indirect_failure)
         unsupported_functions = sorted({
             match.group("name").upper()
             for match in FUNCTION_CALL.finditer(formula_body)

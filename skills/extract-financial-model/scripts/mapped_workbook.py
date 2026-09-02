@@ -747,7 +747,9 @@ class MappedWorkbookExtractor:
                         blocker = (
                             None
                             if automatic
-                            else self._formula_translator.blocker_details(cell["formula"], sheet)
+                            else self._formula_translator.blocker_details(
+                                cell["formula"], sheet, coordinate
+                            )
                         )
                         if blocker and blocker.kind == "unmapped_period":
                             period_mapping_gaps.append((source_key, blocker.coordinates))
